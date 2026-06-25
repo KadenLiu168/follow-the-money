@@ -14,3 +14,4 @@
 - [x] Task 2.1 (commits 693a733..1f4c5f8, review clean) — Minor: missing trailing newlines (recurring)
 - [x] Task 2.2 (commits cb3a4a0..458fcfa, review clean) — Minor: off-by-one in throw message "3 retries" vs `attempt < 2` (2 retries)
 - [x] Task 2.3 (commits c8367ca..56362f0, review clean) — Minor: missing trailing newlines, no coverage for older filings via files array
+- [x] Task 2.4 (commits 6aa0b1d..290ed32, review clean) — Minor: brief had internally inconsistent `* 1000` comment vs test `valueUsd: 58200000000`; implementer correctly followed test (literal dollars in fixture); will need real-EDGAR calibration later
