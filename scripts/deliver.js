@@ -9,7 +9,7 @@ const ENV_PATH = join(HOME, '.env');
 
 if (existsSync(ENV_PATH)) {
   try {
-    loadEnv({ path: ENV_PATH });
+    loadEnv({ path: ENV_PATH, quiet: true });
   } catch (err) {
     console.error(`ERROR: failed to load ${ENV_PATH}: ${err.message}`);
     process.exit(1);
