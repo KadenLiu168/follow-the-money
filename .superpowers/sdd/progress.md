@@ -8,3 +8,4 @@
 
 - [x] Task 0.1 (commits 554d153..effb7e4, review clean) — Minor: trailing newlines missing on package.json and .gitignore (final review triage)
 - [x] Task 0.2 (commits 26e5013..df38663, review clean)
+- [x] Task 1.1 (commits 1f94d1c..4dcdc8a, review clean) — Minor: test JSON.parse duplicated; could assert schemaVersion (faithful to brief)
