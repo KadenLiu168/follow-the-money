@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "thirteenF": [
+    { "cik": "0001067983", "name": "Berkshire Hathaway Inc", "style": "value" },
+    { "cik": "0001336528", "name": "Pershing Square Capital Management", "style": "activist-value" },
+    { "cik": "0001641562", "name": "Scion Asset Management", "style": "deep-value" },
+    { "cik": "0001061768", "name": "Baupost Group", "style": "value" },
+    { "cik": "0000945323", "name": "Oaktree Capital Management", "style": "distressed-value" },
+    { "cik": "0001601072", "name": "ARK Invest", "style": "thematic-growth" },
+    { "cik": "0001167483", "name": "Tiger Global Management", "style": "growth" },
+    { "cik": "0001532173", "name": "Coatue Management", "style": "growth" }
+  ],
+  "thirteenDG": {
+    "enabled": true,
+    "lookbackDays": 3
+  }
+}
