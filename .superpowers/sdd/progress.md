@@ -20,3 +20,4 @@
 - [x] Task 2.7 (commits 592efa9..$(git rev-parse --short HEAD), review clean) — Minor: stripTags rewritten to preserve uppercase labels (fixtures use that format); added stopLabels
 - [x] Task 2.8 (commits 5125cb1..a68118b, review clean) — Minor: missing trailing newlines; no corrupt-JSON test
 - [x] Task 2.9 (commits 3053cec..491967a, review clean) — Minor: trailing newlines, single-writer assumption
+- [x] Task 2.10 (commits ecc21a5..90c5310, review clean) — Minor: brief's reference impl was inconsistent with its own test (history[1] = 13F-HR/A); implementer deduped prior history before append; readFeedJson regenerates generatedAt on every read (non-bug quirk)
