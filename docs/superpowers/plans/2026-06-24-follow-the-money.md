@@ -122,6 +122,63 @@ follow-the-money/
 
 ---
 
+## Task Checklist (32 tasks)
+
+> Source of truth for completion is `.superpowers/sdd/progress.md` and `git log`. This checklist is a quick visual index — update it when a task's ledger row lands.
+
+### Phase 0: Project Scaffold
+- [x] Task 0.1: Initialize package.json and directory layout
+- [x] Task 0.2: Configure vitest
+
+### Phase 1: Config + Fixtures
+- [x] Task 1.1: Write default-sources.json
+- [x] Task 1.2: Create test fixtures
+- [x] Task 1.3: Verify all 8 CIKs against EDGAR (pre-launch gate)
+
+### Phase 2: Core Library Modules
+- [x] Task 2.1: Token bucket rate limiter
+- [x] Task 2.2: HTTP client with rate limit + retry
+- [x] Task 2.3: EDGAR submissions + 13F XML fetcher
+- [x] Task 2.4: 13F XML parser
+- [x] Task 2.5: 13F summary computer (deltas vs prior period)
+- [x] Task 2.6: 13D/G search fetcher
+- [x] Task 2.7: 13D/G primary doc parser (intent by form type)
+- [x] Task 2.8: State JSON store (read/write aggregator's seen 13F filings)
+- [x] Task 2.9: State NDJSON store (atomic append for aggregator's seen 13D/G)
+- [x] Task 2.10: Feed JSON store (13F) with 13F-HR/A overwrite + history
+- [x] Task 2.11: Manifest + per-year NDJSON feed (13D/G)
+- [x] Task 2.12: Filter by lookback
+- [x] Task 2.13: Merge by issuer (13D/A helper for alerts)
+- [x] Task 2.14: Classify (13D vs 13G)
+- [x] Task 2.15: Merge amendments for alert payload
+
+### Phase 3: Aggregator
+- [x] Task 3.1: Pipeline A (13F by CIK list)
+- [x] Task 3.2: Pipeline B (13D/G by form list)
+- [x] Task 3.3: aggregate.js entry script (GitHub Action runs this)
+
+### Phase 4: Local Scripts
+- [x] Task 4.1: prepare-digest.js
+- [x] Task 4.2: check-alerts.js (DERIVED alert state)
+- [x] Task 4.3: deliver.js *(code committed `41e159c`; reviewer dispatch 429-failed, retry pending)*
+
+### Phase 5: Content (Prompts, References, SKILL.md)
+- [ ] Task 5.1: Write the 5 prompt files
+- [ ] Task 5.2: Write the 8 reference files
+- [ ] Task 5.3: Write SKILL.md (~100 lines, agent-agnostic)
+
+### Phase 6: Evals
+- [ ] Task 6.1: Write evals/evals.json (machine-checkable)
+
+### Phase 7: CI
+- [ ] Task 7.1: Write the workflow file
+
+### Phase 8: Docs + Integration
+- [ ] Task 8.1: Write README.md and LICENSE
+- [ ] Task 8.2: Final integration test
+
+---
+
 ## Phase 0: Project Scaffold
 
 ### Task 0.1: Initialize package.json and directory layout
