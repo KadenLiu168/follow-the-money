@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "currentYear": 2026,
+  "years": {
+    "2025": { "file": "feed-13dg/2025.ndjson", "count": 2, "firstDate": "2025-12-30", "lastDate": "2025-12-31" },
+    "2026": { "file": "feed-13dg/2026.ndjson", "count": 2, "firstDate": "2026-06-18", "lastDate": "2026-06-20" }
+  }
+}

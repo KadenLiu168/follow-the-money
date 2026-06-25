@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-05-15T08:00:00.000Z",
+  "lookbackDays": 90,
+  "thirteenF": [
+    {
+      "filerCik": "0001067983",
+      "filerName": "Berkshire Hathaway Inc",
+      "latestFilingDate": "2026-05-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001067983-26-000123",
+      "periodOfReport": "2026-03-31",
+      "history": [
+        { "filingDate": "2026-05-15", "formType": "13F-HR", "accessionNumber": "0001067983-26-000123" }
+      ],
+      "holdings": [
+        {
+          "cusip": "037833100",
+          "issuerName": "APPLE INC",
+          "shares": 300000000,
+          "valueUsd": 58200000000,
+          "votingAuthority": { "sole": 300000000, "shared": 0, "none": 0 }
+        }
+      ],
+      "summary": {
+        "totalHoldingsCount": 1,
+        "totalValueUsd": 58200000000,
+        "newPositions": ["037833100"],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    }
+  ],
+  "stats": { "thirteenFFilings": 1, "thirteenFHoldings": 1 }
+}

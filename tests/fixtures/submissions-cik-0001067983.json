@@ -1,0 +1,13 @@
+{
+  "cik": "1067983",
+  "name": "Berkshire Hathaway Inc",
+  "filings": {
+    "recent": {
+      "form": ["13F-HR", "13F-HR/A"],
+      "filingDate": ["2026-05-15", "2026-06-10"],
+      "accessionNumber": ["0001067983-26-000123", "0001067983-26-000456"],
+      "primaryDocument": ["form13fData.xml", "form13fData.xml"],
+      "reportDate": ["2026-03-31", "2026-03-31"]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "platform": "any",
+  "language": "en",
+  "timezone": "America/New_York",
+  "frequency": "daily",
+  "deliveryTime": "08:00",
+  "delivery": { "method": "stdout" },
+  "lastAlertTimestamp": "2026-06-01T00:00:00.000Z",
+  "onboardingComplete": true
+}
