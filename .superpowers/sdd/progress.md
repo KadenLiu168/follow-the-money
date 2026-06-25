@@ -28,3 +28,4 @@
 - [x] Task 2.15 (commits ef2759e..174d9d7, review clean) — Fixed brief's latent bug: `${7.0}` renders as `7`; added fmtPct helper
 
 ## Phase 2: Core Library Modules — COMPLETE (15/15)
+- [x] Task 3.1 (commits 0644ce5..863f97d, review clean)
