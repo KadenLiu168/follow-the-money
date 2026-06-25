@@ -29,3 +29,4 @@
 
 ## Phase 2: Core Library Modules — COMPLETE (15/15)
 - [x] Task 3.1 (commits 0644ce5..863f97d, review clean)
+- [x] Task 3.2 (commits c0ca6dd..3b80122, review clean) — Minor: unused writeManifest import (delegated internally by append13DFiling)
