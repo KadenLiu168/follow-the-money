@@ -22,3 +22,4 @@
 - [x] Task 2.9 (commits 3053cec..491967a, review clean) — Minor: trailing newlines, single-writer assumption
 - [x] Task 2.10 (commits ecc21a5..90c5310, review clean) — Minor: brief's reference impl was inconsistent with its own test (history[1] = 13F-HR/A); implementer deduped prior history before append; readFeedJson regenerates generatedAt on every read (non-bug quirk)
 - [x] Task 2.11 (commits ab0c772 + a4ae2ca, review clean) — Minor: trailing newlines
+- [x] Task 2.12 (commits efac421..3fbe68e + fix 093c91a, review clean) — Fixed brief's test 2 mismatch: spec says inclusive so lookbackDays=1 keeps 2 days, not 1
