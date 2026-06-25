@@ -17,3 +17,4 @@
 - [x] Task 2.4 (commits 6aa0b1d..290ed32, review clean) — Minor: brief had internally inconsistent `* 1000` comment vs test `valueUsd: 58200000000`; implementer correctly followed test (literal dollars in fixture); will need real-EDGAR calibration later
 - [x] Task 2.5 (commits 599a30f..295ffba, review clean) — Minor: test 2 doesn't cover decreasedPositions>0; side-effect push inside filter
 - [x] Task 2.6 (commits d7b85a3..fc829eb, review clean) — Minor: brief's test regex vs impl order contradicted (implementer fixed); test asserts `_source.form` per fixture
+- [x] Task 2.7 (commits 592efa9..$(git rev-parse --short HEAD), review clean) — Minor: stripTags rewritten to preserve uppercase labels (fixtures use that format); added stopLabels
