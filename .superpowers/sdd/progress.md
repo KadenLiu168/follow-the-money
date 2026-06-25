@@ -11,3 +11,4 @@
 - [x] Task 1.1 (commits 1f94d1c..4dcdc8a, review clean) — Minor: test JSON.parse duplicated; could assert schemaVersion (faithful to brief)
 - [x] Task 1.2 (commits c84b648..18731e0, review clean) — Minor: search-13dg.json has duplicate `ciks`/`display_names` keys (preserved per brief, parser uses last occurrence = [filer, issuer]); tests/fixtures.test.js has unused readdirSync/statSync imports (faithful to brief)
 - [x] Task 1.3 (commits e5821e2..e244504, review clean) — Minor: happy-path test imports runVerify directly (nock child-process constraint), 50ms poll, hardcoded date, missing log string assertion
+- [x] Task 2.1 (commits 693a733..1f4c5f8, review clean) — Minor: missing trailing newlines (recurring)
