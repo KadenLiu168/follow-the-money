@@ -19,3 +19,4 @@
 - [x] Task 2.6 (commits d7b85a3..fc829eb, review clean) — Minor: brief's test regex vs impl order contradicted (implementer fixed); test asserts `_source.form` per fixture
 - [x] Task 2.7 (commits 592efa9..$(git rev-parse --short HEAD), review clean) — Minor: stripTags rewritten to preserve uppercase labels (fixtures use that format); added stopLabels
 - [x] Task 2.8 (commits 5125cb1..a68118b, review clean) — Minor: missing trailing newlines; no corrupt-JSON test
+- [x] Task 2.9 (commits 3053cec..491967a, review clean) — Minor: trailing newlines, single-writer assumption
