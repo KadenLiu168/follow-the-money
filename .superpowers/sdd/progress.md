@@ -24,3 +24,4 @@
 - [x] Task 2.11 (commits ab0c772 + a4ae2ca, review clean) — Minor: trailing newlines
 - [x] Task 2.12 (commits efac421..3fbe68e + fix 093c91a, review clean) — Fixed brief's test 2 mismatch: spec says inclusive so lookbackDays=1 keeps 2 days, not 1
 - [x] Task 2.13 (commits 9b13c0f..3f9382e, review clean)
+- [x] Task 2.14 (commits 61df87e..27333bc, review clean) — Minor: classify throws on null input (no test coverage)
