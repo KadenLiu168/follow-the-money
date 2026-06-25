@@ -14,8 +14,8 @@ describe('filterByLookback', () => {
     expect(r).toHaveLength(2);
   });
 
-  it('handles lookbackDays=1 (only today)', () => {
-    const r = filterByLookback([{ filingDate: '2026-06-25' }, { filingDate: '2026-06-24' }], { lookbackDays: 1, now: NOW });
-    expect(r).toHaveLength(1);
+  it('with lookbackDays=1 keeps today and yesterday (inclusive of now - lookbackDays)', () => {
+    const r = filterByLookback([{ filingDate: '2026-06-25' }, { filingDate: '2026-06-24' }, { filingDate: '2026-06-23' }], { lookbackDays: 1, now: NOW });
+    expect(r).toHaveLength(2);
   });
 });
