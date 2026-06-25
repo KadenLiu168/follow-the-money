@@ -31,3 +31,4 @@
 - [x] Task 3.1 (commits 0644ce5..863f97d, review clean)
 - [x] Task 3.2 (commits c0ca6dd..3b80122, review clean) — Minor: unused writeManifest import (delegated internally by append13DFiling)
 - [x] Task 3.3 (commits da0d6e4..48bc937, review clean) — **CRITICAL bug fix verified**: brief's `a.errors.length || (config.thirteenDG.enabled && a.errors.length)` replaced with `totalErrors > 0 && totalAdded === 0` (total failure only)
+- [x] Task 4.1 (commits 686334e..7946a94, review clean) — Fixed brief bugs: mid-body import (illegal ESM), wrong import source (readManifest from manifest.js, not feed-ndjson.js)
