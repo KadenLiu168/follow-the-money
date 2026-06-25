@@ -25,3 +25,6 @@
 - [x] Task 2.12 (commits efac421..3fbe68e + fix 093c91a, review clean) — Fixed brief's test 2 mismatch: spec says inclusive so lookbackDays=1 keeps 2 days, not 1
 - [x] Task 2.13 (commits 9b13c0f..3f9382e, review clean)
 - [x] Task 2.14 (commits 61df87e..27333bc, review clean) — Minor: classify throws on null input (no test coverage)
+- [x] Task 2.15 (commits ef2759e..174d9d7, review clean) — Fixed brief's latent bug: `${7.0}` renders as `7`; added fmtPct helper
+
+## Phase 2: Core Library Modules — COMPLETE (15/15)
