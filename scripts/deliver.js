@@ -1,21 +1,33 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import dotenvConfig from 'dotenv/config';
-
-const loadEnv = dotenvConfig.config;
+import { config as loadEnv } from 'dotenv';
 
 const HOME = process.env.HOME || homedir();
 const CONFIG_PATH = join(HOME, 'config.json');
 const ENV_PATH = join(HOME, '.env');
-if (existsSync(ENV_PATH)) loadEnv({ path: ENV_PATH });
+
+if (existsSync(ENV_PATH)) {
+  try {
+    loadEnv({ path: ENV_PATH });
+  } catch (err) {
+    console.error(`ERROR: failed to load ${ENV_PATH}: ${err.message}`);
+    process.exit(1);
+  }
+}
 
 const args = process.argv.slice(2);
 const textIdx = args.indexOf('--text');
 const text = textIdx >= 0 ? args[textIdx + 1] : '';
 if (!text) { console.error('ERROR: --text required'); process.exit(1); }
 
-const config = existsSync(CONFIG_PATH) ? JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) : { delivery: { method: 'stdout' } };
+let config;
+try {
+  config = existsSync(CONFIG_PATH) ? JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) : { delivery: { method: 'stdout' } };
+} catch (err) {
+  console.error(`ERROR: failed to parse ${CONFIG_PATH}: ${err.message}`);
+  process.exit(1);
+}
 const method = config.delivery?.method ?? 'stdout';
 
 if (method === 'stdout' || method === 'any') {
