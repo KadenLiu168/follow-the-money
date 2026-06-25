@@ -1,0 +1,19 @@
+{
+  "name": "follow-the-money",
+  "version": "0.1.0",
+  "description": "Track legendary US fund managers via SEC 13F and 13D/G activist moves",
+  "type": "module",
+  "engines": { "node": ">=20.0.0" },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "aggregate": "node scripts/aggregate.js",
+    "digest": "node scripts/prepare-digest.js",
+    "verify-edgar": "node scripts/verify-edgar.js",
+    "evals": "node scripts/eval.js"
+  },
+  "devDependencies": {
+    "vitest": "^2.0.0",
+    "nock": "^14.0.0"
+  }
+}
