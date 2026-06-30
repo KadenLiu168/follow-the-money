@@ -4,3 +4,20 @@ node_modules/
 *.log
 coverage/
 .DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temp / scratch
+tmp/
+temp/
+*.tmp
+
+# SDD internal scratch (per-task briefs, review diffs, reports)
+.superpowers/
+
+# Internal build artifacts (4000-line plan with debug notes; not user-facing)
+docs/superpowers/plans/
