@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/money",
+      "description": "Daily digest — must include 13F section emoji, 13D/G section emoji, and at least one SEC URL",
+      "checks": [
+        { "type": "contains", "value": "📋", "description": "13F section emoji" },
+        { "type": "regex", "pattern": "https://www\\.sec\\.gov/.*primaryDoc.*", "description": "SEC primary doc URL" },
+        { "type": "min_length", "value": 200, "description": "non-trivial digest" }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "/alerts",
+      "description": "Alert check — must mention at least one filer, ticker, and primary doc URL when alerts exist",
+      "checks": [
+        { "type": "regex", "pattern": "🚨|举牌|披露", "description": "alert language marker" },
+        { "type": "regex", "pattern": "https://www\\.sec\\.gov/.*primaryDoc.*", "description": "SEC URL" }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "show my settings",
+      "description": "Config read — must show frequency, delivery method, language",
+      "checks": [
+        { "type": "contains", "value": "frequency", "description": "frequency field shown" },
+        { "type": "contains", "value": "delivery", "description": "delivery field shown" },
+        { "type": "contains", "value": "language", "description": "language field shown" }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "switch to weekly",
+      "description": "Config change — must write frequency=weekly and confirm",
+      "checks": [
+        { "type": "regex", "pattern": "weekly", "description": "weekly reflected" },
+        { "type": "not_contains", "value": "error", "description": "no error" }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "/money --lookback 7",
+      "description": "Weekly lookback — digest must cover 7 days of 13F",
+      "checks": [
+        { "type": "min_length", "value": 400, "description": "weekly digest is longer" },
+        { "type": "regex", "pattern": "Q1|Q2|Q3|Q4", "description": "quarter reference present" }
+      ]
+    }
+  ]
+}
