@@ -37,7 +37,7 @@ Add these lines (adjust times to your config):
 
 ```cron
 # Daily digest at 08:00 local time
-0 8 * * * cd $FTM_SKILL_DIR && /usr/local/bin/node scripts/prepare-digest.js | /usr/local/bin/node scripts/deliver.js >> ~/.follow-the-money/cron.log 2>&1
+0 8 * * * cd $FTM_SKILL_DIR && /usr/local/bin/node scripts/prepare-digest.js --lookback 1 > ~/.follow-the-money/digest.json && /usr/local/bin/node scripts/deliver.js --file ~/.follow-the-money/digest.json >> ~/.follow-the-money/cron.log 2>&1
 
 # Alert check every 4 hours
 0 */4 * * * cd $FTM_SKILL_DIR && /usr/local/bin/node scripts/check-alerts.js >> ~/.follow-the-money/cron.log 2>&1

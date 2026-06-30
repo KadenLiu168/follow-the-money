@@ -18,8 +18,19 @@ if (existsSync(ENV_PATH)) {
 
 const args = process.argv.slice(2);
 const textIdx = args.indexOf('--text');
-const text = textIdx >= 0 ? args[textIdx + 1] : '';
-if (!text) { console.error('ERROR: --text required'); process.exit(1); }
+const fileIdx = args.indexOf('--file');
+const textLiteral = textIdx >= 0 ? args[textIdx + 1] : '';
+const filePath = fileIdx >= 0 ? args[fileIdx + 1] : '';
+let text = textLiteral;
+if (!text && filePath) {
+  try {
+    text = readFileSync(filePath, 'utf8');
+  } catch (err) {
+    console.error(`ERROR: failed to read ${filePath}: ${err.message}`);
+    process.exit(1);
+  }
+}
+if (!text) { console.error('ERROR: --text or --file required'); process.exit(1); }
 
 let config;
 try {

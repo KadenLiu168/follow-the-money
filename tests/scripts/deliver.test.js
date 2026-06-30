@@ -37,6 +37,14 @@ describe('deliver.js', () => {
     expect(out).toMatch(/x/);
   });
 
+  it('reads --file <path> and delivers its contents to stdout', () => {
+    writeFileSync(join(fakeroot, 'config.json'), JSON.stringify({ delivery: { method: 'stdout' } }));
+    const digestPath = join(fakeroot, 'digest.txt');
+    writeFileSync(digestPath, 'hello-from-file');
+    const out = execSync(`HOME=${fakeroot} node scripts/deliver.js --file ${digestPath}`, { encoding: 'utf8' });
+    expect(out).toMatch(/hello-from-file/);
+  });
+
   it('reaches env check when .env is present and method=telegram (proves import works)', () => {
     writeFileSync(join(fakeroot, 'config.json'), JSON.stringify({ delivery: { method: 'telegram' } }));
     writeFileSync(join(fakeroot, '.env'), 'TELEGRAM_BOT_TOKEN=abc123\n');

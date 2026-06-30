@@ -59,7 +59,7 @@ All "seen/unseen" state is derived from the feed files plus `config.lastAlertTim
 The center feed is authoritative. Multiple devices reading the same feed get the same digests and same alert history.
 
 ### Agent-agnostic
-The skill works across Claude Code, OpenClaw, Cursor, etc. No agent brand names anywhere in code, prompts, or SKILL.md. Platform detection uses generic `which <tool>` probing when needed.
+The skill works across any AI agent runtime. No agent brand names anywhere in code, prompts, or SKILL.md. Platform detection uses generic `which <tool>` probing when needed.
 
 ## File Layout (data files)
 

@@ -30,8 +30,8 @@ npm run verify-edgar
 
 ### First digest
 ```bash
-node scripts/prepare-digest.js --lookback 7
-node scripts/deliver.js --text "$(cat digest.txt)"
+node scripts/prepare-digest.js --lookback 7 > digest.txt
+node scripts/deliver.js --file digest.txt
 ```
 
 ### Manual trigger

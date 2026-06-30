@@ -15,7 +15,7 @@ Track what legendary US fund managers and major activists are actually doing —
 
 This skill covers the periodic digest and the immediate SC 13D alert path. It is intentionally pipeline-focused: it orchestrates the local scripts, prompts, and config under `~/.follow-the-money/`, and delegates every network call to `node scripts/*` so the runtime stays a thin coordinator.
 
-The eight managers tracked are: Berkshire Hathaway, Pershing Square Capital, Scion Asset Management, Baupost Group, Oaktree Capital Management, ARK Invest, Tiger Global Management, and Coatue Management. Filings are pulled from EDGAR's public dataset; secrets (Telegram bot token, Resend API key, SMTP password) live in `~/.follow-the-money/.env`, with non-secret config in `config.json`.
+The eight managers tracked are: Berkshire Hathaway, Pershing Square Capital, Scion Asset Management, Baupost Group, Oaktree Capital Management, ARK Invest, Tiger Global Management, and Coatue Management. Filings are pulled from EDGAR's public dataset; secrets (Telegram bot token, Resend API key) live in `~/.follow-the-money/.env`, with non-secret config in `config.json`.
 
 If a step in this skill fails, surface the exact stderr from the failing script to the user and stop. Do not silently fall back to a partial digest. Partial output is worse than no output because the user may act on an incomplete view of recent activity.
 
