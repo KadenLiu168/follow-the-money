@@ -24,8 +24,9 @@ If a step in this skill fails, surface the exact stderr from the failing script 
 1. **Load config** from `~/.follow-the-money/config.json`. If missing or `onboardingComplete: false`, run onboarding (see `references/onboarding.md`).
 2. **Prepare digest**:
    ```bash
-   node scripts/prepare-digest.js --lookback 1
+   node scripts/prepare-digest.js
    ```
+   Default lookback is 90 days (one quarter) — 13F is quarterly, so a 1-day lookback returns nothing on non-filing days. Use `--lookback 1` if the user explicitly asks for "today only".
    Reads `feed-13f.json` + `feed-13dg/manifest.json` + current year NDJSON, filters by lookback, emits unified JSON to stdout.
 3. **Render**: apply `prompts/digest-intro` + `prompts/format-13f` + `prompts/format-13dg` + `prompts/translate` (if `config.language != 'en'`) to the JSON. Output is a Markdown digest.
 4. **Deliver**:

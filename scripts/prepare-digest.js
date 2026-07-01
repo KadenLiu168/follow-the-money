@@ -11,7 +11,10 @@ const FEED_13DG_DIR = join(REPO, 'feed-13dg');
 
 const args = process.argv.slice(2);
 const lookbackIdx = args.indexOf('--lookback');
-const lookbackDays = lookbackIdx >= 0 ? Number(args[lookbackIdx + 1]) : 1;
+// 13F is quarterly, so a 1-day lookback returns nothing on non-filing days.
+// Default to 90 (one quarter) so manual `/money` triggers have context;
+// cron callers that want "today's new filings only" can pass --lookback 1.
+const lookbackDays = lookbackIdx >= 0 ? Number(args[lookbackIdx + 1]) : 90;
 
 const f13 = existsSync(FEED_13F) ? readFeedJson(FEED_13F) : { thirteenF: [] };
 const manifest = existsSync(FEED_13DG_DIR) ? readManifest(FEED_13DG_DIR) : { years: {}, currentYear: new Date().getUTCFullYear() };

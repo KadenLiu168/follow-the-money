@@ -37,7 +37,7 @@ Add these lines (adjust times to your config):
 
 ```cron
 # Daily digest at 08:00 local time
-0 8 * * * cd $FTM_SKILL_DIR && /usr/local/bin/node scripts/prepare-digest.js --lookback 1 > ~/.follow-the-money/digest.json && /usr/local/bin/node scripts/deliver.js --file ~/.follow-the-money/digest.json >> ~/.follow-the-money/cron.log 2>&1
+0 8 * * * cd $FTM_SKILL_DIR && /usr/local/bin/node scripts/prepare-digest.js > ~/.follow-the-money/digest.json && /usr/local/bin/node scripts/deliver.js --file ~/.follow-the-money/digest.json >> ~/.follow-the-money/cron.log 2>&1
 
 # Alert check every 4 hours
 0 */4 * * * cd $FTM_SKILL_DIR && /usr/local/bin/node scripts/check-alerts.js >> ~/.follow-the-money/cron.log 2>&1
@@ -46,6 +46,7 @@ Add these lines (adjust times to your config):
 **Notes:**
 - Use absolute paths to `node` (run `which node` to find it)
 - `cd $FTM_SKILL_DIR` is required — scripts resolve relative paths from cwd
+- The default `--lookback` is 90 days (one quarter) — 13F is quarterly. To run "today only" instead, append `--lookback 1`.
 - Logs go to `~/.follow-the-money/cron.log`; rotate if it grows large
 
 To find your `node` path:

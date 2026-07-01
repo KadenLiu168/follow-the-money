@@ -15,4 +15,11 @@ describe('prepare-digest.js', () => {
     expect(j).toHaveProperty('thirteenF');
     expect(j).toHaveProperty('thirteenDG');
   });
+
+  it('defaults to 90-day lookback (one quarter) so 13F filings appear', () => {
+    const cwd = join(__dirname, '..', '..');
+    const out = execSync('node scripts/prepare-digest.js', { cwd, encoding: 'utf8' });
+    const j = JSON.parse(out);
+    expect(j.lookbackDays).toBe(90);
+  });
 });
