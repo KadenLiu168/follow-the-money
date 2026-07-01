@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-30T14:06:03.414Z",
+  "generatedAt": "2026-07-01T00:44:32.774Z",
   "lookbackDays": 90,
   "thirteenF": [
     {
@@ -4451,10 +4451,3256 @@
         "increasedPositions": 0,
         "decreasedPositions": 0
       }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2018-02-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-18-007071",
+      "periodOfReport": "2017-12-31",
+      "history": [
+        {
+          "filingDate": "2018-02-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-18-007071"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2017-11-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-17-042123",
+      "periodOfReport": "2017-09-30",
+      "history": [
+        {
+          "filingDate": "2017-11-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-17-042123"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2017-08-11",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-17-031385",
+      "periodOfReport": "2017-06-30",
+      "history": [
+        {
+          "filingDate": "2017-08-11",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-17-031385"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2017-05-12",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-17-020088",
+      "periodOfReport": "2017-03-31",
+      "history": [
+        {
+          "filingDate": "2017-05-25",
+          "formType": "13F-HR/A",
+          "accessionNumber": "0001140361-17-022328"
+        },
+        {
+          "filingDate": "2017-05-12",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-17-020088"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2017-02-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-17-007238",
+      "periodOfReport": "2016-12-31",
+      "history": [
+        {
+          "filingDate": "2017-02-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-17-007238"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2016-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-16-086387",
+      "periodOfReport": "2016-09-30",
+      "history": [
+        {
+          "filingDate": "2016-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-16-086387"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2016-08-12",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-16-076176",
+      "periodOfReport": "2016-06-30",
+      "history": [
+        {
+          "filingDate": "2016-08-12",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-16-076176"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2016-05-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-16-065190",
+      "periodOfReport": "2016-03-31",
+      "history": [
+        {
+          "filingDate": "2016-05-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-16-065190"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2016-02-12",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-16-052311",
+      "periodOfReport": "2015-12-31",
+      "history": [
+        {
+          "filingDate": "2016-02-12",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-16-052311"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2015-11-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-15-041178",
+      "periodOfReport": "2015-09-30",
+      "history": [
+        {
+          "filingDate": "2015-11-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-15-041178"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2015-08-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-15-031735",
+      "periodOfReport": "2015-06-30",
+      "history": [
+        {
+          "filingDate": "2015-08-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-15-031735"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2015-05-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-15-019780",
+      "periodOfReport": "2015-03-31",
+      "history": [
+        {
+          "filingDate": "2015-05-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-15-019780"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2015-02-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-15-006579",
+      "periodOfReport": "2014-12-31",
+      "history": [
+        {
+          "filingDate": "2015-02-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-15-006579"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2014-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-14-042304",
+      "periodOfReport": "2014-09-30",
+      "history": [
+        {
+          "filingDate": "2014-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-14-042304"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2014-08-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-14-032763",
+      "periodOfReport": "2014-06-30",
+      "history": [
+        {
+          "filingDate": "2014-08-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-14-032763"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2014-05-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-14-020929",
+      "periodOfReport": "2014-03-31",
+      "history": [
+        {
+          "filingDate": "2014-05-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-14-020929"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2014-02-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-14-006972",
+      "periodOfReport": "2013-12-31",
+      "history": [
+        {
+          "filingDate": "2014-02-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-14-006972"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2013-11-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-13-042185",
+      "periodOfReport": "2013-09-30",
+      "history": [
+        {
+          "filingDate": "2013-11-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-13-042185"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2013-08-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-13-032160",
+      "periodOfReport": "2013-06-30",
+      "history": [
+        {
+          "filingDate": "2013-08-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-13-032160"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2013-05-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-13-020642",
+      "periodOfReport": "2013-03-31",
+      "history": [
+        {
+          "filingDate": "2013-05-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-13-020642"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2013-02-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-13-006404",
+      "periodOfReport": "2012-12-31",
+      "history": [
+        {
+          "filingDate": "2013-02-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-13-006404"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2012-11-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-12-046838",
+      "periodOfReport": "2012-09-30",
+      "history": [
+        {
+          "filingDate": "2012-11-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-12-046838"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2012-08-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-12-036574",
+      "periodOfReport": "2012-06-30",
+      "history": [
+        {
+          "filingDate": "2012-08-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-12-036574"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2012-05-11",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-12-024714",
+      "periodOfReport": "2012-03-31",
+      "history": [
+        {
+          "filingDate": "2012-05-11",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-12-024714"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2012-02-10",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-12-006920",
+      "periodOfReport": "2011-12-31",
+      "history": [
+        {
+          "filingDate": "2012-02-10",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-12-006920"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2011-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-11-053058",
+      "periodOfReport": "2011-09-30",
+      "history": [
+        {
+          "filingDate": "2011-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-11-053058"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2011-08-12",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-11-041507",
+      "periodOfReport": "2011-06-30",
+      "history": [
+        {
+          "filingDate": "2011-08-12",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-11-041507"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2011-05-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-11-027320",
+      "periodOfReport": "2011-03-31",
+      "history": [
+        {
+          "filingDate": "2011-05-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-11-027320"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2011-02-11",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-11-008233",
+      "periodOfReport": "2010-12-31",
+      "history": [
+        {
+          "filingDate": "2011-02-11",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-11-008233"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2010-11-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-10-045769",
+      "periodOfReport": "2010-09-30",
+      "history": [
+        {
+          "filingDate": "2010-11-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-10-045769"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2010-08-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-10-033359",
+      "periodOfReport": "2010-06-30",
+      "history": [
+        {
+          "filingDate": "2010-08-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-10-033359"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2010-05-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-10-021047",
+      "periodOfReport": "2010-03-31",
+      "history": [
+        {
+          "filingDate": "2010-05-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-10-021047"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2010-02-12",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001140361-10-006076",
+      "periodOfReport": "2009-12-31",
+      "history": [
+        {
+          "filingDate": "2010-02-12",
+          "formType": "13F-HR",
+          "accessionNumber": "0001140361-10-006076"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2009-11-12",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-09-000159",
+      "periodOfReport": "2009-09-30",
+      "history": [
+        {
+          "filingDate": "2009-11-12",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-09-000159"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2009-08-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-09-000141",
+      "periodOfReport": "2009-06-30",
+      "history": [
+        {
+          "filingDate": "2009-08-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-09-000141"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2009-05-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-09-000129",
+      "periodOfReport": "2009-03-31",
+      "history": [
+        {
+          "filingDate": "2009-05-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-09-000129"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2009-02-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-09-000102",
+      "periodOfReport": "2008-12-31",
+      "history": [
+        {
+          "filingDate": "2009-02-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-09-000102"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2008-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-08-000206",
+      "periodOfReport": "2008-09-30",
+      "history": [
+        {
+          "filingDate": "2008-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-08-000206"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2008-08-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-08-000191",
+      "periodOfReport": "2008-06-30",
+      "history": [
+        {
+          "filingDate": "2008-08-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-08-000191"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2008-05-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-08-000174",
+      "periodOfReport": "2008-03-31",
+      "history": [
+        {
+          "filingDate": "2008-05-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-08-000174"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2008-02-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-08-000105",
+      "periodOfReport": "2007-12-31",
+      "history": [
+        {
+          "filingDate": "2008-02-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-08-000105"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2007-11-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-07-000165",
+      "periodOfReport": "2007-09-30",
+      "history": [
+        {
+          "filingDate": "2008-02-13",
+          "formType": "13F-HR/A",
+          "accessionNumber": "0001061768-08-000104"
+        },
+        {
+          "filingDate": "2007-11-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-07-000165"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2007-08-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-07-000161",
+      "periodOfReport": "2007-06-30",
+      "history": [
+        {
+          "filingDate": "2007-08-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-07-000161"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2007-05-11",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-07-000155",
+      "periodOfReport": "2007-03-31",
+      "history": [
+        {
+          "filingDate": "2007-05-11",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-07-000155"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2007-02-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-07-000109",
+      "periodOfReport": "2006-12-31",
+      "history": [
+        {
+          "filingDate": "2007-02-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-07-000109"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2006-11-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-06-000045",
+      "periodOfReport": "2006-09-30",
+      "history": [
+        {
+          "filingDate": "2006-11-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-06-000045"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2006-08-11",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-06-000040",
+      "periodOfReport": "2006-06-30",
+      "history": [
+        {
+          "filingDate": "2006-08-11",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-06-000040"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2006-05-12",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-06-000030",
+      "periodOfReport": "2006-03-31",
+      "history": [
+        {
+          "filingDate": "2006-05-12",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-06-000030"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2006-02-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-06-000019",
+      "periodOfReport": "2005-12-31",
+      "history": [
+        {
+          "filingDate": "2006-02-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-06-000019"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2005-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-05-000022",
+      "periodOfReport": "2005-09-30",
+      "history": [
+        {
+          "filingDate": "2005-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-05-000022"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2005-08-12",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-05-000019",
+      "periodOfReport": "2005-06-30",
+      "history": [
+        {
+          "filingDate": "2005-08-12",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-05-000019"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2005-05-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-05-000015",
+      "periodOfReport": "2005-03-31",
+      "history": [
+        {
+          "filingDate": "2005-05-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-05-000015"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2005-02-11",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-05-000012",
+      "periodOfReport": "2004-12-31",
+      "history": [
+        {
+          "filingDate": "2005-02-11",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-05-000012"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2004-11-12",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-04-000039",
+      "periodOfReport": "2004-09-30",
+      "history": [
+        {
+          "filingDate": "2004-11-12",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-04-000039"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2004-08-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-04-000035",
+      "periodOfReport": "2004-06-30",
+      "history": [
+        {
+          "filingDate": "2004-08-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-04-000035"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2004-05-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-04-000029",
+      "periodOfReport": "2004-03-31",
+      "history": [
+        {
+          "filingDate": "2004-05-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-04-000029"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2004-02-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-04-000023",
+      "periodOfReport": "2003-12-31",
+      "history": [
+        {
+          "filingDate": "2004-02-19",
+          "formType": "13F-HR/A",
+          "accessionNumber": "0001061768-04-000025"
+        },
+        {
+          "filingDate": "2004-02-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-04-000023"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2003-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-03-000052",
+      "periodOfReport": "2003-09-30",
+      "history": [
+        {
+          "filingDate": "2003-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-03-000052"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2003-08-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-03-000047",
+      "periodOfReport": "2003-06-30",
+      "history": [
+        {
+          "filingDate": "2003-08-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-03-000047"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2003-05-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-03-000039",
+      "periodOfReport": "2003-03-31",
+      "history": [
+        {
+          "filingDate": "2003-05-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-03-000039"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2003-02-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-03-000018",
+      "periodOfReport": "2002-12-31",
+      "history": [
+        {
+          "filingDate": "2003-02-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-03-000018"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2002-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-02-000012",
+      "periodOfReport": "2002-09-30",
+      "history": [
+        {
+          "filingDate": "2002-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-02-000012"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001061768",
+      "filerName": "Baupost Group",
+      "latestFilingDate": "2002-08-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001061768-02-000010",
+      "periodOfReport": "2002-06-30",
+      "history": [
+        {
+          "filingDate": "2002-08-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001061768-02-000010"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2019-08-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-19-005381",
+      "periodOfReport": "2019-06-30",
+      "history": [
+        {
+          "filingDate": "2019-08-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-19-005381"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2019-05-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-19-003690",
+      "periodOfReport": "2019-03-31",
+      "history": [
+        {
+          "filingDate": "2019-05-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-19-003690"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2019-02-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-19-001612",
+      "periodOfReport": "2018-12-31",
+      "history": [
+        {
+          "filingDate": "2019-02-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-19-001612"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2018-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-18-007445",
+      "periodOfReport": "2018-09-30",
+      "history": [
+        {
+          "filingDate": "2018-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-18-007445"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2018-08-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-18-005626",
+      "periodOfReport": "2018-06-30",
+      "history": [
+        {
+          "filingDate": "2018-08-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-18-005626"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2018-05-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-18-003754",
+      "periodOfReport": "2018-03-31",
+      "history": [
+        {
+          "filingDate": "2018-05-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-18-003754"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2018-02-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-18-001706",
+      "periodOfReport": "2017-12-31",
+      "history": [
+        {
+          "filingDate": "2018-02-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-18-001706"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2017-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-17-008069",
+      "periodOfReport": "2017-09-30",
+      "history": [
+        {
+          "filingDate": "2017-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-17-008069"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2017-08-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-17-006218",
+      "periodOfReport": "2017-06-30",
+      "history": [
+        {
+          "filingDate": "2017-08-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-17-006218"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2017-05-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-17-004286",
+      "periodOfReport": "2017-03-31",
+      "history": [
+        {
+          "filingDate": "2017-05-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-17-004286"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2017-02-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-17-001974",
+      "periodOfReport": "2016-12-31",
+      "history": [
+        {
+          "filingDate": "2017-02-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-17-001974"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2016-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-16-016596",
+      "periodOfReport": "2016-09-30",
+      "history": [
+        {
+          "filingDate": "2016-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-16-016596"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2016-08-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-16-014985",
+      "periodOfReport": "2016-06-30",
+      "history": [
+        {
+          "filingDate": "2016-08-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-16-014985"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2016-05-16",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-16-013223",
+      "periodOfReport": "2016-03-31",
+      "history": [
+        {
+          "filingDate": "2016-05-16",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-16-013223"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2016-02-16",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-16-011040",
+      "periodOfReport": "2015-12-31",
+      "history": [
+        {
+          "filingDate": "2016-02-16",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-16-011040"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2015-11-16",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-15-008225",
+      "periodOfReport": "2015-09-30",
+      "history": [
+        {
+          "filingDate": "2015-11-16",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-15-008225"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2015-08-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-15-006282",
+      "periodOfReport": "2015-06-30",
+      "history": [
+        {
+          "filingDate": "2015-08-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-15-006282"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2015-05-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-15-004426",
+      "periodOfReport": "2015-03-31",
+      "history": [
+        {
+          "filingDate": "2015-05-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-15-004426"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2015-02-17",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-15-002170",
+      "periodOfReport": "2014-12-31",
+      "history": [
+        {
+          "filingDate": "2015-02-17",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-15-002170"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2014-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-14-006596",
+      "periodOfReport": "2014-09-30",
+      "history": [
+        {
+          "filingDate": "2014-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-14-006596"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2014-08-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-14-004747",
+      "periodOfReport": "2014-06-30",
+      "history": [
+        {
+          "filingDate": "2014-08-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-14-004747"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2014-05-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-14-003349",
+      "periodOfReport": "2014-03-31",
+      "history": [
+        {
+          "filingDate": "2014-05-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-14-003349"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2014-02-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-14-001717",
+      "periodOfReport": "2013-12-31",
+      "history": [
+        {
+          "filingDate": "2014-02-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-14-001717"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2013-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-13-006567",
+      "periodOfReport": "2013-09-30",
+      "history": [
+        {
+          "filingDate": "2013-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-13-006567"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2013-08-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-13-005109",
+      "periodOfReport": "2013-06-30",
+      "history": [
+        {
+          "filingDate": "2013-08-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-13-005109"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2013-05-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-13-003513",
+      "periodOfReport": "2013-03-31",
+      "history": [
+        {
+          "filingDate": "2013-05-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-13-003513"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2013-02-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-13-001722",
+      "periodOfReport": "2012-12-31",
+      "history": [
+        {
+          "filingDate": "2013-02-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-13-001722"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2012-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-12-006283",
+      "periodOfReport": "2012-09-30",
+      "history": [
+        {
+          "filingDate": "2012-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-12-006283"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2012-08-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-12-004888",
+      "periodOfReport": "2012-06-30",
+      "history": [
+        {
+          "filingDate": "2012-08-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-12-004888"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2012-05-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-12-003443",
+      "periodOfReport": "2012-03-31",
+      "history": [
+        {
+          "filingDate": "2012-05-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-12-003443"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2012-02-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-12-001569",
+      "periodOfReport": "2011-12-31",
+      "history": [
+        {
+          "filingDate": "2012-02-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-12-001569"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2011-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-11-006190",
+      "periodOfReport": "2011-09-30",
+      "history": [
+        {
+          "filingDate": "2011-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-11-006190"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2011-08-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-11-004823",
+      "periodOfReport": "2011-06-30",
+      "history": [
+        {
+          "filingDate": "2011-08-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-11-004823"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2011-05-16",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-11-003375",
+      "periodOfReport": "2011-03-31",
+      "history": [
+        {
+          "filingDate": "2011-05-16",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-11-003375"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2011-02-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-11-001216",
+      "periodOfReport": "2010-12-31",
+      "history": [
+        {
+          "filingDate": "2011-02-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-11-001216"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2010-11-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-10-006610",
+      "periodOfReport": "2010-09-30",
+      "history": [
+        {
+          "filingDate": "2010-11-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-10-006610"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2010-08-16",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-10-004879",
+      "periodOfReport": "2010-06-30",
+      "history": [
+        {
+          "filingDate": "2010-08-16",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-10-004879"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2010-05-17",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-10-003520",
+      "periodOfReport": "2010-03-31",
+      "history": [
+        {
+          "filingDate": "2010-05-17",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-10-003520"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2010-02-16",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-10-001195",
+      "periodOfReport": "2009-12-31",
+      "history": [
+        {
+          "filingDate": "2010-02-16",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-10-001195"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2009-11-16",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-09-016351",
+      "periodOfReport": "2009-09-30",
+      "history": [
+        {
+          "filingDate": "2009-11-16",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-09-016351"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2009-08-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-09-014573",
+      "periodOfReport": "2009-06-30",
+      "history": [
+        {
+          "filingDate": "2009-08-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-09-014573"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2009-05-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-09-010449",
+      "periodOfReport": "2009-03-31",
+      "history": [
+        {
+          "filingDate": "2009-05-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-09-010449"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2009-02-17",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-09-002858",
+      "periodOfReport": "2008-12-31",
+      "history": [
+        {
+          "filingDate": "2009-02-17",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-09-002858"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2008-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-08-007904",
+      "periodOfReport": "2008-09-30",
+      "history": [
+        {
+          "filingDate": "2008-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-08-007904"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2008-08-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-08-004613",
+      "periodOfReport": "2008-06-30",
+      "history": [
+        {
+          "filingDate": "2008-08-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-08-004613"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2008-02-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-08-001274",
+      "periodOfReport": "2007-12-31",
+      "history": [
+        {
+          "filingDate": "2008-07-03",
+          "formType": "13F-HR/A",
+          "accessionNumber": "0000919574-08-003908"
+        },
+        {
+          "filingDate": "2008-02-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-08-001274"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2008-05-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-08-003097",
+      "periodOfReport": "2008-03-31",
+      "history": [
+        {
+          "filingDate": "2008-05-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-08-003097"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2007-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-07-005209",
+      "periodOfReport": "2007-09-30",
+      "history": [
+        {
+          "filingDate": "2007-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-07-005209"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2007-08-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-07-003883",
+      "periodOfReport": "2007-06-30",
+      "history": [
+        {
+          "filingDate": "2007-09-04",
+          "formType": "13F-HR/A",
+          "accessionNumber": "0000919574-07-004411"
+        },
+        {
+          "filingDate": "2007-08-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-07-003883"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2007-05-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-07-002675",
+      "periodOfReport": "2007-03-31",
+      "history": [
+        {
+          "filingDate": "2007-05-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-07-002675"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2007-02-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-07-001066",
+      "periodOfReport": "2006-12-31",
+      "history": [
+        {
+          "filingDate": "2007-02-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-07-001066"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2006-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-06-000016",
+      "periodOfReport": "2006-09-30",
+      "history": [
+        {
+          "filingDate": "2006-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-06-000016"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2006-08-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-06-000015",
+      "periodOfReport": "2006-06-30",
+      "history": [
+        {
+          "filingDate": "2006-08-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-06-000015"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2006-05-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-06-000012",
+      "periodOfReport": "2006-03-31",
+      "history": [
+        {
+          "filingDate": "2006-05-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-06-000012"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2006-02-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-06-000002",
+      "periodOfReport": "2005-12-31",
+      "history": [
+        {
+          "filingDate": "2006-02-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-06-000002"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2005-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-05-000021",
+      "periodOfReport": "2005-09-30",
+      "history": [
+        {
+          "filingDate": "2005-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-05-000021"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2005-08-12",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-05-000019",
+      "periodOfReport": "2005-06-30",
+      "history": [
+        {
+          "filingDate": "2005-08-12",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-05-000019"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2005-05-13",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-05-000013",
+      "periodOfReport": "2005-03-31",
+      "history": [
+        {
+          "filingDate": "2005-05-13",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-05-000013"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2005-02-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-05-000008",
+      "periodOfReport": "2004-12-31",
+      "history": [
+        {
+          "filingDate": "2005-02-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-05-000008"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2004-11-15",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001279471-04-000012",
+      "periodOfReport": "2004-09-30",
+      "history": [
+        {
+          "filingDate": "2004-11-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0001279471-04-000012"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2004-08-16",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-04-000029",
+      "periodOfReport": "2004-06-30",
+      "history": [
+        {
+          "filingDate": "2004-08-16",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-04-000029"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2004-05-17",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-04-000025",
+      "periodOfReport": "2004-03-31",
+      "history": [
+        {
+          "filingDate": "2004-05-17",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-04-000025"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2004-02-17",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-04-000011",
+      "periodOfReport": "2003-12-31",
+      "history": [
+        {
+          "filingDate": "2004-02-17",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-04-000012"
+        },
+        {
+          "filingDate": "2004-02-17",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-04-000011"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2003-11-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-03-000019",
+      "periodOfReport": "2003-09-30",
+      "history": [
+        {
+          "filingDate": "2003-11-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-03-000019"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2003-08-18",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-03-000017",
+      "periodOfReport": "2003-06-30",
+      "history": [
+        {
+          "filingDate": "2003-08-18",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-03-000017"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2003-05-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-03-000008",
+      "periodOfReport": "2003-03-31",
+      "history": [
+        {
+          "filingDate": "2003-05-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-03-000008"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2003-02-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-03-000004",
+      "periodOfReport": "2002-12-31",
+      "history": [
+        {
+          "filingDate": "2003-02-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-03-000004"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2002-11-12",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-02-000008",
+      "periodOfReport": "2002-09-30",
+      "history": [
+        {
+          "filingDate": "2002-11-12",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-02-000008"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2002-08-12",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-02-000006",
+      "periodOfReport": "2002-06-30",
+      "history": [
+        {
+          "filingDate": "2002-08-12",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-02-000006"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2002-05-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0001167483-02-000004",
+      "periodOfReport": "2002-03-28",
+      "history": [
+        {
+          "filingDate": "2002-05-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0001167483-02-000004"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
+    },
+    {
+      "filerCik": "0001167483",
+      "filerName": "Tiger Global Management",
+      "latestFilingDate": "2002-02-14",
+      "latestFormType": "13F-HR",
+      "latestAccessionNumber": "0000919574-02-000507",
+      "periodOfReport": "2001-12-31",
+      "history": [
+        {
+          "filingDate": "2002-02-14",
+          "formType": "13F-HR",
+          "accessionNumber": "0000919574-02-000507"
+        }
+      ],
+      "holdings": [],
+      "summary": {
+        "totalHoldingsCount": 0,
+        "totalValueUsd": 0,
+        "newPositions": [],
+        "closedPositions": [],
+        "increasedPositions": 0,
+        "decreasedPositions": 0
+      }
     }
   ],
   "stats": {
-    "thirteenFFilings": 181,
+    "thirteenFFilings": 315,
     "thirteenFHoldings": 0
   }
 }
