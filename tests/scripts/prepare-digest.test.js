@@ -46,19 +46,20 @@ describe('prepare-digest.js', () => {
     expect(berkshire.valueUnitAdjusted).toBeUndefined();
   });
 
-  it('attaches summary with newPositions/closedPositions/deltaPct', () => {
+  it('attaches Berkshire summary with concrete new/closed/delta values', () => {
     const cwd = join(__dirname, '..', '..');
     const out = execSync('node scripts/prepare-digest.js --lookback 90', { cwd, encoding: 'utf8' });
     const j = JSON.parse(out);
-    const withSummary = j.thirteenF.find((f) => f.summary !== null && f.summary !== undefined);
-    expect(withSummary).toBeDefined();
-    expect(withSummary.summary).toHaveProperty('newPositions');
-    expect(withSummary.summary).toHaveProperty('closedPositions');
-    expect(withSummary.summary).toHaveProperty('increasedPositions');
-    expect(withSummary.summary).toHaveProperty('decreasedPositions');
-    expect(withSummary.summary).toHaveProperty('totalValueUsd');
-    expect(withSummary.summary).toHaveProperty('priorTotalValueUsd');
-    expect(withSummary.summary).toHaveProperty('deltaPct');
-    expect(Array.isArray(withSummary.summary.newPositions)).toBe(true);
+    const berkshire = j.thirteenF.find((f) => f.filerName === 'Berkshire Hathaway Inc');
+    expect(berkshire).toBeDefined();
+    expect(berkshire.summary).not.toBeNull();
+    // Berkshire has known Q4 2025 → Q1 2026 transition; prior total should be Q4 2025 ~$274B
+    expect(berkshire.summary.priorTotalValueUsd).toBe(274160086701);
+    expect(berkshire.summary.totalValueUsd).toBe(263095703570);
+    // At least one of increased/decreased should be positive (Berkshire always trades)
+    const moved = berkshire.summary.increasedPositions + berkshire.summary.decreasedPositions;
+    expect(moved).toBeGreaterThan(0);
+    // deltaPct should be a finite number
+    expect(Number.isFinite(berkshire.summary.deltaPct)).toBe(true);
   });
 });

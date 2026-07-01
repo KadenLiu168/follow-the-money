@@ -61,4 +61,25 @@ describe('periodDiff', () => {
     const out = periodDiff(current, [current, otherPrior]);
     expect(out.summary).toBeNull();
   });
+
+  it('breaks periodOfReport ties by latestFilingDate desc (Coatue Q4+Q1 double-filing)', () => {
+    const current = baseEntry('0001067983', '2026-03-31', [aapl]);
+    const priorSame = {
+      ...baseEntry('0001067983', '2025-12-31', [
+        { ...aapl, shares: 200000000, valueUsd: 38800000000 },
+      ]),
+      latestFilingDate: '2026-02-14', // earlier than priorTie
+    };
+    // Same periodOfReport as priorSame but later latestFilingDate
+    const priorTie = {
+      ...baseEntry('0001067983', '2025-12-31', [
+        { ...aapl, shares: 150000000, valueUsd: 29100000000 },
+      ]),
+      latestFilingDate: '2026-05-15', // later than priorSame
+    };
+    const all = [current, priorSame, priorTie];
+    const out = periodDiff(current, all);
+    // Should pick priorTie (later latestFilingDate) → prior total = 29100000000
+    expect(out.summary.priorTotalValueUsd).toBe(29100000000);
+  });
 });
