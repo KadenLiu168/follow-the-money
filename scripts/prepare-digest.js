@@ -4,6 +4,9 @@ import { filterByLookback } from '../lib/feed/filter-by-lookback.js';
 import { readFeedJson } from '../lib/store/feed-json.js';
 import { read13DFilings, validateManifest } from '../lib/store/feed-ndjson.js';
 import { readManifest } from '../lib/store/manifest.js';
+import { normalizeValueUnits } from '../lib/enrich/normalize-value-units.js';
+import { periodDiff } from '../lib/enrich/period-diff.js';
+import defaultSources from '../config/default-sources.json' with { type: 'json' };
 
 const REPO = process.cwd();
 const FEED_13F = join(REPO, 'feed-13f.json');
@@ -31,15 +34,23 @@ const f13Filtered = f13.thirteenF.filter(e => {
   return e.latestFilingDate >= cutoff;
 });
 
+const enriched = f13Filtered
+  .map((f) => normalizeValueUnits(f, defaultSources.thirteenF))
+  .map((f) => periodDiff(f, f13.thirteenF));
+
 const out = {
   schemaVersion: 1,
   generatedAt: new Date().toISOString(),
   lookbackDays,
-  thirteenF: f13Filtered,
+  thirteenF: enriched,
   thirteenDG: dgFiltered,
   stats: {
-    thirteenFFilings: f13Filtered.length,
+    thirteenFFilings: enriched.length,
     thirteenDGFilings: dgFiltered.length,
+  },
+  diagnostics: {
+    valueUnitsAdjusted: enriched.filter((f) => f.valueUnitAdjusted).map((f) => f.filerName),
+    summaryMissing: enriched.filter((f) => f.summary === null).map((f) => f.filerName),
   },
 };
 process.stdout.write(JSON.stringify(out, null, 2));
