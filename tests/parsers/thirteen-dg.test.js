@@ -39,4 +39,18 @@ describe('parseThirteenDG', () => {
   it('throws on unknown form type', () => {
     expect(() => parseThirteenDG(html13d, { formType: '10-K' })).toThrow(/invalid formType/);
   });
+
+  it('parses real SEC 13D HTML (parens-wrapped Title Case labels)', async () => {
+    // Fetch a real 13D filing and parse it.
+    const { createHttpClient } = await import('../../lib/http-client.js');
+    const { TokenBucket } = await import('../../lib/token-bucket.js');
+    const client = createHttpClient({ userAgent: 'T t@e.com', bucket: new TokenBucket(100, 100) });
+    const url = 'https://www.sec.gov/Archives/edgar/data/1474627/000147793224008147/tekhill_sc13da.htm';
+    const res = await client.fetch(url);
+    if (!res.ok) return; // skip if SEC is unavailable
+    const html = await res.text();
+    const r = parseThirteenDG(html, { formType: 'SC 13D/A' });
+    expect(r.issuerName).toBe('Newegg Commerce, Inc.');
+    expect(r.intent).toBe('active');
+  }, 10000);
 });
