@@ -34,4 +34,19 @@ describe('fetchLatest13FFilings', () => {
     expect(r).toHaveLength(1);
     expect(r[0].accessionNumber).toBe('0001067983-26-000001');
   });
+
+  it('skips pre-2003 13F filings where primaryDocument is .txt (no infoTable XML)', async () => {
+    nock('https://data.sec.gov').get('/submissions/CIK0001067983.json').reply(200, {
+      filings: { recent: {
+        form: ['13F-HR', '13F-HR', '13F-HR'],
+        filingDate: ['2001-02-13', '2026-05-15', '2000-05-12'],
+        accessionNumber: ['A1', 'A2', 'A3'],
+        primaryDocument: ['0001.txt', 'xslForm13F_X02/primary_doc.xml', ''],
+        reportDate: ['2000-12-31', '2026-03-31', '2000-03-31'],
+      } },
+    });
+    const r = await fetchLatest13FFilings(client, '0001067983');
+    expect(r).toHaveLength(1);
+    expect(r[0].accessionNumber).toBe('A2');
+  });
 });

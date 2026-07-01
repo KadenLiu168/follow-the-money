@@ -23,4 +23,26 @@ describe('parseThirteenF', () => {
   it('returns [] on empty <informationTable/>', () => {
     expect(parseThirteenF('<?xml version="1.0"?><informationTable/>')).toEqual([]);
   });
+
+  it('handles namespaced infoTable elements (Baupost, some filers use xmlns:ns1)', () => {
+    // Some filers' XML declares xmlns:ns1="..." and uses <ns1:infoTable> instead of <infoTable>.
+    const namespaced = `<?xml version="1.0" encoding="UTF-8"?>
+<ns1:informationTable xmlns:ns1="http://www.sec.gov/edgar/document/thirteenf/informationtable">
+  <ns1:infoTable>
+    <ns1:nameOfIssuer>ALPHABET INC</ns1:nameOfIssuer>
+    <ns1:cusip>02079K305</ns1:cusip>
+    <ns1:value>1234567</ns1:value>
+    <ns1:shrsOrPrnAmt><ns1:sshPrnamt>5000000</ns1:sshPrnamt></ns1:shrsOrPrnAmt>
+    <ns1:votingAuthority><ns1:Sole>5000000</ns1:Sole><ns1:Shared>0</ns1:Shared><ns1:None>0</ns1:None></ns1:votingAuthority>
+  </ns1:infoTable>
+</ns1:informationTable>`;
+    const r = parseThirteenF(namespaced);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({
+      cusip: '02079K305',
+      issuerName: 'ALPHABET INC',
+      shares: 5000000,
+      valueUsd: 1234567,
+    });
+  });
 });

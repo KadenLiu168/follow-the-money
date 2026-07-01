@@ -15,7 +15,8 @@ describe('verify-edgar.js (mocked)', () => {
   });
 
   it('reports VERIFICATION PASSED when all CIKs resolve', async () => {
-    for (const cik of ['0001067983', '0001336528', '0001641562', '0001061768', '0000945323', '0001601072', '0001167483', '0001532173']) {
+    // CIKs must match config/default-sources.json
+    for (const cik of ['0001067983', '0001336528', '0001649339', '0001061768', '0000949509', '0001697748', '0001167483', '0001135730']) {
       nock('https://data.sec.gov')
         .get(`/submissions/CIK${cik}.json`)
         .reply(200, { cik, name: `Mock Filer ${cik}` });
