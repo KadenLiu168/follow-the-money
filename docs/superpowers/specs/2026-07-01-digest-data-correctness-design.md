@@ -160,6 +160,17 @@ Threshold is heuristic. If a tracked fund ever sits between $1B and ~$1T with no
 
 ---
 
+## Allowed renderer-side change (per brainstorming decision Q5)
+
+The digest renderer is out of scope for this spec's **detection / enrichment logic**. However, one minimal renderer change is permitted to keep the digest honest with users:
+
+- After rendering the per-filer sections, render a footer line:
+  > *Unit adjustments: <comma-separated list of `diagnostics.valueUnitsAdjusted`> were inferred as thousands-of-dollars (×1000). Raw feed values were inconsistent per filer.*
+
+This change is additive (existing digest structure unchanged) and exists so users see when a portfolio total was auto-corrected. Defer per-row annotations to sub-project B.
+
+---
+
 ## Component 2: `lib/enrich/period-diff.js`
 
 ### Public API
