@@ -18,6 +18,10 @@ const lookbackIdx = args.indexOf('--lookback');
 // Default to 90 (one quarter) so manual `/money` triggers have context;
 // cron callers that want "today's new filings only" can pass --lookback 1.
 const lookbackDays = lookbackIdx >= 0 ? Number(args[lookbackIdx + 1]) : 90;
+if (!Number.isInteger(lookbackDays) || lookbackDays <= 0) {
+  console.error(`[prepare-digest] --lookback must be a positive integer, got: ${args[lookbackIdx + 1]}`);
+  process.exit(1);
+}
 
 const f13 = existsSync(FEED_13F) ? readFeedJson(FEED_13F) : { thirteenF: [] };
 const manifest = existsSync(FEED_13DG_DIR) ? readManifest(FEED_13DG_DIR) : { years: {}, currentYear: new Date().getUTCFullYear() };
@@ -29,14 +33,15 @@ if (existsSync(FEED_13DG_DIR)) {
 const dgRaw = read13DFilings(FEED_13DG_DIR, manifest);
 const dgFiltered = filterByLookback(dgRaw, { lookbackDays });
 
-const f13Filtered = f13.thirteenF.filter(e => {
-  const cutoff = new Date(Date.now() - lookbackDays * 86400000).toISOString().slice(0, 10);
-  return e.latestFilingDate >= cutoff;
-});
+const cutoff = new Date(Date.now() - lookbackDays * 86400000).toISOString().slice(0, 10);
+// Normalize the full feed ONCE so periodDiff can find a prior entry that
+// shares the same unit regime as the current entry. If only the current
+// entry were normalized, deltaPct would compare normalized current totals
+// to raw prior totals (off by 1000x for filers like Baupost).
+const normalizedFeed = f13.thirteenF.map((f) => normalizeValueUnits(f, defaultSources.thirteenF));
+const f13Filtered = normalizedFeed.filter(e => e.latestFilingDate >= cutoff);
 
-const enriched = f13Filtered
-  .map((f) => normalizeValueUnits(f, defaultSources.thirteenF))
-  .map((f) => periodDiff(f, f13.thirteenF));
+const enriched = f13Filtered.map((f) => periodDiff(f, normalizedFeed));
 
 const out = {
   schemaVersion: 1,

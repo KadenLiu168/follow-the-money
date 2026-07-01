@@ -51,7 +51,9 @@ if (method === 'telegram') {
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) { console.error('ERROR: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID required'); process.exit(1); }
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }) });
+  // Telegram defaults to plain text when parse_mode is omitted; this
+  // avoids Markdown injection from EDGAR-derived issuer/filer names.
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text }) });
   if (!res.ok) { console.error(`Telegram HTTP ${res.status}: ${await res.text()}`); process.exit(1); }
   console.log(text);
   process.exit(0);

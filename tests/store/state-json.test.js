@@ -28,4 +28,12 @@ describe('state-json', () => {
     const tempFiles = readdirSync(dir).filter(f => f.includes('.tmp'));
     expect(tempFiles).toEqual([]);
   });
+
+  it('merges DEFAULTS when file exists but lacks seenFilings (older schema)', () => {
+    const p = join(dir, 'state.json');
+    writeFileSync(p, JSON.stringify({ lastUpdated: '2026-05-15T08:00:00.000Z' }));
+    const s = readStateJson(p);
+    expect(s.seenFilings).toEqual({});
+    expect(s.lastUpdated).toBe('2026-05-15T08:00:00.000Z');
+  });
 });
