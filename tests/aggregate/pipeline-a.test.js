@@ -56,4 +56,32 @@ describe('runPipelineA', () => {
     expect(r.errors).toHaveLength(1);
     expect(r.errors[0].cik).toBe('0000000001');
   });
+
+  it('compares against prior period holdings of the same filer (regardless of CIK padding)', async () => {
+    // First filing (Q4 2025)
+    nock('https://data.sec.gov').get('/submissions/CIK0001067983.json').reply(200, {
+      filings: { recent: {
+        form: ['13F-HR', '13F-HR'],
+        filingDate: ['2025-11-14', '2026-05-15'],
+        accessionNumber: ['0001067983-25-999001', '0001067983-26-000123'],
+        primaryDocument: ['form13fData.xml', 'form13fData.xml'],
+        reportDate: ['2025-09-30', '2026-03-31'],
+      } },
+    });
+    // First filing has AAPL, second has AAPL+GOOG
+    const xmlQ4 = '<?xml version="1.0"?><informationTable><infoTable><nameOfIssuer>APPLE INC</nameOfIssuer><cusip>037833100</cusip><value>1000</value><shrsOrPrnAmt><sshPrnamt>100</sshPrnamt></shrsOrPrnAmt><votingAuthority><Sole>100</Sole><Shared>0</Shared><None>0</None></votingAuthority></infoTable></informationTable>';
+    const xmlQ1 = '<?xml version="1.0"?><informationTable><infoTable><nameOfIssuer>APPLE INC</nameOfIssuer><cusip>037833100</cusip><value>2000</value><shrsOrPrnAmt><sshPrnamt>200</sshPrnamt></shrsOrPrnAmt><votingAuthority><Sole>200</Sole><Shared>0</Shared><None>0</None></votingAuthority></infoTable><infoTable><nameOfIssuer>ALPHABET INC</nameOfIssuer><cusip>02079K305</cusip><value>3000</value><shrsOrPrnAmt><sshPrnamt>50</sshPrnamt></shrsOrPrnAmt><votingAuthority><Sole>50</Sole><Shared>0</Shared><None>0</None></votingAuthority></infoTable></informationTable>';
+    nock('https://www.sec.gov').get('/Archives/edgar/data/1067983/000106798325999001/form13fData.xml').reply(200, xmlQ4);
+    nock('https://www.sec.gov').get('/Archives/edgar/data/1067983/000106798326000123/form13fData.xml').reply(200, xmlQ1);
+    const r = await runPipelineA({
+      httpClient, config, feedPath: join(dir, 'feed-13f.json'), statePath: join(dir, 'state-13f.json'),
+    });
+    expect(r.added).toBe(2);
+    // Q1 entry should show: 1 new (GOOG), 0 closed, 1 increased (AAPL 100→200)
+    const q1 = JSON.parse(readFileSync(join(dir, 'feed-13f.json'), 'utf8'))
+      .thirteenF.find(e => e.periodOfReport === '2026-03-31');
+    expect(q1.summary.newPositions).toContain('02079K305');        // GOOG is new
+    expect(q1.summary.closedPositions).toEqual([]);                // nothing closed
+    expect(q1.summary.increasedPositions).toBe(1);                 // AAPL increased
+  });
 });
