@@ -31,10 +31,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Aggregator only writes files when there are new filings; gate each path on existence.
-          [ -f feed-13f.json ] && git add feed-13f.json
-          [ -d feed-13dg ] && git add feed-13dg/
-          [ -f state-13f.json ] && git add state-13f.json
-          [ -f state-13dg.ndjson ] && git add state-13dg.ndjson
+          [ -f feed-13f.json ]     && git add -f feed-13f.json
+          [ -d feed-13dg ]         && git add -f feed-13dg/
+          [ -f state-13f.json ]    && git add -f state-13f.json
+          [ -f state-13dg.ndjson ] && git add -f state-13dg.ndjson
           if git diff --staged --quiet; then
             echo "No changes"
           else
