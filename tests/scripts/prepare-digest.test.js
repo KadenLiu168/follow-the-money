@@ -126,4 +126,24 @@ describe('prepare-digest.js', () => {
       rmSync(envDir, { recursive: true, force: true });
     }
   });
+
+  it('exposes latestFormType=13F-HR/A and history[] for amendment entries (Coatue Q4 2025)', () => {
+    const cwd = join(__dirname, '..', '..');
+    const out = execSync('node scripts/prepare-digest.js --lookback 90', { cwd, encoding: 'utf8' });
+    const j = JSON.parse(out);
+    // Find Coatue's Q4 2025 amendment entry (periodOfReport=2025-12-31, filed 2026-05-15)
+    const coatueQ4 = j.thirteenF.find(
+      (f) => f.filerName === 'Coatue Management LLC' && f.periodOfReport === '2025-12-31'
+    );
+    expect(coatueQ4).toBeDefined();
+    expect(coatueQ4.latestFormType).toBe('13F-HR/A');
+    expect(coatueQ4.latestFilingDate).toBe('2026-05-15');
+    expect(Array.isArray(coatueQ4.history)).toBe(true);
+    expect(coatueQ4.history.length).toBe(2);
+    // history[0] must be the original 13F-HR filing (2026-02-17), history[1] the amendment
+    expect(coatueQ4.history[0].formType).toBe('13F-HR');
+    expect(coatueQ4.history[0].filingDate).toBe('2026-02-17');
+    expect(coatueQ4.history[1].formType).toBe('13F-HR/A');
+    expect(coatueQ4.history[1].filingDate).toBe('2026-05-15');
+  });
 });
