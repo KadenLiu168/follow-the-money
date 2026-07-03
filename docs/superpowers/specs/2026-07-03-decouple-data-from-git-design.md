@@ -140,14 +140,18 @@ After this spec, the four `git add` lines each gain a `-f` flag.
 ### Layer placement
 
 ```
-scripts/                  ← entry points (existing)
-  ├── aggregate.js        ← unchanged
-  ├── prepare-digest.js   ← path resolution refactored
-  ├── check-alerts.js     ← path resolution refactored
-  ├── deliver.js          ← unchanged
-  └── verify-edgar.js     ← unchanged
+scripts/                  ← entry points
+  ├── aggregate.js        ← unchanged (existing)
+  ├── prepare-digest.js   ← path resolution refactored (existing)
+  ├── check-alerts.js     ← path resolution refactored (existing)
+  ├── deliver.js          ← unchanged (existing)
+  ├── verify-edgar.js     ← unchanged (existing)
+  └── fetch-feed.js       ← NEW: CLI wrapper, thin orchestration
 
-lib/                      ← all unchanged
+lib/                      ← modules
+  ├── (all existing unchanged)
+  └── fetch/              ← NEW directory
+      └── fetch-feed.js   ← NEW: pure fetch logic, testable
 
 .github/workflows/
   └── aggregate.yml       ← 4-line change (`-f` flag)
@@ -155,20 +159,15 @@ lib/                      ← all unchanged
 .gitignore                ← 4 lines added
 
 SKILL.md                  ← daily path step 2 split into 2a (fetch) + 2b (digest)
-
-scripts/lib/fetch/        ← NEW directory
-  └── fetch-feed.js       ← new; curl wrapper + path resolver
 ```
 
-### Why a new `lib/fetch/fetch-feed.js` (vs inlining `curl` in SKILL.md)
+### Why split `lib/fetch/fetch-feed.js` + `scripts/fetch-feed.js`
 
-- Tests need a Node-callable API (not a shell-out) to assert retry / fallback behavior.
-- Future consumers (e.g. a `scripts/check-updates.js` cron helper) can reuse the same code path.
-- Keeps SKILL.md a thin coordinator, consistent with the project's existing principle.
+Mirrors the existing `scripts/aggregate.js` + `lib/aggregate/pipeline-a.js` pattern: heavy/testable logic lives in `lib/`, thin CLI orchestration lives in `scripts/`. SKILL.md stays a thin coordinator.
 
 ---
 
-## Component 1: `scripts/lib/fetch/fetch-feed.js` (NEW)
+## Component 1a: `lib/fetch/fetch-feed.js` (NEW — module)
 
 ### Public API
 
@@ -178,33 +177,41 @@ export async function fetchFeed({
   repoName,         // string, e.g. 'follow-the-money'
   branch,           // string, default 'main'
   targetDir,        // string, e.g. $XDG_CACHE_HOME/follow-the-money/feed
-  files,            // string[] — see File list below
   // optional:
   httpTimeoutMs,    // number, default 15000
   retries,          // number, default 2 (matches SKILL.md deliver.js retry policy)
-}) → { ok: true, filesWritten: string[] } | { ok: false, reason: string }
+}) → { ok: true, filesWritten: string[] } | { ok: false, reason: string, partialFilesWritten: string[] }
 ```
 
-### File list (hard-coded inside the module)
+### Static file list (always fetched)
 
 ```js
-const FEED_FILES = [
+const STATIC_FILES = [
   { urlPath: 'feed-13f.json',            localName: 'feed-13f.json' },
   { urlPath: 'state-13f.json',           localName: 'state-13f.json' },
   { urlPath: 'feed-13dg/manifest.json',  localName: 'feed-13dg/manifest.json' },
-  { urlPath: 'feed-13dg/2024.ndjson',    localName: 'feed-13dg/2024.ndjson' },
   { urlPath: 'state-13dg.ndjson',        localName: 'state-13dg.ndjson' },
 ];
 ```
 
-The `feed-13dg/` directory needs at minimum `manifest.json` + the current-year NDJSON. `2024.ndjson` is the only NDJSON in the current feed; this list will be regenerated each fetch by reading `feed-13dg/manifest.json` first and then downloading every year listed under `years.*.file`.
+### NDJSON files (discovered from manifest)
 
-**Implementation note:** Two-phase fetch is required:
-1. Fetch `manifest.json` first → discover `years` map.
-2. Fetch each `years.*.file` NDJSON.
-3. Fetch `state-*.json` and `feed-13f.json` (no dependency).
+NDJSON paths under `feed-13dg/` are **NOT** hard-coded. The module performs a two-phase fetch:
 
-The module exposes this as one call; callers don't see the two phases.
+1. **Phase 1 (parallel):** fetch all 4 STATIC_FILES including `manifest.json`.
+2. **Phase 2 (parallel):** read the just-fetched `manifest.json`, parse `years.*.file` for each year, fetch every NDJSON listed.
+3. **Phase 3 (parallel with phase 2):** nothing — phase 2 covers remaining work.
+
+If `manifest.json` fetch fails, phase 2 is skipped and the result is `ok: false` (the manifest is required to know what NDJSON files to download). The 4 STATIC_FILES that did succeed are reported in `partialFilesWritten` for diagnostic purposes.
+
+### Behavior
+
+- Uses Node's built-in `fetch` (Node 20+, no new deps).
+- Per file: GET `https://raw.githubusercontent.com/<owner>/<name>/<branch>/<urlPath>` → write atomically (`write to <localName>.tmp, fs.rename`) to `<targetDir>/<localName>`.
+- On HTTP failure: retry up to `retries` times with exponential backoff (500ms, 1500ms).
+- On all retries exhausted for any file: that file is reported as failed; other files continue.
+- Returns `ok: true` only when all STATIC_FILES and all discovered NDJSON files succeed.
+- Creates `targetDir` and any subdirectories with `mkdir -p` semantics (via `fs.mkdir({ recursive: true })`).
 
 ### Behavior
 
@@ -230,6 +237,46 @@ The module exposes this as one call; callers don't see the two phases.
 
 - The function returns a result object; it does **not throw**. The caller (SKILL.md agent) decides whether to fall back to local files.
 - On any failure, the function does **not delete** existing files in `targetDir`. Stale data is safer than no data.
+
+---
+
+## Component 1b: `scripts/fetch-feed.js` (NEW — CLI wrapper)
+
+A thin entry point that mirrors `scripts/aggregate.js` (which itself uses `import.meta.url` to be both module and CLI). This file:
+
+1. Reads env vars / computes defaults for `repoOwner`, `repoName`, `branch`, `targetDir`.
+2. Calls `fetchFeed({...})` from `lib/fetch/fetch-feed.js`.
+3. Prints the result as JSON to stdout.
+4. Exits 0 on `ok: true`, exits 1 on `ok: false`.
+
+### Default values
+
+| Parameter | Default | Source |
+|---|---|---|
+| `repoOwner` | `KadenLiu168` | hardcoded (single-repo project) |
+| `repoName` | `follow-the-money` | hardcoded |
+| `branch` | `main` | hardcoded |
+| `targetDir` | `$FOLLOW_THE_MONEY_FEED_DIR` if set, else platform-default | see "Local cache directory" below |
+
+Platform defaults for `targetDir`:
+
+| Platform | Default |
+|---|---|
+| Linux | `$XDG_CACHE_HOME/follow-the-money/feed/` if `XDG_CACHE_HOME` set, else `$HOME/.cache/follow-the-money/feed/` |
+| macOS | `$HOME/Library/Caches/follow-the-money/feed/` |
+| Windows | `%LOCALAPPDATA%\follow-the-money\feed\` |
+
+Resolved via `os.homedir()` + `process.platform` in Node. No external dependency.
+
+### Invocation from SKILL.md
+
+```bash
+node scripts/fetch-feed.js
+# stdout: {"ok":true,"filesWritten":["feed-13f.json", "state-13f.json", "feed-13dg/manifest.json", "feed-13dg/2024.ndjson", "state-13dg.ndjson"]}
+# stderr: (empty on success)
+```
+
+The SKILL.md agent reads stdout JSON; non-zero exit means the fetch failed and the agent falls through to local mode (cwd).
 
 ---
 
@@ -386,7 +433,7 @@ https://raw.githubusercontent.com/KadenLiu168/follow-the-money/main/state-13dg.n
 
 ### Local cache directory
 
-Resolved by `scripts/lib/fetch/fetch-feed.js`:
+Resolved by `scripts/fetch-feed.js` (CLI wrapper) which passes through to `lib/fetch/fetch-feed.js` (module):
 
 | Platform | Default path |
 |---|---|
@@ -430,16 +477,27 @@ Override: `FOLLOW_THE_MONEY_FEED_DIR` env var.
 
 ### New tests (TDD order)
 
-**`tests/lib/fetch/fetch-feed.test.js`** (new file)
+**`tests/fetch/fetch-feed.test.js`** (new file, mirrors `lib/fetch/fetch-feed.js`)
 
 | Test | Setup | Expected |
 |---|---|---|
-| All files 200, fresh fetch | Mock fetch returns 200 for all 5 files | `ok: true`, all 5 files written, atomic via .tmp rename |
-| `feed-13f.json` 404 | Mock returns 404 for feed-13f.json | `ok: false`, reason contains 'http_error', `feed-13f.json` not written, other files also not written (manifest discovery happens first) |
-| Manifest 200, NDJSON 404 | Mock returns 404 for one NDJSON | `ok: true`, warning logged, other files written |
-| Network timeout | Mock fetch rejects with AbortError | Retries up to `retries` times, then `ok: false` |
+| All files 200, fresh fetch | Mock fetch returns 200 for all 4 STATIC + 1 NDJSON (manifest returns 2024) | `ok: true`, all 5 files written, atomic via .tmp rename |
+| `feed-13f.json` 404 | Mock returns 404 for feed-13f.json | `ok: false`, reason contains 'http_error', `feed-13f.json` not written, others may have succeeded (in `partialFilesWritten`) |
+| Manifest 200, NDJSON 404 | Mock returns 404 for `feed-13dg/2024.ndjson` | `ok: true` (manifest is the source of truth; the year file is stale but other files succeed), warning logged |
+| Manifest 404 | Mock returns 404 for `manifest.json` | `ok: false` (cannot discover NDJSON files), other 3 STATIC_FILES reported in `partialFilesWritten` |
+| Network timeout | Mock fetch rejects with AbortError | Retries up to `retries` times per file, then `ok: false` |
 | Concurrent calls | Two simultaneous fetchFeed calls | Both succeed (no lock; last-write-wins) |
 | Existing files in targetDir | Pre-populate `feed-13f.json` with stale content | New fetch overwrites stale content atomically |
+
+**`tests/scripts/fetch-feed.test.js`** (new file, mirrors `scripts/fetch-feed.js`)
+
+| Test | Setup | Expected |
+|---|---|---|
+| Default `targetDir` on Linux | Set `process.platform = 'linux'`, unset `XDG_CACHE_HOME`, set `HOME` | targetDir resolves to `$HOME/.cache/follow-the-money/feed/` |
+| Default `targetDir` on macOS | Set `process.platform = 'darwin'`, set `HOME` | targetDir resolves to `$HOME/Library/Caches/follow-the-money/feed/` |
+| `FOLLOW_THE_MONEY_FEED_DIR` overrides default | Set env var | targetDir equals env var value |
+| Successful fetch | Mock `fetchFeed` returns `ok: true` | stdout has JSON, exit 0 |
+| Failed fetch | Mock `fetchFeed` returns `ok: false` | stdout has JSON, exit 1 |
 
 **`tests/scripts/prepare-digest.test.js`** (existing file, add tests)
 
@@ -486,14 +544,16 @@ Override: `FOLLOW_THE_MONEY_FEED_DIR` env var.
 
 The change is one logical unit and ships as one PR:
 1. `.gitignore` updated (new tracked lines)
-2. `scripts/lib/fetch/fetch-feed.js` added (new file)
-3. `scripts/prepare-digest.js`, `scripts/check-alerts.js` updated (env var resolution)
-4. `.github/workflows/aggregate.yml` updated (`-f` flags)
-5. `SKILL.md` updated (new step 2 + Feed freshness model section)
-6. `README.md` updated (local mode note)
-7. `references/architecture.md` updated (data flow diagram)
-8. `tests/lib/fetch/fetch-feed.test.js` added
-9. `tests/scripts/prepare-digest.test.js`, `tests/scripts/check-alerts.test.js` augmented
+2. `lib/fetch/fetch-feed.js` added (new module)
+3. `scripts/fetch-feed.js` added (new CLI wrapper)
+4. `scripts/prepare-digest.js`, `scripts/check-alerts.js` updated (env var resolution)
+5. `.github/workflows/aggregate.yml` updated (`-f` flags)
+6. `SKILL.md` updated (new step 2 + Feed freshness model section)
+7. `README.md` updated (local mode note)
+8. `references/architecture.md` updated (data flow diagram)
+9. `tests/fetch/fetch-feed.test.js` added
+10. `tests/scripts/fetch-feed.test.js` added
+11. `tests/scripts/prepare-digest.test.js`, `tests/scripts/check-alerts.test.js` augmented
 
 ### Post-merge steps (manual)
 
