@@ -8,7 +8,8 @@ import { mergeByIssuer } from '../lib/feed/merge-by-issuer.js';
 import { mergeAmendmentsForAlert } from '../lib/alert/merge-amendments.js';
 
 const REPO = process.cwd();
-const FEED_13DG_DIR = join(REPO, 'feed-13dg');
+const FEED_DIR = process.env.FOLLOW_THE_MONEY_FEED_DIR || REPO;
+const FEED_13DG_DIR = join(FEED_DIR, 'feed-13dg');
 const CONFIG_PATH = join(homedir(), '.follow-the-money', 'config.json');
 
 let config = {};
