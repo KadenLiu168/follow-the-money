@@ -42,7 +42,11 @@ const cutoff = new Date(Date.now() - lookbackDays * 86400000).toISOString().slic
 const normalizedFeed = f13.thirteenF.map((f) => normalizeValueUnits(f, defaultSources.thirteenF));
 const f13Filtered = normalizedFeed.filter(e => e.latestFilingDate >= cutoff);
 
-const enriched = f13Filtered.map((f) => periodDiff(f, normalizedFeed));
+// Pass defaultSources.thirteenF so periodDiff's defensive normalizeValueUnits
+// can correctly identify small-fund style prior entries (e.g. tiny CIKs that
+// publish in dollars rather than thousands). Idempotent for already-normalized
+// entries.
+const enriched = f13Filtered.map((f) => periodDiff(f, normalizedFeed, defaultSources.thirteenF));
 
 const out = {
   schemaVersion: 1,
