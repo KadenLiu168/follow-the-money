@@ -21,3 +21,12 @@ temp/
 
 # Internal build artifacts (4000-line plan with debug notes; not user-facing)
 docs/superpowers/plans/
+
+# Local knowledge-graph dumps (regenerable via /understand)
+.understand-anything/
+
+# Locally generated feed/state data (skill mode fetches from GitHub; CI uses git add -f)
+feed-13f.json
+state-13f.json
+feed-13dg/
+state-13dg.ndjson
