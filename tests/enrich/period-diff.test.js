@@ -106,4 +106,34 @@ describe('periodDiff', () => {
     // Real deltaPct = (100,000,000 - 110,000,000) / 110,000,000 = -9.09%
     expect(out.summary.deltaPct).toBeCloseTo(-0.0909, 4);
   });
+
+  it('idempotent: leaves prior entry alone when already normalized to dollars (defense does not double-normalize)', () => {
+    // Simulate post-normalizeValueUnits state: sum ≥ $1B → dollars.
+    const current = baseEntry('0001061768', '2026-03-31', [
+      { cusip: '1', issuerName: 'X', shares: 100, valueUsd: 1000000000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+    ]);
+    const prior = baseEntry('0001061768', '2025-12-31', [
+      { cusip: '1', issuerName: 'X', shares: 100, valueUsd: 1100000000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+    ]);
+    const cfg = [{ cik: '0001061768', name: 'Baupost Group', style: 'value' }];
+    const out = periodDiff(current, [current, prior], cfg);
+    // valueUsd sum = 1.1B ≥ $1B → normalizeValueUnits should NOT ×1000.
+    expect(out.summary.priorTotalValueUsd).toBe(1100000000);
+    // deltaPct = (1B - 1.1B) / 1.1B = -0.0909...
+    expect(out.summary.deltaPct).toBeCloseTo(-0.0909, 4);
+  });
+
+  it('honors small-fund style flag on prior: does not normalize even when sum < $1B', () => {
+    // Prior sum < $1B BUT CIK matches small-fund config → should NOT ×1000.
+    const current = baseEntry('0001061768', '2026-03-31', [
+      { cusip: '1', issuerName: 'X', shares: 100, valueUsd: 30000000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+    ]);
+    const prior = baseEntry('0001061768', '2025-12-31', [
+      { cusip: '1', issuerName: 'X', shares: 100, valueUsd: 30, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+    ]);
+    const cfg = [{ cik: '0001061768', name: 'Tiny Filer', style: 'small-fund' }];
+    const out = periodDiff(current, [current, prior], cfg);
+    // small-fund style → valueUnit: 'unknown' → prior valueUsd stays raw.
+    expect(out.summary.priorTotalValueUsd).toBe(30);
+  });
 });
