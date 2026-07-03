@@ -34,6 +34,10 @@ fund 间按 `totalValueUsd` 降序。
 - `history[]`：完整披露链，按时间顺序；`history[0]` 是原始披露，`history[history.length-1]` 是最新披露
 - `N = history.length`
 
+### 边界处理
+- `history` 字段缺失或非数组：按 `length === 1` 处理（跳过表单类型行）。
+- `latestFormType` 字段缺失或不以 `/A` 结尾：按常规披露处理（不应用本节规则）。
+
 ### Section title 格式
 - 常规：`### {filerName}（Q{N} {periodOfReport 年份}）`
 - 修订：`### {filerName}（Q{N} {periodOfReport 年份} 修订，原披露 {history[0].filingDate}）`
