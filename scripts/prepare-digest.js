@@ -9,8 +9,9 @@ import { periodDiff } from '../lib/enrich/period-diff.js';
 import defaultSources from '../config/default-sources.json' with { type: 'json' };
 
 const REPO = process.cwd();
-const FEED_13F = join(REPO, 'feed-13f.json');
-const FEED_13DG_DIR = join(REPO, 'feed-13dg');
+const FEED_DIR = process.env.FOLLOW_THE_MONEY_FEED_DIR || REPO;
+const FEED_13F = join(FEED_DIR, 'feed-13f.json');
+const FEED_13DG_DIR = join(FEED_DIR, 'feed-13dg');
 
 const args = process.argv.slice(2);
 const lookbackIdx = args.indexOf('--lookback');

@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const repoCwd = join(__dirname, '..', '..');
 
 describe('prepare-digest.js', () => {
   it('emits JSON with lookbackDays applied', () => {
@@ -61,5 +63,67 @@ describe('prepare-digest.js', () => {
     expect(moved).toBeGreaterThan(0);
     // deltaPct should be a finite number
     expect(Number.isFinite(berkshire.summary.deltaPct)).toBe(true);
+  });
+
+  it('reads from FOLLOW_THE_MONEY_FEED_DIR when set', async () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-prepdigest-env-'));
+    try {
+      // Put a tiny feed in envDir
+      writeFileSync(join(envDir, 'feed-13f.json'), JSON.stringify({ thirteenF: [] }));
+      mkdirSync(join(envDir, 'feed-13dg'));
+      writeFileSync(join(envDir, 'feed-13dg', 'manifest.json'), JSON.stringify({ schemaVersion: 1, currentYear: 2026, years: {} }));
+
+      // Use repo cwd so node can resolve scripts/prepare-digest.js;
+      // env var points feed reads to envDir (a different directory)
+      const out = execSync('node scripts/prepare-digest.js', {
+        cwd: repoCwd,
+        env: { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: envDir },
+        stdio: 'pipe',
+      }).toString();
+      const parsed = JSON.parse(out);
+      expect(parsed.thirteenF).toEqual([]);
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to cwd when FOLLOW_THE_MONEY_FEED_DIR is unset', async () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-prepdigest-fallback-'));
+    try {
+      writeFileSync(join(envDir, 'feed-13f.json'), JSON.stringify({ thirteenF: [] }));
+      mkdirSync(join(envDir, 'feed-13dg'));
+      writeFileSync(join(envDir, 'feed-13dg', 'manifest.json'), JSON.stringify({ schemaVersion: 1, currentYear: 2026, years: {} }));
+      // Symlink the real scripts/ dir so node can resolve `node scripts/prepare-digest.js`.
+      // cwd is envDir, env var is unset → script should fall back to cwd (envDir) and read the empty feed there.
+      symlinkSync(join(repoCwd, 'scripts'), join(envDir, 'scripts'));
+      // The script imports from ../lib/, ../config/ etc — link those too.
+      mkdirSync(join(envDir, 'lib'), { recursive: true });
+      mkdirSync(join(envDir, 'config'), { recursive: true });
+      const env = { ...process.env };
+      delete env.FOLLOW_THE_MONEY_FEED_DIR;
+      const out = execSync('node scripts/prepare-digest.js', { cwd: envDir, env, stdio: 'pipe' }).toString();
+      const parsed = JSON.parse(out);
+      expect(parsed.thirteenF).toEqual([]);
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+    }
+  });
+
+  it('reads from envDir when set, even if envDir is empty (regression: env var not silently ignored)', async () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-prepdigest-missing-'));
+    try {
+      // envDir is empty — cwd (repoCwd) has the real feed.
+      // After the fix, env var must be respected, so output should be empty feed,
+      // NOT the real repo feed. Before the fix, output would contain the real feed.
+      const out = execSync('node scripts/prepare-digest.js', {
+        cwd: repoCwd,
+        env: { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: envDir },
+        stdio: 'pipe',
+      }).toString();
+      const parsed = JSON.parse(out);
+      expect(parsed.thirteenF).toEqual([]);
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+    }
   });
 });
