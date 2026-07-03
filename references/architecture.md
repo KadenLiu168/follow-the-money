@@ -40,6 +40,17 @@ Four-layer data flow, layer responsibilities, and key design decisions. Load thi
 - `scripts/check-alerts.js` — read feed + filter new 13D/13D/A → alert list
 - `scripts/deliver.js` — dispatch via stdout / Telegram / email
 
+### Skill-mode data freshness
+
+As of 2026-07-03, the skill no longer reads `feed-13f.json` from `cwd`. Instead:
+
+1. `scripts/fetch-feed.js` downloads the 5 data files from `raw.githubusercontent.com` into `$FOLLOW_THE_MONEY_FEED_DIR` (default: `$XDG_CACHE_HOME/follow-the-money/feed/` on Linux, `~/Library/Caches/follow-the-money/feed/` on macOS).
+2. `prepare-digest.js` and `check-alerts.js` read from that env var (fallback to `cwd` for local mode).
+3. CI's `aggregate.yml` uses `git add -f` to publish data files to `main` despite `.gitignore` excluding them for local development.
+4. The repo is public, so raw URLs need no authentication.
+
+Local deployments are unaffected: `node scripts/aggregate.js` still writes to `cwd`, which the scripts read when `FOLLOW_THE_MONEY_FEED_DIR` is unset.
+
 ### Layer 4 — Output
 - **Digest**: periodic push (daily / weekly)
 - **Alert**: triggered on each SC 13D / SC 13D/A new filing

@@ -22,23 +22,44 @@ If a step in this skill fails, surface the exact stderr from the failing script 
 ## Daily path (cron or `/money`)
 
 1. **Load config** from `~/.follow-the-money/config.json`. If missing or `onboardingComplete: false`, run onboarding (see `references/onboarding.md`).
-2. **Prepare digest**:
+2. **Fetch fresh feed** (skill mode only):
    ```bash
-   node scripts/prepare-digest.js
+   node scripts/fetch-feed.js
+   ```
+   Resolves `$FOLLOW_THE_MONEY_FEED_DIR` (default: `$XDG_CACHE_HOME/follow-the-money/feed/` on Linux, `~/Library/Caches/follow-the-money/feed/` on macOS). Downloads `feed-13f.json`, `state-13f.json`, `feed-13dg/`, `state-13dg.ndjson` from `raw.githubusercontent.com/KadenLiu168/follow-the-money/main/`.
+   
+   On failure: log warning to stderr, fall through to local mode (step 3 reads from `cwd`). Suitable when the user has already run `node scripts/aggregate.js` locally.
+   
+3. **Prepare digest**:
+   ```bash
+   FOLLOW_THE_MONEY_FEED_DIR=$FOLLOW_THE_MONEY_FEED_DIR node scripts/prepare-digest.js
    ```
    Default lookback is 90 days (one quarter) — 13F is quarterly, so a 1-day lookback returns nothing on non-filing days. Use `--lookback 1` if the user explicitly asks for "today only".
-   Reads `feed-13f.json` + `feed-13dg/manifest.json` + current year NDJSON, filters by lookback, emits unified JSON to stdout.
-3. **Render**: apply `prompts/digest-intro` + `prompts/format-13f` + `prompts/format-13dg` + `prompts/translate` (if `config.language != 'en'`) to the JSON. Output is a Markdown digest.
-4. **Deliver**:
+   Reads `feed-13f.json` + `feed-13dg/manifest.json` + current year NDJSON from `$FOLLOW_THE_MONEY_FEED_DIR`, filters by lookback, emits unified JSON to stdout.
+4. **Render**: apply `prompts/digest-intro` + `prompts/format-13f` + `prompts/format-13dg` + `prompts/translate` (if `config.language != 'en'`) to the JSON. Output is a Markdown digest.
+5. **Deliver**:
    ```bash
    node scripts/deliver.js --text "<digest>"
    ```
-5. **Check alerts** (always, in parallel):
+6. **Check alerts** (uses `$FOLLOW_THE_MONEY_FEED_DIR` via env var):
    ```bash
-   node scripts/check-alerts.js
+   FOLLOW_THE_MONEY_FEED_DIR=$FOLLOW_THE_MONEY_FEED_DIR node scripts/check-alerts.js
    ```
    For each alert, apply `prompts/format-alert` and deliver individually.
-6. **Update state** (after successful delivery): atomically write the latest alert's `filingDate` back to `config.lastAlertTimestamp`.
+7. **Update state** (after successful delivery): atomically write the latest alert's `filingDate` back to `config.lastAlertTimestamp`.
+
+### Feed freshness model
+
+The skill uses a **fetch-then-digest** pattern:
+- Step 2 fetches fresh data from `raw.githubusercontent.com/KadenLiu168/follow-the-money/main/*`
+  into a per-user cache directory. Override with `FOLLOW_THE_MONEY_FEED_DIR` env var.
+- On fetch failure, the skill falls back to local files in `cwd` (suitable when the user has
+  run `node scripts/aggregate.js` locally).
+- The repo's `.gitignore` excludes the data files for local development, but the CI workflow
+  uses `git add -f` to keep publishing them to `main`.
+
+**Local deployment:** `git clone` gets code only (no data). Run `node scripts/aggregate.js`
+once to populate `cwd` with data; optionally schedule via cron for freshness.
 
 ## Manual trigger
 

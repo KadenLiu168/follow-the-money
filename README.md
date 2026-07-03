@@ -36,6 +36,8 @@
                           ──推送─▶  stdout / Telegram / Email
 ```
 
+> **数据源**：agent 触发 `/money` 时，会先 `node scripts/fetch-feed.js` 从 GitHub 拉取最新 feed 到本地缓存目录（默认 `$XDG_CACHE_HOME/follow-the-money/feed/`）。GitHub 上的 feed 由 CI 每 ~12h 自动更新，所以 agent 永远拿到的是 EDGAR 的最新数据。无需你手动 `git pull`。本地如果跑了 `aggregate.js`，fetch 失败时自动 fallback 到本地数据。
+
 ### 你需要的
 
 - 一个能加载 `SKILL.md` 的 agent（Claude Code / Codex / OpenClaw / 其他）
