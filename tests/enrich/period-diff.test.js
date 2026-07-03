@@ -82,4 +82,28 @@ describe('periodDiff', () => {
     // Should pick priorTie (later latestFilingDate) → prior total = 29100000000
     expect(out.summary.priorTotalValueUsd).toBe(29100000000);
   });
+
+  it('normalizes prior entry units to match current (Baupost-style units mismatch)', () => {
+    // Current: Baupost Q1 2026 — already normalized to dollars (valueUnitAdjusted: true).
+    // Holdings are in post-×1000 dollars.
+    const current = {
+      ...baseEntry('0001061768', '2026-03-31', [
+        { cusip: '1', issuerName: 'X', shares: 100, valueUsd: 100000000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+      ]),
+      valueUnit: 'thousands',
+      valueUnitAdjusted: true,
+    };
+    // Prior: Baupost Q4 2025 — raw (would also be thousands but not yet normalized).
+    // Holdings are in raw thousands.
+    const prior = baseEntry('0001061768', '2025-12-31', [
+      { cusip: '1', issuerName: 'X', shares: 100, valueUsd: 110000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+    ]);
+    const cfg = [{ cik: '0001061768', name: 'Baupost Group', style: 'value' }];
+    const out = periodDiff(current, [current, prior], cfg);
+    // After fix: prior gets normalized → priorTotalValueUsd = 110000 * 1000 = 110,000,000
+    // Before fix: priorTotalValueUsd = 110000 (raw) → deltaPct wildly wrong
+    expect(out.summary.priorTotalValueUsd).toBe(110000000);
+    // Real deltaPct = (100,000,000 - 110,000,000) / 110,000,000 = -9.09%
+    expect(out.summary.deltaPct).toBeCloseTo(-0.0909, 4);
+  });
 });
