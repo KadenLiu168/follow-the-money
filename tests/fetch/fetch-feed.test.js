@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import nock from 'nock';
-import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fetchFeed } from '../../lib/fetch/fetch-feed.js';
@@ -126,5 +126,48 @@ describe('fetchFeed', () => {
 
     expect(result.ok).toBe(false);
     expect(result.reason).toMatch(/feed-13f\.json/);
+  });
+
+  it('returns ok=false when writeAtomic fails for a static file (hard fail)', async () => {
+    nock(RAW).get('/feed-13f.json').reply(200, '{"thirteenF":[]}');
+    nock(RAW).get('/state-13f.json').reply(200, '{}');
+    nock(RAW).get('/feed-13dg/manifest.json').reply(200, JSON.stringify({ years: {} }));
+    nock(RAW).get('/state-13dg.ndjson').reply(200, '');
+
+    // Force writeAtomic to fail by pre-creating a directory at the .tmp path,
+    // so writeFile throws EISDIR.
+    mkdirSync(join(dir, 'feed-13f.json.tmp'));
+
+    const result = await fetchFeed({ repoOwner: OWNER, repoName: REPO, targetDir: dir });
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/feed-13f\.json/);
+    // No throw — module returns result object as spec requires
+  });
+
+  it('returns ok=true (soft fail) when writeAtomic fails for an NDJSON file', async () => {
+    nock(RAW).get('/feed-13f.json').reply(200, '{}');
+    nock(RAW).get('/state-13f.json').reply(200, '{}');
+    nock(RAW).get('/feed-13dg/manifest.json').reply(200, JSON.stringify({
+      years: { 2024: { file: 'feed-13dg/2024.ndjson' }, 2025: { file: 'feed-13dg/2025.ndjson' } },
+    }));
+    nock(RAW).get('/feed-13dg/2024.ndjson').reply(200, '');
+    nock(RAW).get('/feed-13dg/2025.ndjson').reply(200, '');
+    nock(RAW).get('/state-13dg.ndjson').reply(200, '');
+
+    // Force writeAtomic to fail only for the 2025 NDJSON file.
+    // Create feed-13dg/ first so mkdir of the .tmp path's parent succeeds,
+    // then create the .tmp path itself as a directory so writeFile throws EISDIR.
+    mkdirSync(join(dir, 'feed-13dg'), { recursive: true });
+    mkdirSync(join(dir, 'feed-13dg', '2025.ndjson.tmp'));
+
+    const result = await fetchFeed({ repoOwner: OWNER, repoName: REPO, targetDir: dir });
+
+    expect(result.ok).toBe(true);
+    expect(result.filesWritten).not.toContain('feed-13dg/2025.ndjson');
+    // Other files succeeded
+    expect(result.filesWritten).toEqual(expect.arrayContaining([
+      'feed-13f.json', 'state-13f.json', 'feed-13dg/manifest.json', 'feed-13dg/2024.ndjson', 'state-13dg.ndjson',
+    ]));
   });
 });
