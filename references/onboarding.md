@@ -47,14 +47,9 @@ Default: `08:00 America/New_York`. Save to `config.deliveryTime` + `config.timez
 
 ### Step 4 — Delivery Method
 
-Ask: `怎么接收？`
+Delivery is stdout only: digests and alerts are emitted to stdout and rendered by the agent session in the chat. No setup, no API keys. (Earlier versions supported Telegram and Email; those channels were removed because the path bug in `scripts/deliver.js` meant they never actually worked. See `openspec/changes/stdout-only-delivery/` for context.)
 
-Options:
-- **stdout** — 直接在 agent 会话里看 (no setup needed)
-- **Telegram** — 推送到 Telegram 机器人 (need bot setup, see `delivery-setup.md`)
-- **Email** — 邮件 (need Resend API key, see `delivery-setup.md`)
-
-Default: `stdout`. Save to `config.delivery.method`.
+No config field is required.
 
 ### Step 5 — Language
 
@@ -67,19 +62,7 @@ Options:
 
 Default: `bilingual`. Save to `config.language`.
 
-### Step 6 — API Keys (only if Telegram/Email)
-
-If user chose Telegram:
-- Walk them through BotFather setup (see `delivery-setup.md`)
-- Save `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to `~/.follow-the-money/.env`
-
-If user chose Email:
-- Walk them through Resend setup (see `delivery-setup.md`)
-- Save `RESEND_API_KEY` and `EMAIL_TO` to `~/.follow-the-money/.env`
-
-If stdout: skip this step.
-
-### Step 7 — Show Sources
+### Step 6 — Show Sources
 
 Display the full source list:
 
@@ -97,14 +80,13 @@ Display the full source list:
 
 **13D/G Scope**: Full US market. Any filer, any company. Forms: SC 13D, SC 13D/A, SC 13G, SC 13G/A.
 
-### Step 8 — Settings Reminder + Cron Setup
+### Step 7 — Settings Reminder + Cron Setup
 
 Tell the user:
 > 所有设置都可以随时通过对话修改。试试说：
 > - "切换到 weekly"
 > - "把时间改成 17:00"
 > - "翻译成中文"
-> - "改用 Telegram"
 > - "显示我的设置"
 
 Then point them to `references/cron-setup.md` for the OS-specific cron install.
@@ -112,7 +94,7 @@ Then point them to `references/cron-setup.md` for the OS-specific cron install.
 After cron is set, run the **welcome digest** immediately:
 - `node scripts/prepare-digest.js`
 - Apply prompts
-- `node scripts/deliver.js --file <digest>`
+- `node scripts/print.js --file <digest>`
 
 Ask: `看到第一份 digest 了。有什么想调整的？` — collect feedback, set `onboardingComplete: true`, atomic-write the config.
 
@@ -126,7 +108,6 @@ Ask: `看到第一份 digest 了。有什么想调整的？` — collect feedbac
   "timezone": "America/New_York",
   "frequency": "daily",
   "deliveryTime": "08:00",
-  "delivery": { "method": "stdout" },
   "lastAlertTimestamp": "2026-06-25T08:00:00.000Z",
   "onboardingComplete": true
 }
@@ -141,7 +122,6 @@ Recognize these phrases and update config:
 | "Switch to weekly" | `frequency: "weekly"` |
 | "Change time to X" | `deliveryTime: "X"` |
 | "Translate to Chinese" | `language: "zh"` |
-| "Send to Telegram" | `delivery.method: "telegram"` + onboarding for setup |
 | "Show my settings" | read config.json, display human-readable |
 
 All updates use atomic write (temp + rename).

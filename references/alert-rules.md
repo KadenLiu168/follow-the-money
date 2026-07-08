@@ -55,7 +55,7 @@ config.lastAlertTimestamp = newCritical.at(-1).filingDate;
 atomicWriteConfig(config);
 ```
 
-`atomicWriteConfig` uses temp+rename. If push crashes between delivery and timestamp update, the next run re-delivers the last item — acceptable for v1.
+`atomicWriteConfig` uses temp+rename. If print crashes between output and timestamp update, the next run re-prints the last item — acceptable for v1.
 
 ### Why no separate state file
 
@@ -77,8 +77,8 @@ If the center hasn't updated since the last local cron run, no new alerts are ge
 
 | Failure | Behavior |
 |---|---|
-| Delivery (Telegram/email) errors | Log + fall back to stdout (alert still visible in agent session) |
-| Crash between delivery and timestamp write | Next run re-delivers last item; acceptable |
+| Print errors (file read failure) | Surface stderr to agent session |
+| Crash between print and timestamp write | Next run re-prints last item; acceptable |
 | Feed files missing | `check-alerts.js` exits 0 with "no data" message |
 | Config.json missing | Onboarding triggered (see `onboarding.md`) |
 | Bad NDJSON line in feed | Skip line, log, continue |

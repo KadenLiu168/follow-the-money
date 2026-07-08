@@ -11,7 +11,7 @@ Four-layer data flow, layer responsibilities, and key design decisions. Load thi
                           ↓
               [Local Skill on user's machine]
                           ↓
-                [Delivery: stdout / Telegram / Email]
+                [Delivery: stdout]
 ```
 
 | Layer | Runs where | Job |
@@ -19,7 +19,7 @@ Four-layer data flow, layer responsibilities, and key design decisions. Load thi
 | 1. SEC EDGAR | SEC servers | Source of truth for 13F + 13D/G filings |
 | 2. Center aggregator | GitHub Actions cron (08:00 ET + 20:00 ET) | Pull from EDGAR, write feed + state files, commit |
 | 3. Local skill | User's machine (on cron) | Read feed, prepare digest, detect alerts, dispatch |
-| 4. Output | stdout / Telegram / Email | Periodic digest + immediate 13D alerts |
+| 4. Output | stdout | Periodic digest + immediate 13D alerts |
 
 ## Layer Responsibilities
 
@@ -38,7 +38,7 @@ Four-layer data flow, layer responsibilities, and key design decisions. Load thi
 ### Layer 3 — Local skill
 - `scripts/prepare-digest.js` — pull feed + read config + filter by lookback
 - `scripts/check-alerts.js` — read feed + filter new 13D/13D/A → alert list
-- `scripts/deliver.js` — dispatch via stdout / Telegram / email
+- `scripts/print.js` — emit digest/alert text to stdout
 
 ### Skill-mode data freshness
 
@@ -60,8 +60,8 @@ Local deployments are unaffected: `node scripts/aggregate.js` still writes to `c
 ### Centralized aggregation
 EDGAR's rate limit (10 req/sec) and full-market 13D/G scanning cannot be done locally on every user's machine. The center does the heavy work once and publishes the result.
 
-### No user secrets for content
-The center holds `SEC_EDGAR_USER_AGENT` via a GitHub Actions secret. Users only need secrets for *delivery* (Telegram bot, Resend key), not for *content*.
+### No user secrets
+The center holds `SEC_EDGAR_USER_AGENT` via a GitHub Actions secret. Users do not need any secrets for delivery — stdout is the only output channel.
 
 ### Stateless local skill
 All "seen/unseen" state is derived from the feed files plus `config.lastAlertTimestamp`. Deleting `~/.follow-the-money/` does not lose seen information — reinstalling picks up the same state.

@@ -15,7 +15,7 @@
 | 你做什么 | 跟 agent 对话 | 自己跑命令 + 装 cron |
 | 需要 Node.js | ❌ 不需要 | ✅ 需要 |
 | 需要 cron 调度 | ❌ 不需要（agent 自带） | ✅ 需要 |
-| 推送渠道 | 看 agent 能力 | stdout / Telegram / Email |
+| 推送渠道 | 看 agent 能力 | stdout |
 | 难度 | ⭐ 极简 | ⭐⭐⭐ 中等 |
 | 适合 | 90% 的用户 | 想完全控制的开发者 |
 
@@ -33,7 +33,7 @@
 你  ──说──▶  agent  ──读──▶  SKILL.md（说明书）
                           ──读──▶  feed-13f.json / feed-13dg/
                           ──渲染─▶  prompts/*.md
-                          ──推送─▶  stdout / Telegram / Email
+                          ──推送─▶  stdout
 ```
 
 > **数据源**：agent 触发 `/money` 时，会先 `node scripts/fetch-feed.js` 从 GitHub 拉取最新 feed 到本地缓存目录（默认 `$XDG_CACHE_HOME/follow-the-money/feed/`）。GitHub 上的 feed 由 CI 每 ~12h 自动更新，所以 agent 永远拿到的是 EDGAR 的最新数据。无需你手动 `git pull`。本地如果跑了 `aggregate.js`，fetch 失败时自动 fallback 到本地数据。
@@ -82,7 +82,6 @@ cd ~/follow-the-money
 
 ### 限制
 
-- agent 能不能调 Telegram / Email 取决于平台能力
 - agent 的"定时"是平台特性，没就退化到手动
 - 不能改跟踪的基金（v1 固定 8 个）
 
@@ -97,8 +96,6 @@ cd ~/follow-the-money
 | 操作系统 | macOS / Linux / Windows |
 | Node.js | 20 或更高 |
 | cron 替代品 | crontab（macOS/Linux）/ Task Scheduler（Windows）/ launchd（macOS 推荐） |
-| Telegram bot | **可选**，只在 `delivery.method: "telegram"` 时需要 |
-| Email / Resend key | **可选**，只在 `delivery.method: "email"` 时需要 |
 
 ### 步骤
 
@@ -144,22 +141,9 @@ mkdir -p ~/.follow-the-money
   "timezone": "Asia/Shanghai",
   "frequency": "daily",
   "deliveryTime": "08:00",
-  "delivery": { "method": "stdout" },
   "lastAlertTimestamp": "2026-06-25T08:00:00.000Z",
   "onboardingComplete": true
 }
-```
-
-如果用 Telegram / Email，再加 `~/.follow-the-money/.env`：
-
-```bash
-# Telegram（参考 references/delivery-setup.md 配 bot）
-TELEGRAM_BOT_TOKEN=your-bot-token
-TELEGRAM_CHAT_ID=your-chat-id
-
-# Email（Resend，参考 references/delivery-setup.md）
-RESEND_API_KEY=re_your-api-key
-EMAIL_TO=you@example.com
 ```
 
 #### 4. 跑一次试试
@@ -168,14 +152,14 @@ EMAIL_TO=you@example.com
 # 生成 digest JSON
 node scripts/prepare-digest.js --lookback 7 > digest.txt
 
-# 投递（默认 stdout）
-node scripts/deliver.js --file digest.txt
+# 输出到 stdout
+node scripts/print.js --file digest.txt
 ```
 
 或一行串联：
 
 ```bash
-node scripts/prepare-digest.js --lookback 7 | node scripts/deliver.js --text "$(cat)"
+node scripts/prepare-digest.js --lookback 7 | node scripts/print.js --text "$(cat)"
 ```
 
 成功的话你会看到一份 markdown 摘要。
@@ -192,7 +176,7 @@ crontab -e
 
 ```cron
 # 每天 08:00 推 digest
-0 8 * * * cd ~/follow-the-money && /opt/homebrew/bin/node scripts/prepare-digest.js --lookback 1 > /dev/null && /opt/homebrew/bin/node scripts/deliver.js --file <(node scripts/prepare-digest.js --lookback 1) >> ~/.follow-the-money/cron.log 2>&1
+0 8 * * * cd ~/follow-the-money && /opt/homebrew/bin/node scripts/prepare-digest.js --lookback 1 > /dev/null && /opt/homebrew/bin/node scripts/print.js --file <(node scripts/prepare-digest.js --lookback 1) >> ~/.follow-the-money/cron.log 2>&1
 
 # 每 4 小时扫 13D 新申报
 0 */4 * * * cd ~/follow-the-money && /opt/homebrew/bin/node scripts/check-alerts.js >> ~/.follow-the-money/cron.log 2>&1
@@ -213,7 +197,7 @@ crontab -e
 tail -50 ~/.follow-the-money/cron.log   # 看 cron 执行日志
 ```
 
-或在 Telegram / Email 看到第一份 digest 就说明成功了。
+或在 agent 会话/cron.log 里看到第一份 digest 就说明成功了。
 
 ---
 
@@ -235,7 +219,7 @@ tail -50 ~/.follow-the-money/cron.log   # 看 cron 执行日志
     └─ 用 🅱️：本地装 Node.js + cron + 命令行
 ```
 
-**典型升级路径**：先用 🅰️ agent 手动触发，体验 ok → 加 agent 平台定时 / 系统 cron → 仍然不够（要 Telegram 而 agent 不支持推送）→ 升级到 🅱️ 本地。
+**典型升级路径**：先用 🅰️ agent 手动触发，体验 ok → 加 agent 平台定时 / 系统 cron → 仍想要离线持久化 / 多设备 → 升级到 🅱️ 本地。
 
 ---
 
@@ -265,7 +249,6 @@ tail -50 ~/.follow-the-money/cron.log   # 看 cron 执行日志
 
 - `SKILL.md` — agent 视角的完整流程说明
 - `references/onboarding.md` — 8 步首次配置
-- `references/delivery-setup.md` — Telegram / Email 详细配置
 - `references/cron-setup.md` — 各 OS 调度方式
 - `references/architecture.md` — 4 层数据流图
 - `references/alert-rules.md` — 三级告警策略

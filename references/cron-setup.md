@@ -37,7 +37,7 @@ Add these lines (adjust times to your config):
 
 ```cron
 # Daily digest at 08:00 local time
-0 8 * * * cd $FTM_SKILL_DIR && /usr/local/bin/node scripts/prepare-digest.js > ~/.follow-the-money/digest.json && /usr/local/bin/node scripts/deliver.js --file ~/.follow-the-money/digest.json >> ~/.follow-the-money/cron.log 2>&1
+0 8 * * * cd $FTM_SKILL_DIR && /usr/local/bin/node scripts/prepare-digest.js > ~/.follow-the-money/digest.json && /usr/local/bin/node scripts/print.js --file ~/.follow-the-money/digest.json >> ~/.follow-the-money/cron.log 2>&1
 
 # Alert check every 4 hours
 0 */4 * * * cd $FTM_SKILL_DIR && /usr/local/bin/node scripts/check-alerts.js >> ~/.follow-the-money/cron.log 2>&1
@@ -167,7 +167,7 @@ Check `~/.follow-the-money/cron.log` (or the task's history) for output.
 After the first scheduled run:
 
 1. Check the log file: `tail -50 ~/.follow-the-money/cron.log`
-2. Confirm a digest arrived (stdout / Telegram / email)
+2. Confirm a digest arrived (stdout / cron.log)
 3. Confirm `config.lastAlertTimestamp` updated (no alerts on day 1 is normal)
 4. Wait for an SC 13D filing on a tracked issuer — verify the alert lands
 
