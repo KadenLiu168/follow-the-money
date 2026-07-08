@@ -44,8 +44,10 @@ const f13Filtered = normalizedFeed.filter(e => e.latestFilingDate >= cutoff);
 
 // Pass defaultSources.thirteenF so periodDiff's defensive normalizeValueUnits
 // can correctly identify small-fund style prior entries (e.g. tiny CIKs that
-// publish in dollars rather than thousands). Idempotent for already-normalized
-// entries.
+// publish in dollars rather than thousands). Per
+// openspec/specs/value-units-normalization, normalizeValueUnits is idempotent
+// on entries with `valueUnitAdjusted === true`, so re-normalizing already-
+// normalized prior entries is a safe no-op.
 const enriched = f13Filtered.map((f) => periodDiff(f, normalizedFeed, defaultSources.thirteenF));
 
 const out = {

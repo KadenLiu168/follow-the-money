@@ -81,4 +81,51 @@ describe('normalizeValueUnits', () => {
     expect(out.valueUnitAdjusted).toBe(true);
     expect(out.holdings[0].valueUsd).toBe(50000000 * 1000);
   });
+
+  it('keeps already-normalized entry unchanged (idempotency on raw sum < $1M)', () => {
+    // Small filer: raw sum = $500K (well below $1M) so that after the first
+    // ×1000 the sum is still < $1B. This is the zone where the bug used to
+    // re-multiply on the second call.
+    const entry = makeEntry('0001697748', 'ARK Investment Management LLC', [
+      makeHolding('1', 100000, 200000),
+      makeHolding('2', 200000, 300000),
+    ]);
+    const firstPass = normalizeValueUnits(entry, cfg);
+    expect(firstPass.valueUnit).toBe('thousands');
+    expect(firstPass.valueUnitAdjusted).toBe(true);
+    expect(firstPass.holdings[0].valueUsd).toBe(200000 * 1000);
+    expect(firstPass.holdings[1].valueUsd).toBe(300000 * 1000);
+
+    // Second call must NOT re-multiply. valueUnitAdjusted is the canonical
+    // "already normalized" marker; the function must honor it on input.
+    const secondPass = normalizeValueUnits(firstPass, cfg);
+    expect(secondPass.valueUnit).toBe('thousands');
+    expect(secondPass.valueUnitAdjusted).toBe(true);
+    expect(secondPass.holdings[0].valueUsd).toBe(200000 * 1000);
+    expect(secondPass.holdings[1].valueUsd).toBe(300000 * 1000);
+  });
+
+  it('treats raw sum exactly equal to $1B as dollars (boundary)', () => {
+    // Spec Requirement 4, Scenario "Boundary sum = $1,000,000,000":
+    // sum >= ONE_BILLION takes the dollars branch.
+    const entry = makeEntry('0001067983', 'Berkshire Hathaway Inc', [
+      makeHolding('1', 1, 1_000_000_000),
+    ]);
+    const out = normalizeValueUnits(entry, cfg);
+    expect(out.valueUnit).toBe('dollars');
+    expect(out.valueUnitAdjusted).toBeUndefined();
+    expect(out.holdings[0].valueUsd).toBe(1_000_000_000);
+  });
+
+  it('treats raw sum of $1 as thousands (boundary)', () => {
+    // Spec Requirement 4, Scenario "Boundary sum = $1": sum > 0 and < $1B
+    // takes the thousands branch.
+    const entry = makeEntry('0001697748', 'ARK Investment Management LLC', [
+      makeHolding('1', 1, 1),
+    ]);
+    const out = normalizeValueUnits(entry, cfg);
+    expect(out.valueUnit).toBe('thousands');
+    expect(out.valueUnitAdjusted).toBe(true);
+    expect(out.holdings[0].valueUsd).toBe(1000);
+  });
 });

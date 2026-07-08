@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { periodDiff } from '../../lib/enrich/period-diff.js';
+import { normalizeValueUnits } from '../../lib/enrich/normalize-value-units.js';
 
 const aapl = { cusip: '037833100', issuerName: 'APPLE INC', shares: 300000000, valueUsd: 58200000000, votingAuthority: { sole: 300000000, shared: 0, none: 0 } };
 const goog = { cusip: '02079K305', issuerName: 'ALPHABET INC', shares: 10000000, valueUsd: 17000000000, votingAuthority: { sole: 10000000, shared: 0, none: 0 } };
@@ -135,5 +136,38 @@ describe('periodDiff', () => {
     const out = periodDiff(current, [current, prior], cfg);
     // small-fund style → valueUnit: 'unknown' → prior valueUsd stays raw.
     expect(out.summary.priorTotalValueUsd).toBe(30);
+  });
+
+  it('does not double-normalize prior when prior is from a pre-normalized feed (small filer, raw sum < $1M)', () => {
+    // ARK 2017-09-30 (current) vs ARK 2017-06-30 (prior) shape.
+    // Prior raw sum ($513,594) is < $1M, so after the first ×1000 it is
+    // still < $1B and the second call used to re-multiply → ×1,000,000 total.
+    // After the fix, the second call sees valueUnitAdjusted=true and returns
+    // the once-normalized prior unchanged.
+    const rawPrior = baseEntry('0001697748', '2017-06-30', [
+      { cusip: 'A', issuerName: 'X', shares: 100, valueUsd: 200000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+      { cusip: 'B', issuerName: 'Y', shares: 100, valueUsd: 313594, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+    ]);
+    const cfg = [{ cik: '0001697748', name: 'ARK Investment Management LLC', style: 'deep-value' }];
+
+    // Simulate the prepare-digest.js pipeline: normalize the feed ONCE, then
+    // pass it as allFilings to periodDiff.
+    const normalizedPrior = normalizeValueUnits(rawPrior, cfg);
+    // The guard in normalizeValueUnits keys off this marker on input; pin it.
+    expect(normalizedPrior.valueUnitAdjusted).toBe(true);
+    const current = baseEntry('0001697748', '2017-09-30', [
+      { cusip: 'A', issuerName: 'X', shares: 100, valueUsd: 200000 * 1000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+      { cusip: 'B', issuerName: 'Y', shares: 100, valueUsd: 619306 * 1000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+    ]);
+
+    const out = periodDiff(current, [current, normalizedPrior], cfg);
+
+    // Once-normalized prior sum = (200,000 + 313,594) × 1000 = 513,594,000
+    // Before the fix: 513,594,000,000 (×1000 again)
+    expect(out.summary.priorTotalValueUsd).toBe(513594000);
+    // current total = (200,000 + 619,306) × 1000 = 819,306,000
+    // true deltaPct = (819,306,000 - 513,594,000) / 513,594,000 ≈ +0.5952
+    // Before the fix: (819,306,000 - 513,594,000,000) / 513,594,000,000 ≈ -0.9984
+    expect(out.summary.deltaPct).toBeCloseTo(0.5952, 4);
   });
 });
