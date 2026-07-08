@@ -71,8 +71,11 @@ globalThis.fetch = async (url, opts = {}) => {
     expect(existsSync(join(workdir, 'feed-13dg', 'manifest.json'))).toBe(true);
     expect(existsSync(join(workdir, 'feed-13dg', '2026.ndjson'))).toBe(true);
 
-    // Run digest
-    const digestOut = execSync(`node ${join(REPO, 'scripts', 'prepare-digest.js')} --lookback 7`, { cwd: workdir, encoding: 'utf8' });
+    // Run digest. Pin the reference time via FTM_NOW so the fixed fixture
+    // dates (2026-06-25 / 2026-06-29) always fall inside --lookback 7,
+    // making this test deterministic regardless of the real wall-clock date.
+    // See openspec/changes/add-digest-time-seam (capability: digest-lookback).
+    const digestOut = execSync(`node ${join(REPO, 'scripts', 'prepare-digest.js')} --lookback 7`, { cwd: workdir, env: { ...process.env, FTM_NOW: '2026-06-26T00:00:00Z' }, encoding: 'utf8' });
     const digest = JSON.parse(digestOut);
     expect(digest.thirteenF.length).toBeGreaterThan(0);
     expect(digest.thirteenDG.length).toBeGreaterThan(0);

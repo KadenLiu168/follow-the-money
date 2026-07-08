@@ -8,6 +8,32 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoCwd = join(__dirname, '..', '..');
 
+// Minimal deterministic feed for time-seam regression tests
+// (openspec/changes/add-digest-time-seam). One 13F filer with a $2B holding
+// (>= $1B ⇒ normalizeValueUnits treats as dollars, no multiplication) filed
+// 2026-06-25; no prior period ⇒ periodDiff returns summary: null (safe).
+function writeDeterministicFeed(envDir) {
+  writeFileSync(join(envDir, 'feed-13f.json'), JSON.stringify({
+    schemaVersion: 1,
+    thirteenF: [
+      {
+        filerCik: '0001067983',
+        filerName: 'Test Filer',
+        latestFilingDate: '2026-06-25',
+        latestFormType: '13F-HR',
+        latestAccessionNumber: '0001067983-26-000123',
+        periodOfReport: '2026-03-31',
+        history: [{ filingDate: '2026-06-25', formType: '13F-HR', accessionNumber: '0001067983-26-000123' }],
+        holdings: [{ cusip: '000000000', nameOfIssuer: 'Test', titleOfClass: 'COM', valueUsd: 2000000000, sshPrnamt: 100, sshPrnamtType: 'SH', putCall: '' }],
+        summary: null,
+      },
+    ],
+    stats: { thirteenFFilings: 1, thirteenFHoldings: 1 },
+  }));
+  mkdirSync(join(envDir, 'feed-13dg'), { recursive: true });
+  writeFileSync(join(envDir, 'feed-13dg', 'manifest.json'), JSON.stringify({ schemaVersion: 1, currentYear: 2026, years: {} }));
+}
+
 describe('prepare-digest.js', () => {
   it('emits JSON with lookbackDays applied', () => {
     const cwd = join(__dirname, '..', '..');
@@ -145,5 +171,76 @@ describe('prepare-digest.js', () => {
     expect(coatueQ4.history[0].filingDate).toBe('2026-02-17');
     expect(coatueQ4.history[1].formType).toBe('13F-HR/A');
     expect(coatueQ4.history[1].filingDate).toBe('2026-05-15');
+  });
+
+  // --- Time seam regression tests (openspec/changes/add-digest-time-seam) ---
+
+  it('produces identical output across runs for a fixed FTM_NOW and fixed feed', () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-seam-det-'));
+    try {
+      writeDeterministicFeed(envDir);
+      const env = { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: envDir, FTM_NOW: '2026-06-26T00:00:00Z' };
+      const out1 = execSync('node scripts/prepare-digest.js --lookback 7', { cwd: repoCwd, env, encoding: 'utf8' });
+      const out2 = execSync('node scripts/prepare-digest.js --lookback 7', { cwd: repoCwd, env, encoding: 'utf8' });
+      expect(out1).toBe(out2);
+      const j = JSON.parse(out1);
+      expect(j.generatedAt).toBe('2026-06-26T00:00:00.000Z');
+      expect(j.thirteenF.length).toBe(1);
+      expect(j.thirteenF[0].filerName).toBe('Test Filer');
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+    }
+  });
+
+  it('--now flag takes precedence over FTM_NOW env', () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-seam-prec-'));
+    try {
+      writeDeterministicFeed(envDir);
+      const env = { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: envDir, FTM_NOW: '2026-06-26T00:00:00Z' };
+      const out = execSync('node scripts/prepare-digest.js --lookback 7 --now 2026-03-31', { cwd: repoCwd, env, encoding: 'utf8' });
+      const j = JSON.parse(out);
+      // flag wins over env
+      expect(j.generatedAt).toBe('2026-03-31T00:00:00.000Z');
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+    }
+  });
+
+  it('exits non-zero when FTM_NOW is invalid', () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-seam-bad-'));
+    try {
+      writeDeterministicFeed(envDir);
+      const env = { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: envDir, FTM_NOW: 'not-a-date' };
+      let err;
+      try {
+        execSync('node scripts/prepare-digest.js --lookback 7', { cwd: repoCwd, env, encoding: 'utf8', stdio: 'pipe' });
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeTruthy();
+      expect(err.status).not.toBe(0);
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+    }
+  });
+
+  it('exits non-zero when --now flag is present without a value', () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-seam-noval-'));
+    try {
+      writeDeterministicFeed(envDir);
+      const env = { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: envDir };
+      let err;
+      try {
+        // --now as the last arg with no following value
+        execSync('node scripts/prepare-digest.js --lookback 7 --now', { cwd: repoCwd, env, encoding: 'utf8', stdio: 'pipe' });
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeTruthy();
+      expect(err.status).not.toBe(0);
+      expect(String(err.stderr)).toContain('--now requires a value');
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+    }
   });
 });
