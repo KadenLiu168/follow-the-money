@@ -30,3 +30,37 @@ feed-13f.json
 state-13f.json
 feed-13dg/
 state-13dg.ndjson
+
+# ============================================================
+# 追加：本次审计 (2026-07-08) 建议忽略的项
+# ============================================================
+
+# Local AI assistant workspace state（助手本地工作记忆，可重新生成、项目本地产出）
+# 与已忽略的 .superpowers/、.understand-anything/ 性质相同，属本地状态而非交付物。
+# 若希望团队共享 .workbuddy/memory/MEMORY.md 中的项目约定，可单独取消忽略该文件：
+#   !.workbuddy/memory/MEMORY.md
+.workbuddy/
+
+# 生成式代码质量评审文档（带日期、可重新生成，非交付物）
+docs/code-quality-review-*.md
+
+# 课程站点（源/生成产物，按用户决策不纳入版本控制）
+course/
+
+# 密钥 / 证书 / 敏感凭据（防御性，避免任何密钥被误提交）
+*.pem
+*.key
+*.crt
+*.cer
+*.cert
+*.keystore
+*.p12
+id_rsa
+id_dsa
+id_ed25519
+
+# 编译 / 构建输出（当前项目暂无，防御性预留）
+dist/
+build/
+out/
+*.tsbuildinfo
