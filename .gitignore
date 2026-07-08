@@ -41,6 +41,9 @@ state-13dg.ndjson
 #   !.workbuddy/memory/MEMORY.md
 .workbuddy/
 
+# 本地 AI 助手（Claude Code）工作目录：会话历史/缓存，可重新生成、非交付物
+.claude/
+
 # 生成式代码质量评审文档（带日期、可重新生成，非交付物）
 docs/code-quality-review-*.md
 
