@@ -53,7 +53,7 @@ const newCritical = feed.filter(f =>
 );
 if (newCritical.length === 0) exit(0);
 deliver(newCritical);
-config.lastAlertTimestamp = newCritical.at(-1).filingDate;
+config.lastAlertTimestamp = newCritical[0].filingDate;  // feed sorted descending, so [0] is the newest
 atomicWriteConfig(config);
 ```
 

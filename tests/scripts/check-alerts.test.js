@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync, cpSync, existsSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,5 +64,33 @@ describe('check-alerts.js', () => {
     const parsed = JSON.parse(out);
     expect(Array.isArray(parsed.alerts)).toBe(true);
     expect(parsed.alerts.length).toBeGreaterThan(0);
+  });
+
+  it('persists lastAlertTimestamp across runs and emits nothing on the second run', () => {
+    // check-alerts.js reads ~/config.json nested under .follow-the-money/
+    // (os.homedir() honors $HOME), so write the fixture config there.
+    const cfgPath = join(fakeroot, '.follow-the-money', 'config.json');
+    mkdirSync(join(fakeroot, '.follow-the-money'), { recursive: true });
+    writeFileSync(cfgPath, JSON.stringify({ lastAlertTimestamp: '2026-01-01T00:00:00.000Z' }));
+    const run1 = execSync(`HOME=${fakeroot} node ${join(REPO, 'scripts', 'check-alerts.js')}`, { cwd: repoRoot, encoding: 'utf8' });
+    const p1 = JSON.parse(run1);
+    expect(p1.alerts.length).toBeGreaterThan(0);
+    const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
+    expect(cfg.lastAlertTimestamp).toBe('2026-06-20'); // newest alert filing in fixture
+    const run2 = execSync(`HOME=${fakeroot} node ${join(REPO, 'scripts', 'check-alerts.js')}`, { cwd: repoRoot, encoding: 'utf8' });
+    const p2 = JSON.parse(run2);
+    expect(p2.alerts).toEqual([]);
+  });
+
+  it('persists the NEWEST filing date, not the oldest (no re-emit of between-run filings)', () => {
+    const cfgPath = join(fakeroot, '.follow-the-money', 'config.json');
+    mkdirSync(join(fakeroot, '.follow-the-money'), { recursive: true });
+    writeFileSync(cfgPath, JSON.stringify({ lastAlertTimestamp: '2026-01-01T00:00:00.000Z' }));
+    execSync(`HOME=${fakeroot} node ${join(REPO, 'scripts', 'check-alerts.js')}`, { cwd: repoRoot, encoding: 'utf8' });
+    const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
+    // Fixture's alert filings range 2026-01 .. 2026-06-20; persisted cursor must
+    // be the newest (2026-06-20), never an older one (e.g. the oldest 2026-01-xx).
+    expect(cfg.lastAlertTimestamp).toBe('2026-06-20');
+    expect(cfg.lastAlertTimestamp.startsWith('2026-01-')).toBe(false);
   });
 });

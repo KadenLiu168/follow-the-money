@@ -46,7 +46,7 @@ If a step in this skill fails, surface the exact stderr from the failing script 
    FOLLOW_THE_MONEY_FEED_DIR=$FOLLOW_THE_MONEY_FEED_DIR node scripts/check-alerts.js
    ```
    For each alert, apply `prompts/format-alert` and deliver individually.
-7. **Update state** (after successful delivery): atomically write the latest alert's `filingDate` back to `config.lastAlertTimestamp`.
+   (The script atomically persists `config.lastAlertTimestamp` itself — do NOT write it here; the script is the single owner.)
 
 ### Feed freshness model
 
