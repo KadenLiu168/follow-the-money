@@ -1,6 +1,7 @@
 import { TokenBucket } from '../lib/token-bucket.js';
 import { createHttpClient } from '../lib/http-client.js';
 import { loadDefaultSources } from '../lib/config/load-default-sources.js';
+import { DEFAULT_RATE_LIMIT } from '../lib/constants.js';
 
 export function loadConfig() {
   return loadDefaultSources();
@@ -25,7 +26,7 @@ export async function check13DGSearch(client) {
 export async function runVerify(ua) {
   // Share the project-standard rate limiter + HTTP client so there is a single
   // throttling/retry implementation across the codebase.
-  const bucket = new TokenBucket(10, 10);
+  const bucket = new TokenBucket(DEFAULT_RATE_LIMIT.rate, DEFAULT_RATE_LIMIT.capacity);
   const client = createHttpClient({ userAgent: ua, bucket });
   const cfg = loadConfig();
   console.log('Verifying 8 CIKs against EDGAR...');

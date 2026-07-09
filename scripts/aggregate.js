@@ -3,6 +3,7 @@ import { createHttpClient } from '../lib/http-client.js';
 import { runPipelineA } from '../lib/aggregate/pipeline-a.js';
 import { runPipelineB } from '../lib/aggregate/pipeline-b.js';
 import { loadDefaultSources } from '../lib/config/load-default-sources.js';
+import { DEFAULT_RATE_LIMIT } from '../lib/constants.js';
 
 const config = loadDefaultSources();
 
@@ -14,7 +15,10 @@ async function main() {
     );
     process.exit(1);
   }
-  const httpClient = createHttpClient({ userAgent: UA, bucket: new TokenBucket(10, 10) });
+  const httpClient = createHttpClient({
+    userAgent: UA,
+    bucket: new TokenBucket(DEFAULT_RATE_LIMIT.rate, DEFAULT_RATE_LIMIT.capacity),
+  });
   const a = await runPipelineA({
     httpClient,
     config,

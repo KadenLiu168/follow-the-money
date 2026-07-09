@@ -53,6 +53,9 @@ if (newCritical.length === 0) {
 const groups = mergeByIssuer(newCritical);
 const alerts = mergeAmendmentsForAlert(groups);
 
+// Max number of 13D/G alerts sent in full detail. Keeps the notification payload
+// within a reasonable size while still surfacing the most material alerts; any
+// remainder is summarized as a single digest link.
 const DETAIL_CAP = 8;
 let payload;
 if (alerts.length <= DETAIL_CAP) {
