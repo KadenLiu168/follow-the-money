@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { periodDiff } from '../../lib/enrich/period-diff.js';
+import { periodDiff, buildCikIndex } from '../../lib/enrich/period-diff.js';
 import { normalizeValueUnits } from '../../lib/enrich/normalize-value-units.js';
 
 const aapl = { cusip: '037833100', issuerName: 'APPLE INC', shares: 300000000, valueUsd: 58200000000, votingAuthority: { sole: 300000000, shared: 0, none: 0 } };
@@ -174,5 +174,28 @@ describe('periodDiff', () => {
     // true deltaPct = (819,306,000 - 513,594,000) / 513,594,000 ≈ +0.5952
     // Before the fix: (819,306,000 - 513,594,000,000) / 513,594,000,000 ≈ -0.9984
     expect(out.summary.deltaPct).toBeCloseTo(0.5952, 4);
+  });
+
+  it('buildCikIndex path yields identical result to the no-index path', () => {
+    const current = baseEntry('0001067983', '2026-03-31', [aapl, goog]);
+    const prior = { ...baseEntry('0001067983', '2025-12-31', [aapl]), valueUnitAdjusted: true };
+    const all = [current, prior];
+    const noIndex = periodDiff(current, all);
+    const idx = buildCikIndex(all);
+    const withIndex = periodDiff(current, all, [], idx);
+    expect(withIndex).toEqual(noIndex);
+  });
+
+  it('index path diffs multiple filers against their own priors', () => {
+    const f1c = baseEntry('0001067983', '2026-03-31', [aapl]);
+    const f1p = { ...baseEntry('0001067983', '2025-12-31', [{ ...aapl, shares: 200000000, valueUsd: 38800000000 }]), valueUnitAdjusted: true };
+    const f2c = baseEntry('0001336528', '2026-03-31', [goog]);
+    const f2p = { ...baseEntry('0001336528', '2025-12-31', [{ ...goog, shares: 5000000, valueUsd: 8500000000 }]), valueUnitAdjusted: true };
+    const all = [f1c, f1p, f2c, f2p];
+    const idx = buildCikIndex(all);
+    const out1 = periodDiff(f1c, all, [], idx);
+    const out2 = periodDiff(f2c, all, [], idx);
+    expect(out1.summary.priorTotalValueUsd).toBe(38800000000);
+    expect(out2.summary.priorTotalValueUsd).toBe(8500000000);
   });
 });

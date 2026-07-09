@@ -14,10 +14,15 @@ describe('print.js', () => {
     expect(out).toMatch(/hello/);
   });
 
-  it('writes --file contents to stdout', () => {
-    const digestPath = join(fakeroot, 'digest.txt');
+  it('writes --file contents to stdout (file inside repo root)', () => {
+    const digestPath = join(process.cwd(), 'digest.test.txt');
     writeFileSync(digestPath, 'hello-from-file');
-    const out = execSync(`node scripts/print.js --file ${digestPath}`, { encoding: 'utf8' });
+    let out;
+    try {
+      out = execSync(`node scripts/print.js --file ${digestPath}`, { encoding: 'utf8' });
+    } finally {
+      rmSync(digestPath, { force: true });
+    }
     expect(out).toMatch(/hello-from-file/);
   });
 
@@ -45,5 +50,31 @@ describe('print.js', () => {
     }
     expect(status).not.toBe(0);
     expect(combined).toMatch(/failed to read/);
+  });
+
+  it('exits non-zero when --file escapes the repo root via traversal', () => {
+    let status = null, combined = '';
+    try {
+      execSync(`node scripts/print.js --file ../../etc/passwd`, { stdio: 'pipe' });
+      status = 0;
+    } catch (e) {
+      status = e.status;
+      combined = `${e.stdout?.toString() ?? ''}${e.stderr?.toString() ?? ''}`;
+    }
+    expect(status).not.toBe(0);
+    expect(combined).toMatch(/escapes repo root/);
+  });
+
+  it('exits non-zero when --file is an absolute path outside the repo root', () => {
+    let status = null, combined = '';
+    try {
+      execSync(`node scripts/print.js --file /etc/passwd`, { stdio: 'pipe' });
+      status = 0;
+    } catch (e) {
+      status = e.status;
+      combined = `${e.stdout?.toString() ?? ''}${e.stderr?.toString() ?? ''}`;
+    }
+    expect(status).not.toBe(0);
+    expect(combined).toMatch(/escapes repo root/);
   });
 });

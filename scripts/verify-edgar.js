@@ -1,13 +1,9 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 import { TokenBucket } from '../lib/token-bucket.js';
 import { createHttpClient } from '../lib/http-client.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { loadDefaultSources } from '../lib/config/load-default-sources.js';
 
 export function loadConfig() {
-  return JSON.parse(readFileSync(join(__dirname, '..', 'config', 'default-sources.json'), 'utf8'));
+  return loadDefaultSources();
 }
 
 export async function checkCik(cik, client) {

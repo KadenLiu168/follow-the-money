@@ -1,13 +1,10 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 import { TokenBucket } from '../lib/token-bucket.js';
 import { createHttpClient } from '../lib/http-client.js';
 import { runPipelineA } from '../lib/aggregate/pipeline-a.js';
 import { runPipelineB } from '../lib/aggregate/pipeline-b.js';
+import { loadDefaultSources } from '../lib/config/load-default-sources.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const config = JSON.parse(readFileSync(join(__dirname, '..', 'config', 'default-sources.json'), 'utf8'));
+const config = loadDefaultSources();
 
 async function main() {
   const UA = process.env.SEC_EDGAR_USER_AGENT;

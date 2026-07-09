@@ -5,8 +5,10 @@ import { readFeedJson } from '../lib/store/feed-json.js';
 import { read13DFilings, validateManifest } from '../lib/store/feed-ndjson.js';
 import { readManifest } from '../lib/store/manifest.js';
 import { normalizeValueUnits } from '../lib/enrich/normalize-value-units.js';
-import { periodDiff } from '../lib/enrich/period-diff.js';
-import defaultSources from '../config/default-sources.json' with { type: 'json' };
+import { periodDiff, buildCikIndex } from '../lib/enrich/period-diff.js';
+import { loadDefaultSources } from '../lib/config/load-default-sources.js';
+
+const defaultSources = loadDefaultSources();
 
 const REPO = process.cwd();
 const FEED_DIR = process.env.FOLLOW_THE_MONEY_FEED_DIR || REPO;
@@ -79,7 +81,8 @@ const f13Filtered = filterByLookback(normalizedFeed, { lookbackDays, now, field:
 // openspec/specs/value-units-normalization, normalizeValueUnits is idempotent
 // on entries with `valueUnitAdjusted === true`, so re-normalizing already-
 // normalized prior entries is a safe no-op.
-const enriched = f13Filtered.map((f) => periodDiff(f, normalizedFeed, defaultSources.thirteenF));
+const cikIndex = buildCikIndex(normalizedFeed);
+const enriched = f13Filtered.map((f) => periodDiff(f, normalizedFeed, defaultSources.thirteenF, cikIndex));
 
 const out = {
   schemaVersion: 1,
