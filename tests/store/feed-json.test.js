@@ -62,4 +62,19 @@ describe('feed-json', () => {
     const f = { thirteenF: [newEntry(), newEntry({ filerCik: '0001336528', filerName: 'Pershing' })] };
     expect(computeStats(f)).toEqual({ thirteenFFilings: 2, thirteenFHoldings: 2 });
   });
+
+  it('stamps valueUnit: thousands on every upserted entry (prevent recurrence)', () => {
+    const p = join(dir, 'f.json');
+    upsert13FFiling(p, newEntry());
+    const f = readFeedJson(p);
+    // Source entries don't declare valueUnit; the 13F feed writer MUST stamp it.
+    expect(f.thirteenF[0].valueUnit).toBe('thousands');
+    // Amendment path also stamps.
+    upsert13FFiling(p, newEntry({
+      latestFilingDate: '2026-06-10', latestFormType: '13F-HR/A',
+      latestAccessionNumber: '0001067983-26-000456',
+    }));
+    const f2 = readFeedJson(p);
+    expect(f2.thirteenF[0].valueUnit).toBe('thousands');
+  });
 });

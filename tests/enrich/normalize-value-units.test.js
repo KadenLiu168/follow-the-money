@@ -112,4 +112,43 @@ describe('normalizeValueUnits', () => {
     expect(secondPass.valueUnit).toBe('dollars');
     expect(secondPass.holdings[0].valueUsd).toBe(200000);
   });
+
+  // --- repair-feed-units: entry marker takes precedence over config ---
+
+  it('prefers entry marker thousands over config dollars', () => {
+    // Entry declares thousands but its config source says dollars.
+    const entry = makeEntry('0001111111', 'Dollar Fund', [
+      makeHolding('1', 100000, 50000000),
+    ]);
+    entry.valueUnit = 'thousands';
+    const out = normalizeValueUnits(entry, cfg);
+    // Marker wins: resolved as thousands, so ×1000 applies.
+    expect(out.valueUnit).toBe('thousands');
+    expect(out.valueUnitAdjusted).toBe(true);
+    expect(out.holdings[0].valueUsd).toBe(50000000 * 1000);
+  });
+
+  it('prefers entry marker dollars over config thousands', () => {
+    // Entry declares dollars but its config source says thousands.
+    const entry = makeEntry('0001067983', 'Berkshire Hathaway Inc', [
+      makeHolding('1', 100000, 200000000),
+    ]);
+    entry.valueUnit = 'dollars';
+    const out = normalizeValueUnits(entry, cfg);
+    // Marker wins: resolved as dollars, so holdings left unchanged.
+    expect(out.valueUnit).toBe('dollars');
+    expect(out.valueUnitAdjusted).toBeUndefined();
+    expect(out.holdings[0].valueUsd).toBe(200000000);
+  });
+
+  it('falls back to config when entry marker is absent', () => {
+    const entry = makeEntry('0001061768', 'Baupost Group', [
+      makeHolding('1', 3118754, 649543),
+    ]);
+    // No valueUnit on entry → config (thousands) applies.
+    const out = normalizeValueUnits(entry, cfg);
+    expect(out.valueUnit).toBe('thousands');
+    expect(out.valueUnitAdjusted).toBe(true);
+    expect(out.holdings[0].valueUsd).toBe(649543 * 1000);
+  });
 });
