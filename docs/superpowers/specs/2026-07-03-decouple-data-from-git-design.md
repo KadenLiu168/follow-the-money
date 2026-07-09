@@ -14,6 +14,7 @@
 Make `feed-13f.json`, `state-13f.json`, `feed-13dg/`, and `state-13dg.ndjson` **gitignored for local development** while **continuing to be committed to `main` by the GitHub Action** via `git add -f`. Concurrently, make the repo public so the skill can fetch the data via `raw.githubusercontent.com` without authentication.
 
 The net effect:
+
 - Local clones no longer pull 11MB of JSON over the wire.
 - Local `aggregate.js` runs stay local (don't leak into the user's `git status`).
 - The CI keeps publishing fresh data to `main` so the skill always sees the latest run.
@@ -31,7 +32,7 @@ Three forces converged:
 
 - **Changing CI's publishing destination** (gh-pages, Releases, sister repo). The user explicitly chose "keep pushing to main, same as now" — `git add -f` is the smallest change that achieves the local/remote split.
 - **Removing 11MB JSON from git history.** Existing history is not retroactively purged (`git filter-repo` etc.). New clones still pay the history cost once; that cost is bounded by pack compression and is out of scope.
-- **Re-architecting the digest pipeline** (compute, enrich, deliver). The pipeline already reads JSON correctly; this spec only changes *where the JSON comes from*.
+- **Re-architecting the digest pipeline** (compute, enrich, deliver). The pipeline already reads JSON correctly; this spec only changes _where the JSON comes from_.
 - **Adding authentication to the skill fetch.** The repo will be public, so the fetch URL needs no token. No `GITHUB_TOKEN` secret is introduced.
 - **Backporting data fetches for non-skill consumers** (e.g. the README's `git clone` flow). Local users continue to rely on running `node scripts/aggregate.js` themselves; the README is updated to reflect this.
 
@@ -187,10 +188,10 @@ export async function fetchFeed({
 
 ```js
 const STATIC_FILES = [
-  { urlPath: 'feed-13f.json',            localName: 'feed-13f.json' },
-  { urlPath: 'state-13f.json',           localName: 'state-13f.json' },
-  { urlPath: 'feed-13dg/manifest.json',  localName: 'feed-13dg/manifest.json' },
-  { urlPath: 'state-13dg.ndjson',        localName: 'state-13dg.ndjson' },
+  { urlPath: 'feed-13f.json', localName: 'feed-13f.json' },
+  { urlPath: 'state-13f.json', localName: 'state-13f.json' },
+  { urlPath: 'feed-13dg/manifest.json', localName: 'feed-13dg/manifest.json' },
+  { urlPath: 'state-13dg.ndjson', localName: 'state-13dg.ndjson' },
 ];
 ```
 
@@ -223,15 +224,15 @@ If `manifest.json` fetch fails, phase 2 is skipped and the result is `ok: false`
 
 ### Edge cases
 
-| Case | Behavior |
-|---|---|
-| `feed-13dg/manifest.json` 404 | Return `ok: false` immediately; manifest is required to discover NDJSON files |
-| `feed-13dg/<year>.ndjson` 404 (year listed in manifest but missing) | Log warning, continue with other years, mark manifest-stale in result |
-| `feed-13f.json` 404 | Return `ok: false` |
-| Network timeout | Retry; eventually return `ok: false` with reason |
-| Target dir on a read-only filesystem | Catch EACCES, return `ok: false` with reason |
-| Existing files in targetDir | Overwrite (the fetch represents the latest authoritative state) |
-| Concurrent fetches (parallel `node scripts/fetch-feed.js` calls) | No locking — last write wins; this matches the "always latest" semantic |
+| Case                                                                | Behavior                                                                      |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `feed-13dg/manifest.json` 404                                       | Return `ok: false` immediately; manifest is required to discover NDJSON files |
+| `feed-13dg/<year>.ndjson` 404 (year listed in manifest but missing) | Log warning, continue with other years, mark manifest-stale in result         |
+| `feed-13f.json` 404                                                 | Return `ok: false`                                                            |
+| Network timeout                                                     | Retry; eventually return `ok: false` with reason                              |
+| Target dir on a read-only filesystem                                | Catch EACCES, return `ok: false` with reason                                  |
+| Existing files in targetDir                                         | Overwrite (the fetch represents the latest authoritative state)               |
+| Concurrent fetches (parallel `node scripts/fetch-feed.js` calls)    | No locking — last write wins; this matches the "always latest" semantic       |
 
 ### Error handling
 
@@ -251,20 +252,20 @@ A thin entry point that mirrors `scripts/aggregate.js` (which itself uses `impor
 
 ### Default values
 
-| Parameter | Default | Source |
-|---|---|---|
-| `repoOwner` | `KadenLiu168` | hardcoded (single-repo project) |
-| `repoName` | `follow-the-money` | hardcoded |
-| `branch` | `main` | hardcoded |
+| Parameter   | Default                                                    | Source                            |
+| ----------- | ---------------------------------------------------------- | --------------------------------- |
+| `repoOwner` | `KadenLiu168`                                              | hardcoded (single-repo project)   |
+| `repoName`  | `follow-the-money`                                         | hardcoded                         |
+| `branch`    | `main`                                                     | hardcoded                         |
 | `targetDir` | `$FOLLOW_THE_MONEY_FEED_DIR` if set, else platform-default | see "Local cache directory" below |
 
 Platform defaults for `targetDir`:
 
-| Platform | Default |
-|---|---|
-| Linux | `$XDG_CACHE_HOME/follow-the-money/feed/` if `XDG_CACHE_HOME` set, else `$HOME/.cache/follow-the-money/feed/` |
-| macOS | `$HOME/Library/Caches/follow-the-money/feed/` |
-| Windows | `%LOCALAPPDATA%\follow-the-money\feed\` |
+| Platform | Default                                                                                                      |
+| -------- | ------------------------------------------------------------------------------------------------------------ |
+| Linux    | `$XDG_CACHE_HOME/follow-the-money/feed/` if `XDG_CACHE_HOME` set, else `$HOME/.cache/follow-the-money/feed/` |
+| macOS    | `$HOME/Library/Caches/follow-the-money/feed/`                                                                |
+| Windows  | `%LOCALAPPDATA%\follow-the-money\feed\`                                                                      |
 
 Resolved via `os.homedir()` + `process.platform` in Node. No external dependency.
 
@@ -294,8 +295,7 @@ const FEED_13DG_DIR = join(REPO, 'feed-13dg');
 
 ```js
 const REPO = process.cwd();
-const FEED_DIR = process.env.FOLLOW_THE_MONEY_FEED_DIR
-  || REPO;  // backward-compat: local mode still works
+const FEED_DIR = process.env.FOLLOW_THE_MONEY_FEED_DIR || REPO; // backward-compat: local mode still works
 const FEED_13F = join(FEED_DIR, 'feed-13f.json');
 const FEED_13DG_DIR = join(FEED_DIR, 'feed-13dg');
 ```
@@ -397,6 +397,7 @@ The "fall back to cwd" path preserves backward compatibility for users who alrea
 ### Feed freshness model
 
 The skill uses a **fetch-then-digest** pattern:
+
 - Step 2 fetches fresh data from `raw.githubusercontent.com/KadenLiu168/follow-the-money/main/*`
   into a per-user cache directory (`$XDG_CACHE_HOME/follow-the-money/feed/` on Linux,
   `~/Library/Caches/follow-the-money/feed/` on macOS, `%LOCALAPPDATA%\follow-the-money\feed\`
@@ -435,37 +436,37 @@ https://raw.githubusercontent.com/KadenLiu168/follow-the-money/main/state-13dg.n
 
 Resolved by `scripts/fetch-feed.js` (CLI wrapper) which passes through to `lib/fetch/fetch-feed.js` (module):
 
-| Platform | Default path |
-|---|---|
-| Linux | `$XDG_CACHE_HOME/follow-the-money/feed/` (default `$HOME/.cache/follow-the-money/feed/`) |
-| macOS | `$HOME/Library/Caches/follow-the-money/feed/` |
-| Windows | `%LOCALAPPDATA%\follow-the-money\feed\` |
+| Platform | Default path                                                                             |
+| -------- | ---------------------------------------------------------------------------------------- |
+| Linux    | `$XDG_CACHE_HOME/follow-the-money/feed/` (default `$HOME/.cache/follow-the-money/feed/`) |
+| macOS    | `$HOME/Library/Caches/follow-the-money/feed/`                                            |
+| Windows  | `%LOCALAPPDATA%\follow-the-money\feed\`                                                  |
 
 Override: `FOLLOW_THE_MONEY_FEED_DIR` env var.
 
 ### What each consumer reads
 
-| Consumer | Reads from | Source |
-|---|---|---|
-| Skill mode (`/money`) | `$FOLLOW_THE_MONEY_FEED_DIR` (fetched in step 2) | Network → GitHub raw URL |
-| Local mode (user runs `aggregate.js`) | `cwd` | Local disk |
-| Local mode fallback (skill fetch failed) | `cwd` | Local disk |
-| CI workflow `aggregate.yml` | `cwd` (written by `aggregate.js`, committed with `-f`) | Disk → git push to main |
+| Consumer                                 | Reads from                                             | Source                   |
+| ---------------------------------------- | ------------------------------------------------------ | ------------------------ |
+| Skill mode (`/money`)                    | `$FOLLOW_THE_MONEY_FEED_DIR` (fetched in step 2)       | Network → GitHub raw URL |
+| Local mode (user runs `aggregate.js`)    | `cwd`                                                  | Local disk               |
+| Local mode fallback (skill fetch failed) | `cwd`                                                  | Local disk               |
+| CI workflow `aggregate.yml`              | `cwd` (written by `aggregate.js`, committed with `-f`) | Disk → git push to main  |
 
 ---
 
 ## Error handling
 
-| Failure | Behavior | Impact |
-|---|---|---|
-| Skill fetch: `feed-13f.json` 404 | Return `ok: false`; SKILL.md step 2 logs warning, falls through to local mode (cwd) | If local has stale data → user sees stale digest; if local has no data → prepare-digest.js exits with stderr (existing behavior) |
-| Skill fetch: manifest.json 404 (CI just started) | Return `ok: false`; same fallback | Same as above |
-| Skill fetch: per-year NDJSON 404 | Log warning, continue with other years | One year of 13D/G data missing from digest; digest still renders with reduced coverage |
-| Network offline | All fetches fail with timeout | Fall through to local mode |
-| Local mode + no local data | `prepare-digest.js` exits non-zero (existing) | Skill halts per SKILL.md error handling section |
-| CI push fails (permissions, branch protection) | Workflow step exits non-zero | Feed stays at last successful push; all consumers see this state |
-| `git add -f` accidentally adds a non-data file | Not possible: CI script uses explicit file paths, no globs | None |
-| Repo public → exposure of data files | The data is **already public** (SEC EDGAR); only difference is now it's also at a stable raw URL | None (intentional outcome) |
+| Failure                                          | Behavior                                                                                         | Impact                                                                                                                           |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| Skill fetch: `feed-13f.json` 404                 | Return `ok: false`; SKILL.md step 2 logs warning, falls through to local mode (cwd)              | If local has stale data → user sees stale digest; if local has no data → prepare-digest.js exits with stderr (existing behavior) |
+| Skill fetch: manifest.json 404 (CI just started) | Return `ok: false`; same fallback                                                                | Same as above                                                                                                                    |
+| Skill fetch: per-year NDJSON 404                 | Log warning, continue with other years                                                           | One year of 13D/G data missing from digest; digest still renders with reduced coverage                                           |
+| Network offline                                  | All fetches fail with timeout                                                                    | Fall through to local mode                                                                                                       |
+| Local mode + no local data                       | `prepare-digest.js` exits non-zero (existing)                                                    | Skill halts per SKILL.md error handling section                                                                                  |
+| CI push fails (permissions, branch protection)   | Workflow step exits non-zero                                                                     | Feed stays at last successful push; all consumers see this state                                                                 |
+| `git add -f` accidentally adds a non-data file   | Not possible: CI script uses explicit file paths, no globs                                       | None                                                                                                                             |
+| Repo public → exposure of data files             | The data is **already public** (SEC EDGAR); only difference is now it's also at a stable raw URL | None (intentional outcome)                                                                                                       |
 
 ---
 
@@ -479,40 +480,40 @@ Override: `FOLLOW_THE_MONEY_FEED_DIR` env var.
 
 **`tests/fetch/fetch-feed.test.js`** (new file, mirrors `lib/fetch/fetch-feed.js`)
 
-| Test | Setup | Expected |
-|---|---|---|
-| All files 200, fresh fetch | Mock fetch returns 200 for all 4 STATIC + 1 NDJSON (manifest returns 2024) | `ok: true`, all 5 files written, atomic via .tmp rename |
-| `feed-13f.json` 404 | Mock returns 404 for feed-13f.json | `ok: false`, reason contains 'http_error', `feed-13f.json` not written, others may have succeeded (in `partialFilesWritten`) |
-| Manifest 200, NDJSON 404 | Mock returns 404 for `feed-13dg/2024.ndjson` | `ok: true` (manifest is the source of truth; the year file is stale but other files succeed), warning logged |
-| Manifest 404 | Mock returns 404 for `manifest.json` | `ok: false` (cannot discover NDJSON files), other 3 STATIC_FILES reported in `partialFilesWritten` |
-| Network timeout | Mock fetch rejects with AbortError | Retries up to `retries` times per file, then `ok: false` |
-| Concurrent calls | Two simultaneous fetchFeed calls | Both succeed (no lock; last-write-wins) |
-| Existing files in targetDir | Pre-populate `feed-13f.json` with stale content | New fetch overwrites stale content atomically |
+| Test                        | Setup                                                                      | Expected                                                                                                                     |
+| --------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| All files 200, fresh fetch  | Mock fetch returns 200 for all 4 STATIC + 1 NDJSON (manifest returns 2024) | `ok: true`, all 5 files written, atomic via .tmp rename                                                                      |
+| `feed-13f.json` 404         | Mock returns 404 for feed-13f.json                                         | `ok: false`, reason contains 'http_error', `feed-13f.json` not written, others may have succeeded (in `partialFilesWritten`) |
+| Manifest 200, NDJSON 404    | Mock returns 404 for `feed-13dg/2024.ndjson`                               | `ok: true` (manifest is the source of truth; the year file is stale but other files succeed), warning logged                 |
+| Manifest 404                | Mock returns 404 for `manifest.json`                                       | `ok: false` (cannot discover NDJSON files), other 3 STATIC_FILES reported in `partialFilesWritten`                           |
+| Network timeout             | Mock fetch rejects with AbortError                                         | Retries up to `retries` times per file, then `ok: false`                                                                     |
+| Concurrent calls            | Two simultaneous fetchFeed calls                                           | Both succeed (no lock; last-write-wins)                                                                                      |
+| Existing files in targetDir | Pre-populate `feed-13f.json` with stale content                            | New fetch overwrites stale content atomically                                                                                |
 
 **`tests/scripts/fetch-feed.test.js`** (new file, mirrors `scripts/fetch-feed.js`)
 
-| Test | Setup | Expected |
-|---|---|---|
-| Default `targetDir` on Linux | Set `process.platform = 'linux'`, unset `XDG_CACHE_HOME`, set `HOME` | targetDir resolves to `$HOME/.cache/follow-the-money/feed/` |
-| Default `targetDir` on macOS | Set `process.platform = 'darwin'`, set `HOME` | targetDir resolves to `$HOME/Library/Caches/follow-the-money/feed/` |
-| `FOLLOW_THE_MONEY_FEED_DIR` overrides default | Set env var | targetDir equals env var value |
-| Successful fetch | Mock `fetchFeed` returns `ok: true` | stdout has JSON, exit 0 |
-| Failed fetch | Mock `fetchFeed` returns `ok: false` | stdout has JSON, exit 1 |
+| Test                                          | Setup                                                                | Expected                                                            |
+| --------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Default `targetDir` on Linux                  | Set `process.platform = 'linux'`, unset `XDG_CACHE_HOME`, set `HOME` | targetDir resolves to `$HOME/.cache/follow-the-money/feed/`         |
+| Default `targetDir` on macOS                  | Set `process.platform = 'darwin'`, set `HOME`                        | targetDir resolves to `$HOME/Library/Caches/follow-the-money/feed/` |
+| `FOLLOW_THE_MONEY_FEED_DIR` overrides default | Set env var                                                          | targetDir equals env var value                                      |
+| Successful fetch                              | Mock `fetchFeed` returns `ok: true`                                  | stdout has JSON, exit 0                                             |
+| Failed fetch                                  | Mock `fetchFeed` returns `ok: false`                                 | stdout has JSON, exit 1                                             |
 
 **`tests/scripts/prepare-digest.test.js`** (existing file, add tests)
 
-| Test | Setup | Expected |
-|---|---|---|
-| `FOLLOW_THE_MONEY_FEED_DIR` set, files exist there | Set env var, write data to env var dir | Reads from env var dir (not cwd) |
-| `FOLLOW_THE_MONEY_FEED_DIR` unset | Unset env var | Reads from cwd (backward compat) |
-| `FOLLOW_THE_MONEY_FEED_DIR` set, files don't exist there | Set env var, no files | Exits non-zero with stderr (existing behavior) |
+| Test                                                     | Setup                                  | Expected                                       |
+| -------------------------------------------------------- | -------------------------------------- | ---------------------------------------------- |
+| `FOLLOW_THE_MONEY_FEED_DIR` set, files exist there       | Set env var, write data to env var dir | Reads from env var dir (not cwd)               |
+| `FOLLOW_THE_MONEY_FEED_DIR` unset                        | Unset env var                          | Reads from cwd (backward compat)               |
+| `FOLLOW_THE_MONEY_FEED_DIR` set, files don't exist there | Set env var, no files                  | Exits non-zero with stderr (existing behavior) |
 
 **`tests/scripts/check-alerts.test.js`** (existing file, add test)
 
-| Test | Setup | Expected |
-|---|---|---|
+| Test                            | Setup                                | Expected               |
+| ------------------------------- | ------------------------------------ | ---------------------- |
 | `FOLLOW_THE_MONEY_FEED_DIR` set | Set env var, write manifest + ndjson | Reads from env var dir |
-| Unset | Default | Reads from cwd |
+| Unset                           | Default                              | Reads from cwd         |
 
 **CI workflow validation** (manual)
 
@@ -543,6 +544,7 @@ Override: `FOLLOW_THE_MONEY_FEED_DIR` env var.
 ### Merge order (single PR)
 
 The change is one logical unit and ships as one PR:
+
 1. `.gitignore` updated (new tracked lines)
 2. `lib/fetch/fetch-feed.js` added (new module)
 3. `scripts/fetch-feed.js` added (new CLI wrapper)

@@ -2,8 +2,8 @@ name: Aggregate SEC Filings
 
 on:
   schedule:
-    - cron: '0 12 * * *'   # 08:00 ET (winter) — UTC offset may shift; cron uses UTC
-    - cron: '0 0 * * *'    # 20:00 ET
+    - cron: '0 12 * * *' # 08:00 ET (winter) — UTC offset may shift; cron uses UTC
+    - cron: '0 0 * * *' # 20:00 ET
   workflow_dispatch:
 
 permissions:
@@ -19,11 +19,15 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v5
         with:
-          node-version: '24'
+          node-version-file: .nvmrc
           cache: 'npm'
       - run: npm ci
       - name: Run tests (gate)
         run: npm test
+      - name: Lint (gate)
+        run: npm run lint
+      - name: Format check (gate)
+        run: npm run format:check
       - name: Run aggregator
         env:
           SEC_EDGAR_USER_AGENT: ${{ secrets.SEC_EDGAR_USER_AGENT }}

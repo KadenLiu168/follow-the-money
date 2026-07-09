@@ -6,11 +6,41 @@ import { append13DFiling, read13DFilings, validateManifest } from '../../lib/sto
 import { readManifest } from '../../lib/store/manifest.js';
 
 let dir;
-beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ftm-')); });
-afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), 'ftm-'));
+});
+afterEach(() => {
+  rmSync(dir, { recursive: true, force: true });
+});
 
-const e1 = { filerCik: '0000932470', filerName: 'ICAHN CARL C', issuerCik: '0001717393', issuerName: 'Jet.AI Inc', issuerTicker: 'JTAI', formType: 'SC 13D', filingDate: '2026-06-20', ownershipPercent: 6.8, sharesOwned: 4500000, intent: 'active', accessionNumber: '0000932470-26-000045', primaryDocUrl: 'https://www.sec.gov/...' };
-const e2 = { filerCik: '0000893855', filerName: 'ELLIOTT', issuerCik: '0001315098', issuerName: 'ATVI', issuerTicker: 'ATVI', formType: 'SC 13G', filingDate: '2026-06-18', ownershipPercent: 5.1, sharesOwned: 4900000, intent: 'passive', accessionNumber: '0000893855-26-000078', primaryDocUrl: 'https://www.sec.gov/...' };
+const e1 = {
+  filerCik: '0000932470',
+  filerName: 'ICAHN CARL C',
+  issuerCik: '0001717393',
+  issuerName: 'Jet.AI Inc',
+  issuerTicker: 'JTAI',
+  formType: 'SC 13D',
+  filingDate: '2026-06-20',
+  ownershipPercent: 6.8,
+  sharesOwned: 4500000,
+  intent: 'active',
+  accessionNumber: '0000932470-26-000045',
+  primaryDocUrl: 'https://www.sec.gov/...',
+};
+const e2 = {
+  filerCik: '0000893855',
+  filerName: 'ELLIOTT',
+  issuerCik: '0001315098',
+  issuerName: 'ATVI',
+  issuerTicker: 'ATVI',
+  formType: 'SC 13G',
+  filingDate: '2026-06-18',
+  ownershipPercent: 5.1,
+  sharesOwned: 4900000,
+  intent: 'passive',
+  accessionNumber: '0000893855-26-000078',
+  primaryDocUrl: 'https://www.sec.gov/...',
+};
 
 describe('feed-ndjson', () => {
   it('appends to year file and updates manifest', () => {
@@ -72,15 +102,15 @@ describe('feed-ndjson', () => {
     const m = readManifest(dir);
     append13DFiling(dir, m, { ...e1, filingDate: 'not-a-date' });
     const files = readdirSync(dir);
-    expect(files.some(f => f.includes('NaN'))).toBe(false);
+    expect(files.some((f) => f.includes('NaN'))).toBe(false);
     expect(readManifest(dir).years['NaN']).toBeUndefined();
   });
 
   it('validateManifest reports corrupt lines in diagnostics', () => {
     const file = join(dir, '2026.ndjson');
     writeFileSync(file, `${JSON.stringify(e1)}\nbroken line\n`);
-    const r = validateManifest(dir, { years: { '2026': { count: 1 } }, currentYear: 2026 });
+    const r = validateManifest(dir, { years: { 2026: { count: 1 } }, currentYear: 2026 });
     expect(r.ok).toBe(false);
-    expect(r.warnings.some(w => /corrupt/.test(w))).toBe(true);
+    expect(r.warnings.some((w) => /corrupt/.test(w))).toBe(true);
   });
 });

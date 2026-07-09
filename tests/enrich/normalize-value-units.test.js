@@ -6,18 +6,30 @@ import { normalizeValueUnits } from '../../lib/enrich/normalize-value-units.js';
 const cfg = [
   { cik: '0001067983', name: 'Berkshire Hathaway Inc', style: 'value', valueUnit: 'thousands' },
   { cik: '0001061768', name: 'Baupost Group', style: 'value', valueUnit: 'thousands' },
-  { cik: '0001649339', name: 'Scion Asset Management, LLC', style: 'deep-value', valueUnit: 'thousands' },
+  {
+    cik: '0001649339',
+    name: 'Scion Asset Management, LLC',
+    style: 'deep-value',
+    valueUnit: 'thousands',
+  },
   { cik: '0000000099', name: 'Tiny Tagged Fund', style: 'small-fund' },
   { cik: '0001111111', name: 'Dollar Fund', style: 'value', valueUnit: 'dollars' },
 ];
 
 const makeHolding = (cusip, shares, valueUsd) => ({
-  cusip, issuerName: 'X', shares, valueUsd, votingAuthority: { sole: shares, shared: 0, none: 0 },
+  cusip,
+  issuerName: 'X',
+  shares,
+  valueUsd,
+  votingAuthority: { sole: shares, shared: 0, none: 0 },
 });
 
 const makeEntry = (cik, name, holdings) => ({
-  filerCik: cik, filerName: name, periodOfReport: '2026-03-31',
-  latestFilingDate: '2026-05-15', latestFormType: '13F-HR',
+  filerCik: cik,
+  filerName: name,
+  periodOfReport: '2026-03-31',
+  latestFilingDate: '2026-05-15',
+  latestFormType: '13F-HR',
   latestAccessionNumber: '0000000000-00-000000',
   holdings,
 });
@@ -36,9 +48,7 @@ describe('normalizeValueUnits', () => {
   });
 
   it('leaves valueUsd unchanged when source declares dollars', () => {
-    const entry = makeEntry('0001111111', 'Dollar Fund', [
-      makeHolding('1', 100000, 50000000),
-    ]);
+    const entry = makeEntry('0001111111', 'Dollar Fund', [makeHolding('1', 100000, 50000000)]);
     const out = normalizeValueUnits(entry, cfg);
     expect(out.valueUnit).toBe('dollars');
     expect(out.valueUnitAdjusted).toBeUndefined();
@@ -46,9 +56,7 @@ describe('normalizeValueUnits', () => {
   });
 
   it('defaults to thousands for an unmatched CIK (SEC 13F spec)', () => {
-    const entry = makeEntry('9999999999', 'Unknown Filer', [
-      makeHolding('1', 100000, 50000000),
-    ]);
+    const entry = makeEntry('9999999999', 'Unknown Filer', [makeHolding('1', 100000, 50000000)]);
     const out = normalizeValueUnits(entry, cfg);
     expect(out.valueUnit).toBe('thousands');
     expect(out.valueUnitAdjusted).toBe(true);
@@ -56,9 +64,7 @@ describe('normalizeValueUnits', () => {
   });
 
   it('respects style: small-fund opt-out', () => {
-    const entry = makeEntry('0000000099', 'Tiny Tagged Fund', [
-      makeHolding('1', 100000, 50000000),
-    ]);
+    const entry = makeEntry('0000000099', 'Tiny Tagged Fund', [makeHolding('1', 100000, 50000000)]);
     const out = normalizeValueUnits(entry, cfg);
     expect(out.valueUnit).toBe('unknown');
     expect(out.valueUnitAdjusted).toBeUndefined();
@@ -100,9 +106,7 @@ describe('normalizeValueUnits', () => {
   });
 
   it('keeps already-normalized dollars entry unchanged (idempotency)', () => {
-    const entry = makeEntry('0001111111', 'Dollar Fund', [
-      makeHolding('1', 100000, 200000),
-    ]);
+    const entry = makeEntry('0001111111', 'Dollar Fund', [makeHolding('1', 100000, 200000)]);
     const firstPass = normalizeValueUnits(entry, cfg);
     expect(firstPass.valueUnit).toBe('dollars');
     expect(firstPass.valueUnitAdjusted).toBeUndefined();
@@ -117,9 +121,7 @@ describe('normalizeValueUnits', () => {
 
   it('prefers entry marker thousands over config dollars', () => {
     // Entry declares thousands but its config source says dollars.
-    const entry = makeEntry('0001111111', 'Dollar Fund', [
-      makeHolding('1', 100000, 50000000),
-    ]);
+    const entry = makeEntry('0001111111', 'Dollar Fund', [makeHolding('1', 100000, 50000000)]);
     entry.valueUnit = 'thousands';
     const out = normalizeValueUnits(entry, cfg);
     // Marker wins: resolved as thousands, so ×1000 applies.
@@ -142,9 +144,7 @@ describe('normalizeValueUnits', () => {
   });
 
   it('falls back to config when entry marker is absent', () => {
-    const entry = makeEntry('0001061768', 'Baupost Group', [
-      makeHolding('1', 3118754, 649543),
-    ]);
+    const entry = makeEntry('0001061768', 'Baupost Group', [makeHolding('1', 3118754, 649543)]);
     // No valueUnit on entry → config (thousands) applies.
     const out = normalizeValueUnits(entry, cfg);
     expect(out.valueUnit).toBe('thousands');

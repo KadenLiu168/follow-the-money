@@ -25,7 +25,9 @@ describe('parseThirteenF', () => {
   });
 
   it('throws when XML has no <infoTable> at all (cover page parsed as holdings)', () => {
-    expect(() => parseThirteenF('<?xml version="1.0"?><form13F><coverPage/></form13F>')).toThrow(/0 holdings/);
+    expect(() => parseThirteenF('<?xml version="1.0"?><form13F><coverPage/></form13F>')).toThrow(
+      /0 holdings/,
+    );
   });
 
   it('handles namespaced infoTable elements (Baupost, some filers use xmlns:ns1)', () => {

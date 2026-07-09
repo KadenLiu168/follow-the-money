@@ -15,16 +15,28 @@ const mixedFeed = {
         { cusip: '037833100', issuerName: 'APPLE INC', valueUsd: 86841000000, shares: 100 },
         { cusip: '02079K107', issuerName: 'ALPHABET INC', valueUsd: 5000000000, shares: 50 },
       ],
-      summary: { totalHoldingsCount: 2, totalValueUsd: 91841000000, newPositions: [], closedPositions: [], increasedPositions: 0, decreasedPositions: 0 },
+      summary: {
+        totalHoldingsCount: 2,
+        totalValueUsd: 91841000000,
+        newPositions: [],
+        closedPositions: [],
+        increasedPositions: 0,
+        decreasedPositions: 0,
+      },
     },
     {
       filerCik: '0001067983',
       filerName: 'Berkshire (thousands-stored)',
       periodOfReport: '2016-09-30',
-      holdings: [
-        { cusip: '037833100', issuerName: 'APPLE INC', valueUsd: 29000000, shares: 100 },
-      ],
-      summary: { totalHoldingsCount: 1, totalValueUsd: 29000000, newPositions: [], closedPositions: [], increasedPositions: 0, decreasedPositions: 0 },
+      holdings: [{ cusip: '037833100', issuerName: 'APPLE INC', valueUsd: 29000000, shares: 100 }],
+      summary: {
+        totalHoldingsCount: 1,
+        totalValueUsd: 29000000,
+        newPositions: [],
+        closedPositions: [],
+        increasedPositions: 0,
+        decreasedPositions: 0,
+      },
     },
   ],
   stats: { thirteenFFilings: 2, thirteenFHoldings: 3 },
@@ -70,10 +82,12 @@ describe('repairFeed', () => {
   it('clears legacy valueUnitAdjusted if present on input', () => {
     const feedWithLegacy = {
       ...mixedFeed,
-      thirteenF: [{
-        ...mixedFeed.thirteenF[0],
-        valueUnitAdjusted: true,
-      }],
+      thirteenF: [
+        {
+          ...mixedFeed.thirteenF[0],
+          valueUnitAdjusted: true,
+        },
+      ],
     };
     const { feed } = repairFeed(feedWithLegacy);
     expect(feed.thirteenF[0].valueUnitAdjusted).toBeUndefined();

@@ -15,10 +15,15 @@ describe('fetchLatest13FFilings', () => {
     client = createHttpClient({ userAgent: 'T t@e.com', bucket: new TokenBucket(100, 100) });
     nock.disableNetConnect();
   });
-  afterEach(() => { nock.cleanAll(); nock.enableNetConnect(); });
+  afterEach(() => {
+    nock.cleanAll();
+    nock.enableNetConnect();
+  });
 
   it('returns only 13F-HR and 13F-HR/A, sorted desc', async () => {
-    const fixture = JSON.parse(readFileSync(join(__dirname, '../fixtures/submissions-cik-0001067983.json'), 'utf8'));
+    const fixture = JSON.parse(
+      readFileSync(join(__dirname, '../fixtures/submissions-cik-0001067983.json'), 'utf8'),
+    );
     nock('https://data.sec.gov').get('/submissions/CIK0001067983.json').reply(200, fixture);
     const r = await fetchLatest13FFilings(client, '0001067983');
     expect(r).toHaveLength(2);
@@ -27,24 +32,38 @@ describe('fetchLatest13FFilings', () => {
   });
 
   it('handles 10-digit CIK with and without leading zeros', async () => {
-    nock('https://data.sec.gov').get('/submissions/CIK0001067983.json').reply(200, {
-      filings: { recent: { form: ['13F-HR'], filingDate: ['2026-01-01'], accessionNumber: ['0001067983-26-000001'], primaryDocument: ['form13fData.xml'], reportDate: ['2025-12-31'] } },
-    });
+    nock('https://data.sec.gov')
+      .get('/submissions/CIK0001067983.json')
+      .reply(200, {
+        filings: {
+          recent: {
+            form: ['13F-HR'],
+            filingDate: ['2026-01-01'],
+            accessionNumber: ['0001067983-26-000001'],
+            primaryDocument: ['form13fData.xml'],
+            reportDate: ['2025-12-31'],
+          },
+        },
+      });
     const r = await fetchLatest13FFilings(client, '1067983');
     expect(r).toHaveLength(1);
     expect(r[0].accessionNumber).toBe('0001067983-26-000001');
   });
 
   it('skips pre-2003 13F filings where primaryDocument is .txt (no infoTable XML)', async () => {
-    nock('https://data.sec.gov').get('/submissions/CIK0001067983.json').reply(200, {
-      filings: { recent: {
-        form: ['13F-HR', '13F-HR', '13F-HR'],
-        filingDate: ['2001-02-13', '2026-05-15', '2000-05-12'],
-        accessionNumber: ['A1', 'A2', 'A3'],
-        primaryDocument: ['0001.txt', 'xslForm13F_X02/primary_doc.xml', ''],
-        reportDate: ['2000-12-31', '2026-03-31', '2000-03-31'],
-      } },
-    });
+    nock('https://data.sec.gov')
+      .get('/submissions/CIK0001067983.json')
+      .reply(200, {
+        filings: {
+          recent: {
+            form: ['13F-HR', '13F-HR', '13F-HR'],
+            filingDate: ['2001-02-13', '2026-05-15', '2000-05-12'],
+            accessionNumber: ['A1', 'A2', 'A3'],
+            primaryDocument: ['0001.txt', 'xslForm13F_X02/primary_doc.xml', ''],
+            reportDate: ['2000-12-31', '2026-03-31', '2000-03-31'],
+          },
+        },
+      });
     const r = await fetchLatest13FFilings(client, '0001067983');
     expect(r).toHaveLength(1);
     expect(r[0].accessionNumber).toBe('A2');

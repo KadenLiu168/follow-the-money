@@ -9,8 +9,14 @@ const dir = join(tmpdir(), `ftm-atomic-write-${process.pid}`);
 // (so it can throw when the dir is missing — per spec). Success-path tests
 // must create `dir` themselves; the `missing/` subpath is never created, so
 // the throw-path tests still exercise the "dir does not exist" case.
-beforeEach(() => { mkdirSync(dir, { recursive: true }); });
-afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
+beforeEach(() => {
+  mkdirSync(dir, { recursive: true });
+});
+afterEach(() => {
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch {}
+});
 
 describe('atomicWriteJSON', () => {
   it('writes content identical to inline JSON.stringify(obj, null, 2)', () => {
@@ -23,7 +29,7 @@ describe('atomicWriteJSON', () => {
   it('is atomic: no leftover .tmp file after a successful write', () => {
     const path = join(dir, 'feed.json');
     atomicWriteJSON(path, { ok: true });
-    const leftover = readdirSync(dir).filter(f => f.endsWith('.tmp'));
+    const leftover = readdirSync(dir).filter((f) => f.endsWith('.tmp'));
     expect(leftover).toHaveLength(0);
     expect(existsSync(path)).toBe(true);
   });

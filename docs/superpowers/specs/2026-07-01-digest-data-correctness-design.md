@@ -137,14 +137,14 @@ if (explicitlySmall) {
 
 ### Edge cases
 
-| Case | Detector behavior | Reasoning |
-|---|---|---|
-| Berkshire-style ~$263B raw | keep as `dollars` | sum ≥ $1B → confident in dollars |
-| Baupost ~$5M raw | ×1000 → $5.1B → `thousands` | sum < $1B → likely thousands |
-| Scion ~$1.4B raw (ambiguous) | keep as `dollars` | sum ≥ $1B → don't risk ×1000 |
-| Genuinely tiny fund tagged `style: 'small-fund'` | unchanged, `valueUnit: 'unknown'` | explicit opt-out; detector stays passive |
-| Genuinely tiny fund NOT tagged ($50M raw, no tag) | ×1000 → $50B | sum < $1B → default ×1000 path fires |
-| All-zero `holdings: []` (late/amended filing) | unchanged, `valueUnit: 'dollars'` (default) | detector doesn't fire on empty (`sum === 0`) |
+| Case                                              | Detector behavior                           | Reasoning                                    |
+| ------------------------------------------------- | ------------------------------------------- | -------------------------------------------- |
+| Berkshire-style ~$263B raw                        | keep as `dollars`                           | sum ≥ $1B → confident in dollars             |
+| Baupost ~$5M raw                                  | ×1000 → $5.1B → `thousands`                 | sum < $1B → likely thousands                 |
+| Scion ~$1.4B raw (ambiguous)                      | keep as `dollars`                           | sum ≥ $1B → don't risk ×1000                 |
+| Genuinely tiny fund tagged `style: 'small-fund'`  | unchanged, `valueUnit: 'unknown'`           | explicit opt-out; detector stays passive     |
+| Genuinely tiny fund NOT tagged ($50M raw, no tag) | ×1000 → $50B                                | sum < $1B → default ×1000 path fires         |
+| All-zero `holdings: []` (late/amended filing)     | unchanged, `valueUnit: 'dollars'` (default) | detector doesn't fire on empty (`sum === 0`) |
 
 ### Why `$1B` threshold (and explicit `style: 'small-fund'` escape hatch)
 
@@ -165,7 +165,7 @@ Threshold is heuristic. If a tracked fund ever sits between $1B and ~$1T with no
 The digest renderer is out of scope for this spec's **detection / enrichment logic**. However, one minimal renderer change is permitted to keep the digest honest with users:
 
 - After rendering the per-filer sections, render a footer line:
-  > *Unit adjustments: <comma-separated list of `diagnostics.valueUnitsAdjusted`> were inferred as thousands-of-dollars (×1000). Raw feed values were inconsistent per filer.*
+  > _Unit adjustments: <comma-separated list of `diagnostics.valueUnitsAdjusted`> were inferred as thousands-of-dollars (×1000). Raw feed values were inconsistent per filer._
 
 This change is additive (existing digest structure unchanged) and exists so users see when a portfolio total was auto-corrected. Defer per-row annotations to sub-project B.
 
@@ -202,13 +202,13 @@ return { ...filerEntry, summary }
 
 ### Edge cases
 
-| Case | Behavior |
-|---|---|
-| No prior period in feed (first-ever filing) | `summary: null` + warning |
-| Prior period has 0 holdings (late/amended) | `compute13FSummary` returns zeros — fine |
-| Coatue filed Q4 2025 + Q1 2026 in same week | Diff runs against immediately prior Q4 2025; correct |
+| Case                                                                    | Behavior                                                               |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| No prior period in feed (first-ever filing)                             | `summary: null` + warning                                              |
+| Prior period has 0 holdings (late/amended)                              | `compute13FSummary` returns zeros — fine                               |
+| Coatue filed Q4 2025 + Q1 2026 in same week                             | Diff runs against immediately prior Q4 2025; correct                   |
 | Filer appears multiple times with same `periodOfReport` (duplicate run) | Diff uses `sort().[0]` which is the latest `latestFilingDate`; correct |
-| Per-CIK diff only — never cross-CIK (Scion vs ARK) | Coded |
+| Per-CIK diff only — never cross-CIK (Scion vs ARK)                      | Coded                                                                  |
 
 ---
 
@@ -224,8 +224,8 @@ import defaultSources from '../config/default-sources.json' with { type: 'json' 
 // ... existing code that builds f13Filtered ...
 
 const enriched = f13Filtered
-  .map(f => normalizeValueUnits(f, defaultSources))
-  .map(f => periodDiff(f, f13.thirteenF));
+  .map((f) => normalizeValueUnits(f, defaultSources))
+  .map((f) => periodDiff(f, f13.thirteenF));
 
 const out = {
   schemaVersion: 1,
@@ -239,8 +239,8 @@ const out = {
   },
   // NEW: aggregate stats for surfaceability
   diagnostics: {
-    valueUnitsAdjusted: enriched.filter(f => f.valueUnitAdjusted).map(f => f.filerName),
-    summaryMissing: enriched.filter(f => f.summary === null).map(f => f.filerName),
+    valueUnitsAdjusted: enriched.filter((f) => f.valueUnitAdjusted).map((f) => f.filerName),
+    summaryMissing: enriched.filter((f) => f.summary === null).map((f) => f.filerName),
   },
 };
 ```
@@ -290,23 +290,23 @@ const out = {
 
 **`tests/enrich/normalize-value-units.test.js`** (new file)
 
-| Test | Input | Expected |
-|---|---|---|
-| Berkshire $263B raw | raw entry | unchanged, `valueUnit: 'dollars'` |
-| Baupost $5M raw | raw entry | ×1000, `valueUnit: 'thousands'`, `valueUnitAdjusted: true` |
-| Scion $1.4B raw | raw entry | unchanged (≥$1B → confident) |
-| Empty holdings | `{holdings: []}` | unchanged, `valueUnit: 'dollars'` |
-| Holdings missing | `{...no holdings}` | unchanged, log warning |
-| `style: 'small-fund'` with $50M raw | config tagged small-fund | unchanged |
+| Test                                | Input                    | Expected                                                   |
+| ----------------------------------- | ------------------------ | ---------------------------------------------------------- |
+| Berkshire $263B raw                 | raw entry                | unchanged, `valueUnit: 'dollars'`                          |
+| Baupost $5M raw                     | raw entry                | ×1000, `valueUnit: 'thousands'`, `valueUnitAdjusted: true` |
+| Scion $1.4B raw                     | raw entry                | unchanged (≥$1B → confident)                               |
+| Empty holdings                      | `{holdings: []}`         | unchanged, `valueUnit: 'dollars'`                          |
+| Holdings missing                    | `{...no holdings}`       | unchanged, log warning                                     |
+| `style: 'small-fund'` with $50M raw | config tagged small-fund | unchanged                                                  |
 
 **`tests/enrich/period-diff.test.js`** (new file)
 
-| Test | Input | Expected |
-|---|---|---|
-| Two consecutive quarters | current + prior entry | `summary.newPositions.length` matches diff |
-| First-ever filing (no prior) | current only | `summary: null` |
-| Multiple prior periods | array of 3 priors | uses most recent |
-| Coatue Q4 + Q1 (double-filed) | current Q1 2026 | prior is Q4 2025; correct |
+| Test                          | Input                 | Expected                                   |
+| ----------------------------- | --------------------- | ------------------------------------------ |
+| Two consecutive quarters      | current + prior entry | `summary.newPositions.length` matches diff |
+| First-ever filing (no prior)  | current only          | `summary: null`                            |
+| Multiple prior periods        | array of 3 priors     | uses most recent                           |
+| Coatue Q4 + Q1 (double-filed) | current Q1 2026       | prior is Q4 2025; correct                  |
 
 **`tests/scripts/prepare-digest.test.js`** (extend existing)
 
@@ -328,12 +328,12 @@ const out = {
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|---|---|---|
-| Detector false-positive (×1000 on a legitimately small portfolio) | Low | `style: 'small-fund'` opt-out; threshold tuned at $1B |
-| Detector false-negative (a filer's raw values are 1000× wrong but sum stays ≥$1B by coincidence) | Very low | Sum ≥$1B with non-conforming units would mean a $1T portfolio — implausible |
-| `compute13FSummary` returns stale data for Coatue's late Q4 2025 | Medium | Tested explicitly; doc note that Q4-late filings may show larger diffs than expected |
-| Schema consumers break on new fields | Low | All new fields are additive; `schemaVersion` stays at 1 |
+| Risk                                                                                             | Likelihood | Mitigation                                                                           |
+| ------------------------------------------------------------------------------------------------ | ---------- | ------------------------------------------------------------------------------------ |
+| Detector false-positive (×1000 on a legitimately small portfolio)                                | Low        | `style: 'small-fund'` opt-out; threshold tuned at $1B                                |
+| Detector false-negative (a filer's raw values are 1000× wrong but sum stays ≥$1B by coincidence) | Very low   | Sum ≥$1B with non-conforming units would mean a $1T portfolio — implausible          |
+| `compute13FSummary` returns stale data for Coatue's late Q4 2025                                 | Medium     | Tested explicitly; doc note that Q4-late filings may show larger diffs than expected |
+| Schema consumers break on new fields                                                             | Low        | All new fields are additive; `schemaVersion` stays at 1                              |
 
 ---
 

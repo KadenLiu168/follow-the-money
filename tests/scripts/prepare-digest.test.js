@@ -13,25 +13,47 @@ const repoCwd = join(__dirname, '..', '..');
 // (>= $1B ⇒ normalizeValueUnits treats as dollars, no multiplication) filed
 // 2026-06-25; no prior period ⇒ periodDiff returns summary: null (safe).
 function writeDeterministicFeed(envDir) {
-  writeFileSync(join(envDir, 'feed-13f.json'), JSON.stringify({
-    schemaVersion: 1,
-    thirteenF: [
-      {
-        filerCik: '0001067983',
-        filerName: 'Test Filer',
-        latestFilingDate: '2026-06-25',
-        latestFormType: '13F-HR',
-        latestAccessionNumber: '0001067983-26-000123',
-        periodOfReport: '2026-03-31',
-        history: [{ filingDate: '2026-06-25', formType: '13F-HR', accessionNumber: '0001067983-26-000123' }],
-        holdings: [{ cusip: '000000000', nameOfIssuer: 'Test', titleOfClass: 'COM', valueUsd: 2000000000, sshPrnamt: 100, sshPrnamtType: 'SH', putCall: '' }],
-        summary: null,
-      },
-    ],
-    stats: { thirteenFFilings: 1, thirteenFHoldings: 1 },
-  }));
+  writeFileSync(
+    join(envDir, 'feed-13f.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      thirteenF: [
+        {
+          filerCik: '0001067983',
+          filerName: 'Test Filer',
+          latestFilingDate: '2026-06-25',
+          latestFormType: '13F-HR',
+          latestAccessionNumber: '0001067983-26-000123',
+          periodOfReport: '2026-03-31',
+          history: [
+            {
+              filingDate: '2026-06-25',
+              formType: '13F-HR',
+              accessionNumber: '0001067983-26-000123',
+            },
+          ],
+          holdings: [
+            {
+              cusip: '000000000',
+              nameOfIssuer: 'Test',
+              titleOfClass: 'COM',
+              valueUsd: 2000000000,
+              sshPrnamt: 100,
+              sshPrnamtType: 'SH',
+              putCall: '',
+            },
+          ],
+          summary: null,
+        },
+      ],
+      stats: { thirteenFFilings: 1, thirteenFHoldings: 1 },
+    }),
+  );
   mkdirSync(join(envDir, 'feed-13dg'), { recursive: true });
-  writeFileSync(join(envDir, 'feed-13dg', 'manifest.json'), JSON.stringify({ schemaVersion: 1, currentYear: 2026, years: {} }));
+  writeFileSync(
+    join(envDir, 'feed-13dg', 'manifest.json'),
+    JSON.stringify({ schemaVersion: 1, currentYear: 2026, years: {} }),
+  );
 }
 
 describe('prepare-digest.js', () => {
@@ -103,7 +125,10 @@ describe('prepare-digest.js', () => {
       // Put a tiny feed in envDir
       writeFileSync(join(envDir, 'feed-13f.json'), JSON.stringify({ thirteenF: [] }));
       mkdirSync(join(envDir, 'feed-13dg'));
-      writeFileSync(join(envDir, 'feed-13dg', 'manifest.json'), JSON.stringify({ schemaVersion: 1, currentYear: 2026, years: {} }));
+      writeFileSync(
+        join(envDir, 'feed-13dg', 'manifest.json'),
+        JSON.stringify({ schemaVersion: 1, currentYear: 2026, years: {} }),
+      );
 
       // Use repo cwd so node can resolve scripts/prepare-digest.js;
       // env var points feed reads to envDir (a different directory)
@@ -124,7 +149,10 @@ describe('prepare-digest.js', () => {
     try {
       writeFileSync(join(envDir, 'feed-13f.json'), JSON.stringify({ thirteenF: [] }));
       mkdirSync(join(envDir, 'feed-13dg'));
-      writeFileSync(join(envDir, 'feed-13dg', 'manifest.json'), JSON.stringify({ schemaVersion: 1, currentYear: 2026, years: {} }));
+      writeFileSync(
+        join(envDir, 'feed-13dg', 'manifest.json'),
+        JSON.stringify({ schemaVersion: 1, currentYear: 2026, years: {} }),
+      );
       // Symlink the real scripts/ dir so node can resolve `node scripts/prepare-digest.js`.
       // cwd is envDir, env var is unset → script should fall back to cwd (envDir) and read the empty feed there.
       symlinkSync(join(repoCwd, 'scripts'), join(envDir, 'scripts'));
@@ -133,7 +161,11 @@ describe('prepare-digest.js', () => {
       mkdirSync(join(envDir, 'config'), { recursive: true });
       const env = { ...process.env };
       delete env.FOLLOW_THE_MONEY_FEED_DIR;
-      const out = execSync('node scripts/prepare-digest.js', { cwd: envDir, env, stdio: 'pipe' }).toString();
+      const out = execSync('node scripts/prepare-digest.js', {
+        cwd: envDir,
+        env,
+        stdio: 'pipe',
+      }).toString();
       const parsed = JSON.parse(out);
       expect(parsed.thirteenF).toEqual([]);
     } finally {
@@ -165,7 +197,7 @@ describe('prepare-digest.js', () => {
     const j = JSON.parse(out);
     // Find Coatue's Q4 2025 amendment entry (periodOfReport=2025-12-31, filed 2026-05-15)
     const coatueQ4 = j.thirteenF.find(
-      (f) => f.filerName === 'Coatue Management LLC' && f.periodOfReport === '2025-12-31'
+      (f) => f.filerName === 'Coatue Management LLC' && f.periodOfReport === '2025-12-31',
     );
     expect(coatueQ4).toBeDefined();
     expect(coatueQ4.latestFormType).toBe('13F-HR/A');
@@ -185,9 +217,21 @@ describe('prepare-digest.js', () => {
     const envDir = mkdtempSync(join(tmpdir(), 'ftm-seam-det-'));
     try {
       writeDeterministicFeed(envDir);
-      const env = { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: envDir, FTM_NOW: '2026-06-26T00:00:00Z' };
-      const out1 = execSync('node scripts/prepare-digest.js --lookback 7', { cwd: repoCwd, env, encoding: 'utf8' });
-      const out2 = execSync('node scripts/prepare-digest.js --lookback 7', { cwd: repoCwd, env, encoding: 'utf8' });
+      const env = {
+        ...process.env,
+        FOLLOW_THE_MONEY_FEED_DIR: envDir,
+        FTM_NOW: '2026-06-26T00:00:00Z',
+      };
+      const out1 = execSync('node scripts/prepare-digest.js --lookback 7', {
+        cwd: repoCwd,
+        env,
+        encoding: 'utf8',
+      });
+      const out2 = execSync('node scripts/prepare-digest.js --lookback 7', {
+        cwd: repoCwd,
+        env,
+        encoding: 'utf8',
+      });
       expect(out1).toBe(out2);
       const j = JSON.parse(out1);
       expect(j.generatedAt).toBe('2026-06-26T00:00:00.000Z');
@@ -202,8 +246,16 @@ describe('prepare-digest.js', () => {
     const envDir = mkdtempSync(join(tmpdir(), 'ftm-seam-prec-'));
     try {
       writeDeterministicFeed(envDir);
-      const env = { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: envDir, FTM_NOW: '2026-06-26T00:00:00Z' };
-      const out = execSync('node scripts/prepare-digest.js --lookback 7 --now 2026-03-31', { cwd: repoCwd, env, encoding: 'utf8' });
+      const env = {
+        ...process.env,
+        FOLLOW_THE_MONEY_FEED_DIR: envDir,
+        FTM_NOW: '2026-06-26T00:00:00Z',
+      };
+      const out = execSync('node scripts/prepare-digest.js --lookback 7 --now 2026-03-31', {
+        cwd: repoCwd,
+        env,
+        encoding: 'utf8',
+      });
       const j = JSON.parse(out);
       // flag wins over env
       expect(j.generatedAt).toBe('2026-03-31T00:00:00.000Z');
@@ -219,7 +271,12 @@ describe('prepare-digest.js', () => {
       const env = { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: envDir, FTM_NOW: 'not-a-date' };
       let err;
       try {
-        execSync('node scripts/prepare-digest.js --lookback 7', { cwd: repoCwd, env, encoding: 'utf8', stdio: 'pipe' });
+        execSync('node scripts/prepare-digest.js --lookback 7', {
+          cwd: repoCwd,
+          env,
+          encoding: 'utf8',
+          stdio: 'pipe',
+        });
       } catch (e) {
         err = e;
       }
@@ -238,7 +295,12 @@ describe('prepare-digest.js', () => {
       let err;
       try {
         // --now as the last arg with no following value
-        execSync('node scripts/prepare-digest.js --lookback 7 --now', { cwd: repoCwd, env, encoding: 'utf8', stdio: 'pipe' });
+        execSync('node scripts/prepare-digest.js --lookback 7 --now', {
+          cwd: repoCwd,
+          env,
+          encoding: 'utf8',
+          stdio: 'pipe',
+        });
       } catch (e) {
         err = e;
       }

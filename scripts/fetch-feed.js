@@ -9,14 +9,17 @@ const BRANCH = 'main';
 export function defaultTargetDir() {
   if (process.env.FOLLOW_THE_MONEY_FEED_DIR) return process.env.FOLLOW_THE_MONEY_FEED_DIR;
   const home = homedir();
-  if (process.platform === 'darwin') return join(home, 'Library', 'Caches', 'follow-the-money', 'feed');
+  if (process.platform === 'darwin')
+    return join(home, 'Library', 'Caches', 'follow-the-money', 'feed');
   if (process.platform === 'win32') {
     const local = process.env.LOCALAPPDATA || join(home, 'AppData', 'Local');
     return join(local, 'follow-the-money', 'feed');
   }
   // linux and others
   const xdg = process.env.XDG_CACHE_HOME;
-  return xdg ? join(xdg, 'follow-the-money', 'feed') : join(home, '.cache', 'follow-the-money', 'feed');
+  return xdg
+    ? join(xdg, 'follow-the-money', 'feed')
+    : join(home, '.cache', 'follow-the-money', 'feed');
 }
 
 async function main() {

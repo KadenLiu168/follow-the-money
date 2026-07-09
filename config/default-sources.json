@@ -1,14 +1,49 @@
 {
   "schemaVersion": 1,
   "thirteenF": [
-    { "cik": "0001067983", "name": "Berkshire Hathaway Inc", "style": "value", "valueUnit": "thousands" },
-    { "cik": "0001336528", "name": "Pershing Square Capital Management", "style": "activist-value", "valueUnit": "thousands" },
-    { "cik": "0001649339", "name": "Scion Asset Management, LLC", "style": "deep-value", "valueUnit": "thousands" },
+    {
+      "cik": "0001067983",
+      "name": "Berkshire Hathaway Inc",
+      "style": "value",
+      "valueUnit": "thousands"
+    },
+    {
+      "cik": "0001336528",
+      "name": "Pershing Square Capital Management",
+      "style": "activist-value",
+      "valueUnit": "thousands"
+    },
+    {
+      "cik": "0001649339",
+      "name": "Scion Asset Management, LLC",
+      "style": "deep-value",
+      "valueUnit": "thousands"
+    },
     { "cik": "0001061768", "name": "Baupost Group", "style": "value", "valueUnit": "thousands" },
-    { "cik": "0000949509", "name": "Oaktree Capital Management LP", "style": "distressed-value", "valueUnit": "thousands" },
-    { "cik": "0001697748", "name": "ARK Investment Management LLC", "style": "thematic-growth", "valueUnit": "thousands" },
-    { "cik": "0001167483", "name": "Tiger Global Management LLC", "style": "growth", "valueUnit": "thousands" },
-    { "cik": "0001135730", "name": "Coatue Management LLC", "style": "growth", "valueUnit": "thousands" }
+    {
+      "cik": "0000949509",
+      "name": "Oaktree Capital Management LP",
+      "style": "distressed-value",
+      "valueUnit": "thousands"
+    },
+    {
+      "cik": "0001697748",
+      "name": "ARK Investment Management LLC",
+      "style": "thematic-growth",
+      "valueUnit": "thousands"
+    },
+    {
+      "cik": "0001167483",
+      "name": "Tiger Global Management LLC",
+      "style": "growth",
+      "valueUnit": "thousands"
+    },
+    {
+      "cik": "0001135730",
+      "name": "Coatue Management LLC",
+      "style": "growth",
+      "valueUnit": "thousands"
+    }
   ],
   "thirteenDG": {
     "enabled": true,

@@ -2,11 +2,20 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readStateJson, writeStateJson, pruneSeenFilings, SEEN_FILINGS_TTL_DAYS } from '../../lib/store/state-json.js';
+import {
+  readStateJson,
+  writeStateJson,
+  pruneSeenFilings,
+  SEEN_FILINGS_TTL_DAYS,
+} from '../../lib/store/state-json.js';
 
 let dir;
-beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ftm-')); });
-afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), 'ftm-'));
+});
+afterEach(() => {
+  rmSync(dir, { recursive: true, force: true });
+});
 
 describe('state-json', () => {
   it('returns defaults when file missing', () => {
@@ -17,7 +26,10 @@ describe('state-json', () => {
   it('round-trips via write + read (recent seenFilings preserved)', () => {
     const p = join(dir, 'state.json');
     const now = Date.now();
-    const s = { lastUpdated: '2026-05-15T08:00:00.000Z', seenFilings: { a: now - 1000, b: now - 2000 } };
+    const s = {
+      lastUpdated: '2026-05-15T08:00:00.000Z',
+      seenFilings: { a: now - 1000, b: now - 2000 },
+    };
     writeStateJson(p, s);
     expect(readStateJson(p)).toEqual(s);
   });
@@ -26,7 +38,7 @@ describe('state-json', () => {
     const p = join(dir, 'state.json');
     writeStateJson(p, { lastUpdated: 'x', seenFilings: {} });
     expect(existsSync(p)).toBe(true);
-    const tempFiles = readdirSync(dir).filter(f => f.includes('.tmp'));
+    const tempFiles = readdirSync(dir).filter((f) => f.includes('.tmp'));
     expect(tempFiles).toEqual([]);
   });
 
@@ -42,7 +54,10 @@ describe('state-json', () => {
     const now = Date.now();
     const stale = now - (SEEN_FILINGS_TTL_DAYS + 1) * 24 * 60 * 60 * 1000;
     const p = join(dir, 'state.json');
-    const s = { lastUpdated: '2026-05-15T08:00:00.000Z', seenFilings: { fresh: now - 1000, stale1: stale, stale2: stale - 5000 } };
+    const s = {
+      lastUpdated: '2026-05-15T08:00:00.000Z',
+      seenFilings: { fresh: now - 1000, stale1: stale, stale2: stale - 5000 },
+    };
     writeStateJson(p, s);
     const read = readStateJson(p);
     expect(read.seenFilings).toEqual({ fresh: now - 1000 });

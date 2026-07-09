@@ -2,13 +2,34 @@ import { describe, it, expect } from 'vitest';
 import { periodDiff, buildCikIndex } from '../../lib/enrich/period-diff.js';
 import { normalizeValueUnits } from '../../lib/enrich/normalize-value-units.js';
 
-const aapl = { cusip: '037833100', issuerName: 'APPLE INC', shares: 300000000, valueUsd: 58200000000, votingAuthority: { sole: 300000000, shared: 0, none: 0 } };
-const goog = { cusip: '02079K305', issuerName: 'ALPHABET INC', shares: 10000000, valueUsd: 17000000000, votingAuthority: { sole: 10000000, shared: 0, none: 0 } };
-const oldco = { cusip: '999999999', issuerName: 'OLDCO', shares: 1, valueUsd: 1, votingAuthority: { sole: 1, shared: 0, none: 0 } };
+const aapl = {
+  cusip: '037833100',
+  issuerName: 'APPLE INC',
+  shares: 300000000,
+  valueUsd: 58200000000,
+  votingAuthority: { sole: 300000000, shared: 0, none: 0 },
+};
+const goog = {
+  cusip: '02079K305',
+  issuerName: 'ALPHABET INC',
+  shares: 10000000,
+  valueUsd: 17000000000,
+  votingAuthority: { sole: 10000000, shared: 0, none: 0 },
+};
+const oldco = {
+  cusip: '999999999',
+  issuerName: 'OLDCO',
+  shares: 1,
+  valueUsd: 1,
+  votingAuthority: { sole: 1, shared: 0, none: 0 },
+};
 
 const baseEntry = (cik, period, holdings) => ({
-  filerCik: cik, filerName: 'Test Filer', periodOfReport: period,
-  latestFilingDate: '2026-05-15', latestFormType: '13F-HR',
+  filerCik: cik,
+  filerName: 'Test Filer',
+  periodOfReport: period,
+  latestFilingDate: '2026-05-15',
+  latestFormType: '13F-HR',
   latestAccessionNumber: '0000000000-00-000000',
   holdings,
 });
@@ -18,10 +39,13 @@ describe('periodDiff', () => {
     const current = baseEntry('0001067983', '2026-03-31', [aapl, goog]);
     // Prior is already normalized (valueUnitAdjusted) — periodDiff's defensive
     // normalizeValueUnits must be a no-op on it (config-driven model).
-    const prior = { ...baseEntry('0001067983', '2025-12-31', [
-      { ...aapl, shares: 200000000, valueUsd: 38800000000 },
-      oldco,
-    ]), valueUnitAdjusted: true };
+    const prior = {
+      ...baseEntry('0001067983', '2025-12-31', [
+        { ...aapl, shares: 200000000, valueUsd: 38800000000 },
+        oldco,
+      ]),
+      valueUnitAdjusted: true,
+    };
     const all = [current, prior];
     const out = periodDiff(current, all);
 
@@ -47,12 +71,18 @@ describe('periodDiff', () => {
 
   it('uses the most recent prior when multiple exist', () => {
     const current = baseEntry('0001067983', '2026-03-31', [aapl]);
-    const priorOld = { ...baseEntry('0001067983', '2025-06-30', [
-      { ...aapl, shares: 100000000, valueUsd: 19400000000 },
-    ]), valueUnitAdjusted: true };
-    const priorRecent = { ...baseEntry('0001067983', '2025-12-31', [
-      { ...aapl, shares: 200000000, valueUsd: 38800000000 },
-    ]), valueUnitAdjusted: true };
+    const priorOld = {
+      ...baseEntry('0001067983', '2025-06-30', [
+        { ...aapl, shares: 100000000, valueUsd: 19400000000 },
+      ]),
+      valueUnitAdjusted: true,
+    };
+    const priorRecent = {
+      ...baseEntry('0001067983', '2025-12-31', [
+        { ...aapl, shares: 200000000, valueUsd: 38800000000 },
+      ]),
+      valueUnitAdjusted: true,
+    };
     const all = [current, priorOld, priorRecent];
     const out = periodDiff(current, all);
     expect(out.summary.priorTotalValueUsd).toBe(38800000000);
@@ -93,7 +123,13 @@ describe('periodDiff', () => {
     // Holdings are in post-×1000 dollars.
     const current = {
       ...baseEntry('0001061768', '2026-03-31', [
-        { cusip: '1', issuerName: 'X', shares: 100, valueUsd: 100000000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+        {
+          cusip: '1',
+          issuerName: 'X',
+          shares: 100,
+          valueUsd: 100000000,
+          votingAuthority: { sole: 100, shared: 0, none: 0 },
+        },
       ]),
       valueUnit: 'thousands',
       valueUnitAdjusted: true,
@@ -101,7 +137,13 @@ describe('periodDiff', () => {
     // Prior: Baupost Q4 2025 — raw (would also be thousands but not yet normalized).
     // Holdings are in raw thousands.
     const prior = baseEntry('0001061768', '2025-12-31', [
-      { cusip: '1', issuerName: 'X', shares: 100, valueUsd: 110000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+      {
+        cusip: '1',
+        issuerName: 'X',
+        shares: 100,
+        valueUsd: 110000,
+        votingAuthority: { sole: 100, shared: 0, none: 0 },
+      },
     ]);
     const cfg = [{ cik: '0001061768', name: 'Baupost Group', style: 'value' }];
     const out = periodDiff(current, [current, prior], cfg);
@@ -116,11 +158,26 @@ describe('periodDiff', () => {
     // Simulate post-normalizeValueUnits state: prior already carries
     // valueUnitAdjusted, so the defensive normalizeValueUnits short-circuits.
     const current = baseEntry('0001061768', '2026-03-31', [
-      { cusip: '1', issuerName: 'X', shares: 100, valueUsd: 1000000000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+      {
+        cusip: '1',
+        issuerName: 'X',
+        shares: 100,
+        valueUsd: 1000000000,
+        votingAuthority: { sole: 100, shared: 0, none: 0 },
+      },
     ]);
-    const prior = { ...baseEntry('0001061768', '2025-12-31', [
-      { cusip: '1', issuerName: 'X', shares: 100, valueUsd: 1100000000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
-    ]), valueUnitAdjusted: true };
+    const prior = {
+      ...baseEntry('0001061768', '2025-12-31', [
+        {
+          cusip: '1',
+          issuerName: 'X',
+          shares: 100,
+          valueUsd: 1100000000,
+          votingAuthority: { sole: 100, shared: 0, none: 0 },
+        },
+      ]),
+      valueUnitAdjusted: true,
+    };
     const cfg = [{ cik: '0001061768', name: 'Baupost Group', style: 'value' }];
     const out = periodDiff(current, [current, prior], cfg);
     // valueUnitAdjusted guard → prior valueUsd unchanged (no ×1000).
@@ -132,10 +189,22 @@ describe('periodDiff', () => {
   it('honors small-fund style flag on prior: does not normalize even when sum < $1B', () => {
     // Prior sum < $1B BUT CIK matches small-fund config → should NOT ×1000.
     const current = baseEntry('0001061768', '2026-03-31', [
-      { cusip: '1', issuerName: 'X', shares: 100, valueUsd: 30000000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+      {
+        cusip: '1',
+        issuerName: 'X',
+        shares: 100,
+        valueUsd: 30000000,
+        votingAuthority: { sole: 100, shared: 0, none: 0 },
+      },
     ]);
     const prior = baseEntry('0001061768', '2025-12-31', [
-      { cusip: '1', issuerName: 'X', shares: 100, valueUsd: 30, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+      {
+        cusip: '1',
+        issuerName: 'X',
+        shares: 100,
+        valueUsd: 30,
+        votingAuthority: { sole: 100, shared: 0, none: 0 },
+      },
     ]);
     const cfg = [{ cik: '0001061768', name: 'Tiny Filer', style: 'small-fund' }];
     const out = periodDiff(current, [current, prior], cfg);
@@ -150,8 +219,20 @@ describe('periodDiff', () => {
     // After the fix, the second call sees valueUnitAdjusted=true and returns
     // the once-normalized prior unchanged.
     const rawPrior = baseEntry('0001697748', '2017-06-30', [
-      { cusip: 'A', issuerName: 'X', shares: 100, valueUsd: 200000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
-      { cusip: 'B', issuerName: 'Y', shares: 100, valueUsd: 313594, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+      {
+        cusip: 'A',
+        issuerName: 'X',
+        shares: 100,
+        valueUsd: 200000,
+        votingAuthority: { sole: 100, shared: 0, none: 0 },
+      },
+      {
+        cusip: 'B',
+        issuerName: 'Y',
+        shares: 100,
+        valueUsd: 313594,
+        votingAuthority: { sole: 100, shared: 0, none: 0 },
+      },
     ]);
     const cfg = [{ cik: '0001697748', name: 'ARK Investment Management LLC', style: 'deep-value' }];
 
@@ -161,8 +242,20 @@ describe('periodDiff', () => {
     // The guard in normalizeValueUnits keys off this marker on input; pin it.
     expect(normalizedPrior.valueUnitAdjusted).toBe(true);
     const current = baseEntry('0001697748', '2017-09-30', [
-      { cusip: 'A', issuerName: 'X', shares: 100, valueUsd: 200000 * 1000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
-      { cusip: 'B', issuerName: 'Y', shares: 100, valueUsd: 619306 * 1000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
+      {
+        cusip: 'A',
+        issuerName: 'X',
+        shares: 100,
+        valueUsd: 200000 * 1000,
+        votingAuthority: { sole: 100, shared: 0, none: 0 },
+      },
+      {
+        cusip: 'B',
+        issuerName: 'Y',
+        shares: 100,
+        valueUsd: 619306 * 1000,
+        votingAuthority: { sole: 100, shared: 0, none: 0 },
+      },
     ]);
 
     const out = periodDiff(current, [current, normalizedPrior], cfg);
@@ -188,9 +281,19 @@ describe('periodDiff', () => {
 
   it('index path diffs multiple filers against their own priors', () => {
     const f1c = baseEntry('0001067983', '2026-03-31', [aapl]);
-    const f1p = { ...baseEntry('0001067983', '2025-12-31', [{ ...aapl, shares: 200000000, valueUsd: 38800000000 }]), valueUnitAdjusted: true };
+    const f1p = {
+      ...baseEntry('0001067983', '2025-12-31', [
+        { ...aapl, shares: 200000000, valueUsd: 38800000000 },
+      ]),
+      valueUnitAdjusted: true,
+    };
     const f2c = baseEntry('0001336528', '2026-03-31', [goog]);
-    const f2p = { ...baseEntry('0001336528', '2025-12-31', [{ ...goog, shares: 5000000, valueUsd: 8500000000 }]), valueUnitAdjusted: true };
+    const f2p = {
+      ...baseEntry('0001336528', '2025-12-31', [
+        { ...goog, shares: 5000000, valueUsd: 8500000000 },
+      ]),
+      valueUnitAdjusted: true,
+    };
     const all = [f1c, f1p, f2c, f2p];
     const idx = buildCikIndex(all);
     const out1 = periodDiff(f1c, all, [], idx);

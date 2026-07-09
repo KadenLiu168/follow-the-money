@@ -22,7 +22,9 @@ const lookbackIdx = args.indexOf('--lookback');
 // cron callers that want "today's new filings only" can pass --lookback 1.
 const lookbackDays = lookbackIdx >= 0 ? Number(args[lookbackIdx + 1]) : 90;
 if (!Number.isInteger(lookbackDays) || lookbackDays <= 0) {
-  console.error(`[prepare-digest] --lookback must be a positive integer, got: ${args[lookbackIdx + 1]}`);
+  console.error(
+    `[prepare-digest] --lookback must be a positive integer, got: ${args[lookbackIdx + 1]}`,
+  );
   process.exit(1);
 }
 
@@ -57,7 +59,9 @@ if (nowSource !== 'wall' && Number.isNaN(now.getTime())) {
 }
 
 const f13 = existsSync(FEED_13F) ? readFeedJson(FEED_13F) : { thirteenF: [] };
-const manifest = existsSync(FEED_13DG_DIR) ? readManifest(FEED_13DG_DIR) : { years: {}, currentYear: now.getUTCFullYear() };
+const manifest = existsSync(FEED_13DG_DIR)
+  ? readManifest(FEED_13DG_DIR)
+  : { years: {}, currentYear: now.getUTCFullYear() };
 // Spec §NDJSON robustness: validate line counts on startup
 if (existsSync(FEED_13DG_DIR)) {
   const v = validateManifest(FEED_13DG_DIR, manifest);
@@ -73,7 +77,11 @@ const dgFiltered = filterByLookback(dgRaw.entries, { lookbackDays, now });
 const normalizedFeed = f13.thirteenF.map((f) => normalizeValueUnits(f, defaultSources.thirteenF));
 // 13F entries expose `latestFilingDate` (not `filingDate`); window on it via
 // the `field` option so 13F and 13DG share one filter function and one `now`.
-const f13Filtered = filterByLookback(normalizedFeed, { lookbackDays, now, field: 'latestFilingDate' });
+const f13Filtered = filterByLookback(normalizedFeed, {
+  lookbackDays,
+  now,
+  field: 'latestFilingDate',
+});
 
 // Pass defaultSources.thirteenF so periodDiff's defensive normalizeValueUnits
 // can correctly identify small-fund style prior entries (e.g. tiny CIKs that
@@ -82,7 +90,9 @@ const f13Filtered = filterByLookback(normalizedFeed, { lookbackDays, now, field:
 // on entries with `valueUnitAdjusted === true`, so re-normalizing already-
 // normalized prior entries is a safe no-op.
 const cikIndex = buildCikIndex(normalizedFeed);
-const enriched = f13Filtered.map((f) => periodDiff(f, normalizedFeed, defaultSources.thirteenF, cikIndex));
+const enriched = f13Filtered.map((f) =>
+  periodDiff(f, normalizedFeed, defaultSources.thirteenF, cikIndex),
+);
 
 const out = {
   schemaVersion: 1,

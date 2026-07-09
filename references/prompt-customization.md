@@ -1,6 +1,7 @@
 # 自定义 Prompt
 
 ## 步骤
+
 1. 在用户目录创建 `~/.follow-the-money/prompts/`（如果不存在）
 2. 拷贝你想修改的 prompt：
    - macOS / Linux:

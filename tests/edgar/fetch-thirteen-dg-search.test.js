@@ -16,14 +16,19 @@ describe('fetchThirteenDGSearch', () => {
     client = createHttpClient({ userAgent: 'T t@e.com', bucket: new TokenBucket(100, 100) });
     nock.disableNetConnect();
   });
-  afterEach(() => { nock.cleanAll(); nock.enableNetConnect(); });
+  afterEach(() => {
+    nock.cleanAll();
+    nock.enableNetConnect();
+  });
 
   it('queries EDGAR full-text search with the form and date range', async () => {
     const scope = nock('https://efts.sec.gov')
       .get(/LATEST\/search-index.*forms=SC\+13D.*startDate=2026-06-20.*endDate=2026-06-25/)
       .reply(200, fixture);
     const r = await fetchThirteenDGSearch(client, {
-      startDate: '2026-06-20', endDate: '2026-06-25', formType: 'SC 13D',
+      startDate: '2026-06-20',
+      endDate: '2026-06-25',
+      formType: 'SC 13D',
     });
     expect(r).toHaveLength(2);
     expect(r[0]._source.form).toBe('SC 13D');
@@ -32,8 +37,17 @@ describe('fetchThirteenDGSearch', () => {
 
   it('encodes form name with + (not %20) per EDGAR convention', async () => {
     let capturedUrl = null;
-    nock('https://efts.sec.gov').get(/.*/).reply(200, (uri) => { capturedUrl = uri; return fixture; });
-    await fetchThirteenDGSearch(client, { startDate: '2026-06-20', endDate: '2026-06-25', formType: 'SC 13G/A' });
+    nock('https://efts.sec.gov')
+      .get(/.*/)
+      .reply(200, (uri) => {
+        capturedUrl = uri;
+        return fixture;
+      });
+    await fetchThirteenDGSearch(client, {
+      startDate: '2026-06-20',
+      endDate: '2026-06-25',
+      formType: 'SC 13G/A',
+    });
     expect(capturedUrl).toMatch(/forms=SC\+13G%2FA/);
   });
 });

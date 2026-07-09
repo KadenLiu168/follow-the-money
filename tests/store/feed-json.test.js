@@ -2,19 +2,49 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readFeedJson, writeFeedJson, upsert13FFiling, merge13FFiling, computeStats } from '../../lib/store/feed-json.js';
+import {
+  readFeedJson,
+  writeFeedJson,
+  upsert13FFiling,
+  merge13FFiling,
+  computeStats,
+} from '../../lib/store/feed-json.js';
 
 let dir;
-beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ftm-')); });
-afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), 'ftm-'));
+});
+afterEach(() => {
+  rmSync(dir, { recursive: true, force: true });
+});
 
 const newEntry = (over = {}) => ({
-  filerCik: '0001067983', filerName: 'Berkshire Hathaway Inc',
-  latestFilingDate: '2026-05-15', latestFormType: '13F-HR',
-  latestAccessionNumber: '0001067983-26-000123', periodOfReport: '2026-03-31',
-  history: [{ filingDate: '2026-05-15', formType: '13F-HR', accessionNumber: '0001067983-26-000123' }],
-  holdings: [{ cusip: '037833100', issuerName: 'APPLE INC', shares: 300000000, valueUsd: 58200000000, votingAuthority: { sole: 300000000, shared: 0, none: 0 } }],
-  summary: { totalHoldingsCount: 1, totalValueUsd: 58200000000, newPositions: ['037833100'], closedPositions: [], increasedPositions: 0, decreasedPositions: 0 },
+  filerCik: '0001067983',
+  filerName: 'Berkshire Hathaway Inc',
+  latestFilingDate: '2026-05-15',
+  latestFormType: '13F-HR',
+  latestAccessionNumber: '0001067983-26-000123',
+  periodOfReport: '2026-03-31',
+  history: [
+    { filingDate: '2026-05-15', formType: '13F-HR', accessionNumber: '0001067983-26-000123' },
+  ],
+  holdings: [
+    {
+      cusip: '037833100',
+      issuerName: 'APPLE INC',
+      shares: 300000000,
+      valueUsd: 58200000000,
+      votingAuthority: { sole: 300000000, shared: 0, none: 0 },
+    },
+  ],
+  summary: {
+    totalHoldingsCount: 1,
+    totalValueUsd: 58200000000,
+    newPositions: ['037833100'],
+    closedPositions: [],
+    increasedPositions: 0,
+    decreasedPositions: 0,
+  },
   ...over,
 });
 
@@ -36,10 +66,26 @@ describe('feed-json', () => {
     const p = join(dir, 'f.json');
     upsert13FFiling(p, newEntry());
     const amended = newEntry({
-      latestFilingDate: '2026-06-10', latestFormType: '13F-HR/A',
+      latestFilingDate: '2026-06-10',
+      latestFormType: '13F-HR/A',
       latestAccessionNumber: '0001067983-26-000456',
-      holdings: [{ cusip: '037833100', issuerName: 'APPLE INC', shares: 310000000, valueUsd: 60140000000, votingAuthority: { sole: 310000000, shared: 0, none: 0 } }],
-      summary: { totalHoldingsCount: 1, totalValueUsd: 60140000000, newPositions: [], closedPositions: [], increasedPositions: 1, decreasedPositions: 0 },
+      holdings: [
+        {
+          cusip: '037833100',
+          issuerName: 'APPLE INC',
+          shares: 310000000,
+          valueUsd: 60140000000,
+          votingAuthority: { sole: 310000000, shared: 0, none: 0 },
+        },
+      ],
+      summary: {
+        totalHoldingsCount: 1,
+        totalValueUsd: 60140000000,
+        newPositions: [],
+        closedPositions: [],
+        increasedPositions: 1,
+        decreasedPositions: 0,
+      },
     });
     upsert13FFiling(p, amended);
     const f = readFeedJson(p);
@@ -59,7 +105,9 @@ describe('feed-json', () => {
   });
 
   it('computeStats counts holdings across all filers', () => {
-    const f = { thirteenF: [newEntry(), newEntry({ filerCik: '0001336528', filerName: 'Pershing' })] };
+    const f = {
+      thirteenF: [newEntry(), newEntry({ filerCik: '0001336528', filerName: 'Pershing' })],
+    };
     expect(computeStats(f)).toEqual({ thirteenFFilings: 2, thirteenFHoldings: 2 });
   });
 
@@ -70,10 +118,14 @@ describe('feed-json', () => {
     // Source entries don't declare valueUnit; the 13F feed writer MUST stamp it.
     expect(f.thirteenF[0].valueUnit).toBe('thousands');
     // Amendment path also stamps.
-    upsert13FFiling(p, newEntry({
-      latestFilingDate: '2026-06-10', latestFormType: '13F-HR/A',
-      latestAccessionNumber: '0001067983-26-000456',
-    }));
+    upsert13FFiling(
+      p,
+      newEntry({
+        latestFilingDate: '2026-06-10',
+        latestFormType: '13F-HR/A',
+        latestAccessionNumber: '0001067983-26-000456',
+      }),
+    );
     const f2 = readFeedJson(p);
     expect(f2.thirteenF[0].valueUnit).toBe('thousands');
   });
@@ -82,14 +134,20 @@ describe('feed-json', () => {
     const base = readFeedJson(join(dir, 'none.json'));
     const before = JSON.parse(JSON.stringify(base.thirteenF));
     const merged = merge13FFiling(base, newEntry());
-    expect(base.thirteenF).toEqual(before);            // input untouched
-    expect(merged).not.toBe(base);                      // distinct object
+    expect(base.thirteenF).toEqual(before); // input untouched
+    expect(merged).not.toBe(base); // distinct object
     expect(merged.thirteenF).toHaveLength(1);
     expect(merged.thirteenF[0].valueUnit).toBe('thousands');
   });
 
   it('merge13FFiling accumulates in memory: two filings yield two entries + correct stats', () => {
-    let feed = { schemaVersion: 1, generatedAt: '', lookbackDays: 90, thirteenF: [], stats: { thirteenFFilings: 0, thirteenFHoldings: 0 } };
+    let feed = {
+      schemaVersion: 1,
+      generatedAt: '',
+      lookbackDays: 90,
+      thirteenF: [],
+      stats: { thirteenFFilings: 0, thirteenFHoldings: 0 },
+    };
     feed = merge13FFiling(feed, newEntry({ periodOfReport: '2025-12-31' }));
     feed = merge13FFiling(feed, newEntry({ periodOfReport: '2026-03-31' }));
     expect(feed.thirteenF).toHaveLength(2);

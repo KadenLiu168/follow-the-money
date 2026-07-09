@@ -23,13 +23,15 @@ If a step in this skill fails, surface the exact stderr from the failing script 
 
 1. **Load config** from `~/.follow-the-money/config.json`. If missing or `onboardingComplete: false`, run onboarding (see `references/onboarding.md`).
 2. **Fetch fresh feed** (skill mode only):
+
    ```bash
    node scripts/fetch-feed.js
    ```
+
    Resolves `$FOLLOW_THE_MONEY_FEED_DIR` (default: `$XDG_CACHE_HOME/follow-the-money/feed/` on Linux, `~/Library/Caches/follow-the-money/feed/` on macOS). Downloads `feed-13f.json`, `state-13f.json`, `feed-13dg/`, `state-13dg.ndjson` from `raw.githubusercontent.com/KadenLiu168/follow-the-money/main/`.
-   
+
    On failure: log warning to stderr, fall through to local mode (step 3 reads from `cwd`). Suitable when the user has already run `node scripts/aggregate.js` locally.
-   
+
 3. **Prepare digest**:
    ```bash
    FOLLOW_THE_MONEY_FEED_DIR=$FOLLOW_THE_MONEY_FEED_DIR node scripts/prepare-digest.js
@@ -51,6 +53,7 @@ If a step in this skill fails, surface the exact stderr from the failing script 
 ### Feed freshness model
 
 The skill uses a **fetch-then-digest** pattern:
+
 - Step 2 fetches fresh data from `raw.githubusercontent.com/KadenLiu168/follow-the-money/main/*`
   into a per-user cache directory. Override with `FOLLOW_THE_MONEY_FEED_DIR` env var.
 - On fetch failure, the skill falls back to local files in `cwd` (suitable when the user has
@@ -69,11 +72,11 @@ once to populate `cwd` with data; optionally schedule via cron for freshness.
 
 When the user says one of the following, update `~/.follow-the-money/config.json` and confirm:
 
-| Phrase (examples) | Field |
-|---|---|
-| "switch to weekly" / "send me weekly" | `frequency: "weekly"` |
-| "change time to 9am" / "send at 9:00" | `deliveryTime: "09:00"` |
-| "in Chinese" / "translate to Chinese" | `language: "zh"` |
+| Phrase (examples)                       | Field                      |
+| --------------------------------------- | -------------------------- |
+| "switch to weekly" / "send me weekly"   | `frequency: "weekly"`      |
+| "change time to 9am" / "send at 9:00"   | `deliveryTime: "09:00"`    |
+| "in Chinese" / "translate to Chinese"   | `language: "zh"`           |
 | "show my settings" / "what's my config" | read + display config.json |
 
 All other changes → confirm with user before writing.

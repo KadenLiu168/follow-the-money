@@ -4,14 +4,14 @@ What triggers an immediate push vs. what waits for the next digest. Load this wh
 
 ## Three-Level Classification
 
-> **Taxonomy, not a classifier.** This is a *behavior* taxonomy derived from form type plus the merge pipeline — it is **not** a 3-way `classify()` output. `lib/alert/classify.js` returns only two values: `alert` and `digest`. The "merged alert" level *emerges* from `merge-by-issuer` + `merge-amendments`, and `intent` (`active`/`passive`) is written by the parsers (see *Intent Field* below), not by `classify`.
+> **Taxonomy, not a classifier.** This is a _behavior_ taxonomy derived from form type plus the merge pipeline — it is **not** a 3-way `classify()` output. `lib/alert/classify.js` returns only two values: `alert` and `digest`. The "merged alert" level _emerges_ from `merge-by-issuer` + `merge-amendments`, and `intent` (`active`/`passive`) is written by the parsers (see _Intent Field_ below), not by `classify`.
 
-| Form | Treatment | Rationale |
-|---|---|---|
-| SC 13D | Always alert (full details) | Active investor, 5% threshold cross, rare & important |
-| SC 13D/A | Alert but merged per (filer + issuer + day) | Amendment — usually a small tweak, can be noisy |
-| SC 13G | Digest only | Passive, high volume |
-| SC 13G/A | Digest only | Same as 13G |
+| Form     | Treatment                                   | Rationale                                             |
+| -------- | ------------------------------------------- | ----------------------------------------------------- |
+| SC 13D   | Always alert (full details)                 | Active investor, 5% threshold cross, rare & important |
+| SC 13D/A | Alert but merged per (filer + issuer + day) | Amendment — usually a small tweak, can be noisy       |
+| SC 13G   | Digest only                                 | Passive, high volume                                  |
+| SC 13G/A | Digest only                                 | Same as 13G                                           |
 
 ## Merge Rule (13D/A)
 
@@ -35,9 +35,9 @@ The user can read the full list in the next digest. The summary line keeps the n
 
 `intent` is derived purely from form type. No Item 4 text regex.
 
-| Form | intent |
-|---|---|
-| SC 13D / 13D/A | `active` |
+| Form           | intent    |
+| -------------- | --------- |
+| SC 13D / 13D/A | `active`  |
 | SC 13G / 13G/A | `passive` |
 
 Rationale: SEC's legal framework already separates 13D (active) from 13G (passive). Item 4 text is mostly legal boilerplate — unreliable signal. Alert wording uses "举牌" (active) vs "披露" (passive) for clarity in Chinese.
@@ -47,13 +47,11 @@ Rationale: SEC's legal framework already separates 13D (active) from 13G (passiv
 `scripts/check-alerts.js` logic:
 
 ```js
-const lastAlert = config.lastAlertTimestamp || "1970-01-01";
-const newCritical = feed.filter(f =>
-  ALERT_FORMS.has(f.formType) && f.filingDate > lastAlert
-);
+const lastAlert = config.lastAlertTimestamp || '1970-01-01';
+const newCritical = feed.filter((f) => ALERT_FORMS.has(f.formType) && f.filingDate > lastAlert);
 if (newCritical.length === 0) exit(0);
 deliver(newCritical);
-config.lastAlertTimestamp = newCritical[0].filingDate;  // feed sorted descending, so [0] is the newest
+config.lastAlertTimestamp = newCritical[0].filingDate; // feed sorted descending, so [0] is the newest
 atomicWriteConfig(config);
 ```
 
@@ -69,20 +67,20 @@ atomicWriteConfig(config);
 
 Alerts run on **every cron tick** of the local skill, not just on digest schedule. Typical local cron: 4-6× per day (more frequent than the center's 2× per day) so 13D alerts land within minutes of the feed update.
 
-| Center cron (GitHub Actions) | Local cron (user machine) |
-|---|---|
-| 08:00 ET + 20:00 ET | User choice (typical: every 2-4h, plus alert checks hourly) |
+| Center cron (GitHub Actions) | Local cron (user machine)                                   |
+| ---------------------------- | ----------------------------------------------------------- |
+| 08:00 ET + 20:00 ET          | User choice (typical: every 2-4h, plus alert checks hourly) |
 
 If the center hasn't updated since the last local cron run, no new alerts are generated. `check-alerts.js` exits 0 silently.
 
 ## Failure Handling
 
-| Failure | Behavior |
-|---|---|
-| Print errors (file read failure) | Surface stderr to agent session |
-| Crash between print and timestamp write | Next run re-prints last item; acceptable |
-| Feed files missing | `check-alerts.js` exits 0 with "no data" message |
-| Config.json missing | Onboarding triggered (see `onboarding.md`) |
-| Bad NDJSON line in feed | Skip line, log, continue |
+| Failure                                 | Behavior                                         |
+| --------------------------------------- | ------------------------------------------------ |
+| Print errors (file read failure)        | Surface stderr to agent session                  |
+| Crash between print and timestamp write | Next run re-prints last item; acceptable         |
+| Feed files missing                      | `check-alerts.js` exits 0 with "no data" message |
+| Config.json missing                     | Onboarding triggered (see `onboarding.md`)       |
+| Bad NDJSON line in feed                 | Skip line, log, continue                         |
 
 See `data-formats.md` for the `lastAlertTimestamp` field location in config.

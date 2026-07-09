@@ -9,6 +9,7 @@
 `scripts/prepare-digest.js` 用 `latestFilingDate >= cutoff` 过滤 13F 条目，意味着迟交的修订（如 Coatue Q4 2025 13F-HR/A 在 2026-05-15 提交）会被纳入当期 digest。当前 `prompts/format-13f.md` 没有处理修订场景，渲染时容易让读者误以为这是当前 quarter 的常规披露。
 
 实测数据：Coatue Management LLC Q4 2025 entry
+
 - `latestFormType`: `13F-HR/A`
 - `history[0]`: 2026-02-17 13F-HR（原披露）
 - `history[1]`: 2026-05-15 13F-HR/A（修订）
@@ -29,12 +30,14 @@
 **唯一改动**：`prompts/format-13f.md`（新增约 15 行规则）
 
 **不动**：
+
 - `lib/aggregate/pipeline-a.js`
 - `lib/store/feed-json.js`（`upsert13FFiling` 的 history 合并逻辑已经够用）
 - `feed-13f.json` schema
 - 其他 prompt 文件
 
 **新增**（仅验证用）：
+
 - `tests/scripts/prepare-digest-amendment.test.js` — e2e 测试，验证 aggregator 输出包含 amendment 字段（见"验证"章节）
 
 ## 设计
@@ -42,15 +45,16 @@
 ### 触发条件
 
 `latestFormType.endsWith('/A')` 视为修订。这样：
+
 - `13F-HR` → 常规
 - `13F-HR/A` → 修订
 - 未来出现 `13F-HR/A/A` 等多级修订也自动覆盖
 
 ### Section title 格式
 
-| 场景 | 格式 |
-|---|---|
-| 常规 | `### {filerName}（Q{N} {periodOfReport 年份}）` |
+| 场景 | 格式                                                                                 |
+| ---- | ------------------------------------------------------------------------------------ |
+| 常规 | `### {filerName}（Q{N} {periodOfReport 年份}）`                                      |
 | 修订 | `### {filerName}（Q{N} {periodOfReport 年份} 修订，原披露 {history[0].filingDate}）` |
 
 `Q{N}` 直接用映射表：03=Q1、06=Q2、09=Q3、12=Q4。**prompt 模板里必须列出这张表，不让 LLM 自行推导**。
@@ -98,13 +102,13 @@ N = `history.length`
 
 ## 边界情况
 
-| 情况 | 行为 |
-|---|---|
-| `history.length === 1` | 跳过表单类型行 |
-| `history.length === 2` | "第 1 次修订" |
-| `history.length >= 3` | "第 N-1 次修订"，不展开中间过程 |
-| `history` 字段缺失 | 视为 `length === 1`（按 `?? []` fallback） |
-| `latestFormType` 缺失 | 视为常规（template 上不应发生） |
+| 情况                   | 行为                                       |
+| ---------------------- | ------------------------------------------ |
+| `history.length === 1` | 跳过表单类型行                             |
+| `history.length === 2` | "第 1 次修订"                              |
+| `history.length >= 3`  | "第 N-1 次修订"，不展开中间过程            |
+| `history` 字段缺失     | 视为 `length === 1`（按 `?? []` fallback） |
+| `latestFormType` 缺失  | 视为常规（template 上不应发生）            |
 
 ## 验证
 
@@ -125,12 +129,12 @@ N = `history.length`
 
 ## 风险
 
-| 风险 | 缓解 |
-|---|---|
-| LLM 不严格遵循模板 | 在模板里用 `must` / `务必` 强化；考虑在 evals 里加 fixture |
-| 未来 prompt 模板被改回 | 提一条 .editorconfig 风格的 review 规则或 doc comment |
+| 风险                              | 缓解                                                              |
+| --------------------------------- | ----------------------------------------------------------------- |
+| LLM 不严格遵循模板                | 在模板里用 `must` / `务必` 强化；考虑在 evals 里加 fixture        |
+| 未来 prompt 模板被改回            | 提一条 .editorconfig 风格的 review 规则或 doc comment             |
 | periodOfReport 月份推导 Q{N} 写错 | 用 `periodOfReport.slice(5,7)` 映射到 Q1–Q4；模板里直接列出映射表 |
-| history 字段未来 schema 变化 | 修改成本低（聚合器控制） |
+| history 字段未来 schema 变化      | 修改成本低（聚合器控制）                                          |
 
 ## 后续可能扩展（不在本期）
 

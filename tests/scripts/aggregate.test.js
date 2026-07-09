@@ -18,12 +18,18 @@ describe('aggregate.js (mocked, execSync)', () => {
     runPipelineAMock.mockReset();
     runPipelineBMock.mockReset();
   });
-  afterEach(() => { nock.cleanAll(); nock.enableNetConnect(); vi.restoreAllMocks(); });
+  afterEach(() => {
+    nock.cleanAll();
+    nock.enableNetConnect();
+    vi.restoreAllMocks();
+  });
 
   it('fails with clear error if env var missing', async () => {
     delete process.env.SEC_EDGAR_USER_AGENT;
     const { execSync } = await import('node:child_process');
-    expect(() => execSync('node scripts/aggregate.js', { stdio: 'pipe' })).toThrow(/SEC_EDGAR_USER_AGENT/);
+    expect(() => execSync('node scripts/aggregate.js', { stdio: 'pipe' })).toThrow(
+      /SEC_EDGAR_USER_AGENT/,
+    );
   });
 
   it('exits 0 on partial success (pipeline A errored, pipeline B added 3)', async () => {
@@ -35,7 +41,7 @@ describe('aggregate.js (mocked, execSync)', () => {
       throw new Error(`__exit_${code}__`);
     });
     await expect(main()).resolves.toBeUndefined();
-    const codes = exitSpy.mock.calls.map(c => c[0]);
+    const codes = exitSpy.mock.calls.map((c) => c[0]);
     expect(codes).not.toContain(1);
   });
 });

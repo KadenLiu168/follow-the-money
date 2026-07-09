@@ -7,7 +7,11 @@
       "description": "Daily digest — must include 13F section emoji, 13D/G section emoji, and at least one SEC URL",
       "checks": [
         { "type": "contains", "value": "📋", "description": "13F section emoji" },
-        { "type": "regex", "pattern": "https://www\\.sec\\.gov/.*primaryDoc.*", "description": "SEC primary doc URL" },
+        {
+          "type": "regex",
+          "pattern": "https://www\\.sec\\.gov/.*primaryDoc.*",
+          "description": "SEC primary doc URL"
+        },
         { "type": "min_length", "value": 200, "description": "non-trivial digest" }
       ]
     },
@@ -17,7 +21,11 @@
       "description": "Alert check — must mention at least one filer, ticker, and primary doc URL when alerts exist",
       "checks": [
         { "type": "regex", "pattern": "🚨|举牌|披露", "description": "alert language marker" },
-        { "type": "regex", "pattern": "https://www\\.sec\\.gov/.*primaryDoc.*", "description": "SEC URL" }
+        {
+          "type": "regex",
+          "pattern": "https://www\\.sec\\.gov/.*primaryDoc.*",
+          "description": "SEC URL"
+        }
       ]
     },
     {

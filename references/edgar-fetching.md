@@ -19,6 +19,7 @@ https://data.sec.gov/submissions/CIK<10-digit-cik>.json
 Returns the filer's recent submissions metadata. The aggregator uses the `filings.recent` block to find new `13F-HR` / `13F-HR/A` accession numbers.
 
 Example:
+
 ```
 https://data.sec.gov/submissions/CIK0001067983.json
 ```
@@ -32,6 +33,7 @@ https://www.sec.gov/Archives/edgar/data/<cik-no-leading-zeros>/<accession-no-das
 Returns the holdings table (CUSIP, shares, value, voting authority). The aggregator parses this into the `holdings` array.
 
 Example:
+
 ```
 https://www.sec.gov/Archives/edgar/data/1067983/000106798326000456/form13fData.xml
 ```
@@ -68,18 +70,19 @@ The aggregator implements a **token bucket** (`lib/token-bucket.js`) sized to 10
 
 ## Error Fallbacks
 
-| Failure | Behavior |
-|---|---|
-| Single CIK 13F fetch fails | Log + skip that CIK, continue with others |
-| Single 13F XML parse fails | Skip + log, mark entry as unparsed |
-| Single 13D/G search result missing fields | Drop that result, log |
-| All CIKs fail | Do not commit feed; let next cron retry |
-| Total EDGAR outage | Aggregator exits non-zero; feed unchanged |
-| 429 sustained | Token bucket drains, requests wait, eventually succeed |
+| Failure                                   | Behavior                                               |
+| ----------------------------------------- | ------------------------------------------------------ |
+| Single CIK 13F fetch fails                | Log + skip that CIK, continue with others              |
+| Single 13F XML parse fails                | Skip + log, mark entry as unparsed                     |
+| Single 13D/G search result missing fields | Drop that result, log                                  |
+| All CIKs fail                             | Do not commit feed; let next cron retry                |
+| Total EDGAR outage                        | Aggregator exits non-zero; feed unchanged              |
+| 429 sustained                             | Token bucket drains, requests wait, eventually succeed |
 
 ## Parser Notes
 
 ### 13F XML quirks
+
 - `<infoTable>` rows: one per holding
 - `CUSIP` may have leading zeros — preserve as string, do not parse to number
 - `value` is in thousands of dollars (e.g. `58200000` = $58.2B) — multiply by 1000
@@ -87,6 +90,7 @@ The aggregator implements a **token bucket** (`lib/token-bucket.js`) sized to 10
 - Amendment form (`13F-HR/A`) replaces prior quarter's holdings — see `data-formats.md` merge rule
 
 ### 13D/G search quirks
+
 - Search results are paginated; the aggregator uses `from` / `size` parameters
 - `accessionNumber` field may be missing in older filings — fall back to filing index
 - `issuerTicker` is not always present — leave field empty (not null) when unknown

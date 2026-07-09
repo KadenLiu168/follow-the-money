@@ -45,7 +45,8 @@ describe('parseThirteenDG', () => {
     const { createHttpClient } = await import('../../lib/http-client.js');
     const { TokenBucket } = await import('../../lib/token-bucket.js');
     const client = createHttpClient({ userAgent: 'T t@e.com', bucket: new TokenBucket(100, 100) });
-    const url = 'https://www.sec.gov/Archives/edgar/data/1474627/000147793224008147/tekhill_sc13da.htm';
+    const url =
+      'https://www.sec.gov/Archives/edgar/data/1474627/000147793224008147/tekhill_sc13da.htm';
     const res = await client.fetch(url);
     if (!res.ok) return; // skip if SEC is unavailable
     const html = await res.text();

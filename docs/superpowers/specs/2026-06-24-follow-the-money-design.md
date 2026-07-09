@@ -43,21 +43,25 @@ Most stock news comes from commentators summarizing what the smart money is doin
 ```
 
 **Layer 1 — SEC EDGAR:**
+
 - 13F data: submissions JSON API + form13fData.xml
 - 13D/G data: EDGAR full-text search API + daily filing index
 
 **Layer 2 — Center aggregator (GitHub Actions):**
+
 - Triggered by cron (08:00 ET + 20:00 ET daily) + manual dispatch
 - Single secret: `SEC_EDGAR_USER_AGENT` (format: `"AppName email@example.com"`)
 - Two parallel pipelines: A (13F by CIK list) / B (13D/G by form list)
 - Incrementally writes feed files + updates state files; commits to repo
 
 **Layer 3 — Local skill:**
+
 - `prepare-digest.js`: pull feed + read config + filter by lookback
 - `check-alerts.js`: read feed + filter new 13D/13D/A → alert list
 - `deliver.js`: dispatch (stdout/Telegram/email)
 
 **Layer 4 — Output:**
+
 - **Digest**: periodic push (daily/weekly)
 - **Alert**: triggered on each 13D/13D/A new filing
 
@@ -77,22 +81,23 @@ The skill MUST work across any AI agent runtime (Claude Code, OpenClaw, Cursor, 
 
 ### 13F Filers (8 funds)
 
-| Fund | CIK | Style |
-|---|---|---|
-| Berkshire Hathaway | 0001067983 | value |
-| Pershing Square | 0001336528 | activist-value |
-| Scion Asset Management | 0001641562 | deep-value |
-| Baupost Group | 0001061768 | value |
-| Oaktree Capital | 0000945323 | distressed-value |
-| ARK Invest | 0001601072 | thematic-growth |
-| Tiger Global Management | 0001167483 | growth |
-| Coatue Management | 0001532173 | growth |
+| Fund                    | CIK        | Style            |
+| ----------------------- | ---------- | ---------------- |
+| Berkshire Hathaway      | 0001067983 | value            |
+| Pershing Square         | 0001336528 | activist-value   |
+| Scion Asset Management  | 0001641562 | deep-value       |
+| Baupost Group           | 0001061768 | value            |
+| Oaktree Capital         | 0000945323 | distressed-value |
+| ARK Invest              | 0001601072 | thematic-growth  |
+| Tiger Global Management | 0001167483 | growth           |
+| Coatue Management       | 0001532173 | growth           |
 
 **Note:** CIKs must be verified against EDGAR before launch. Verification step in `scripts/verify-edgar.js`.
 
 ### 13D/G Scope
 
 Full US market. Any filer, any company. Forms tracked:
+
 - SC 13D, SC 13D/A
 - SC 13G, SC 13G/A
 
@@ -134,8 +139,16 @@ follow-the-money/
       "latestAccessionNumber": "0001067983-26-000456",
       "periodOfReport": "2026-03-31",
       "history": [
-        { "filingDate": "2026-05-15", "formType": "13F-HR",  "accessionNumber": "0001067983-26-000123" },
-        { "filingDate": "2026-06-10", "formType": "13F-HR/A", "accessionNumber": "0001067983-26-000456" }
+        {
+          "filingDate": "2026-05-15",
+          "formType": "13F-HR",
+          "accessionNumber": "0001067983-26-000123"
+        },
+        {
+          "filingDate": "2026-06-10",
+          "formType": "13F-HR/A",
+          "accessionNumber": "0001067983-26-000456"
+        }
       ],
       "holdings": [
         {
@@ -169,8 +182,18 @@ follow-the-money/
   "schemaVersion": 1,
   "currentYear": 2026,
   "years": {
-    "2026": { "file": "feed-13dg/2026.ndjson", "count": 8934, "firstDate": "2026-01-01", "lastDate": "2026-06-25" },
-    "2025": { "file": "feed-13dg/2025.ndjson", "count": 42103, "firstDate": "2025-01-02", "lastDate": "2025-12-31" }
+    "2026": {
+      "file": "feed-13dg/2026.ndjson",
+      "count": 8934,
+      "firstDate": "2026-01-01",
+      "lastDate": "2026-06-25"
+    },
+    "2025": {
+      "file": "feed-13dg/2025.ndjson",
+      "count": 42103,
+      "firstDate": "2025-01-02",
+      "lastDate": "2025-12-31"
+    }
   }
 }
 ```
@@ -207,6 +230,7 @@ follow-the-money/
 **Decision:** Local skill has **no independent alert state file**. Alert deduplication is purely derived from `feed-13dg/manifest.json` + the user's `config.lastAlertTimestamp` (stored in `~/.follow-the-money/config.json`).
 
 Rationale:
+
 - Single source of truth: center feed is authoritative
 - Zero-cost reinstall: deleting `~/.follow-the-money/` doesn't lose "seen" information
 - Multi-device sync: every device reads the same feed
@@ -230,16 +254,17 @@ All NDJSON writers MUST use atomic write (temp file + rename) to prevent half-li
 
 ### Three-level classification
 
-| Form | Treatment | Rationale |
-|---|---|---|
-| SC 13D | Always alert (full details) | Active investor, 5% threshold cross, rare & important |
+| Form     | Treatment                                   | Rationale                                              |
+| -------- | ------------------------------------------- | ------------------------------------------------------ |
+| SC 13D   | Always alert (full details)                 | Active investor, 5% threshold cross, rare & important  |
 | SC 13D/A | Alert but merged per (filer + issuer + day) | Amendment, usually position/intent tweak, can be noisy |
-| SC 13G | Digest only | Passive, high volume |
-| SC 13G/A | Digest only | Same as 13G |
+| SC 13G   | Digest only                                 | Passive, high volume                                   |
+| SC 13G/A | Digest only                                 | Same as 13G                                            |
 
 ### Merging rule (13D/A)
 
 When multiple 13D/A filings have the same `(filerCik, issuerCik, filingDate)`:
+
 - Combine into one alert: `🚨 [filer] 修订了 [issuer] 的 13D（N 次修订，[position change summary]）`
 - position change summary derived from comparing last vs. current ownershipPercent
 
@@ -252,9 +277,9 @@ When multiple 13D/A filings have the same `(filerCik, issuerCik, filingDate)`:
 
 **Decision:** intent is derived purely from form type. No Item 4 text regex.
 
-| Form | intent |
-|---|---|
-| SC 13D / 13D/A | `active` |
+| Form           | intent    |
+| -------------- | --------- |
+| SC 13D / 13D/A | `active`  |
 | SC 13G / 13G/A | `passive` |
 
 Rationale: SEC legal framework already separates 13D (active) from 13G (passive). Item 4 text is mostly legal boilerplate, unreliable signal. Alert wording uses "举牌" (active) vs "披露" (passive) for clarity.
@@ -264,10 +289,8 @@ Rationale: SEC legal framework already separates 13D (active) from 13G (passive)
 check-alerts.js logic:
 
 ```js
-const lastAlert = config.lastAlertTimestamp || "1970-01-01";
-const newCritical = feed.filter(f =>
-  ALERT_FORMS.has(f.formType) && f.filingDate > lastAlert
-);
+const lastAlert = config.lastAlertTimestamp || '1970-01-01';
+const newCritical = feed.filter((f) => ALERT_FORMS.has(f.formType) && f.filingDate > lastAlert);
 if (newCritical.length === 0) exit(0);
 deliver(newCritical);
 config.lastAlertTimestamp = newCritical.at(-1).filingDate;
@@ -409,6 +432,7 @@ Detailed flow in `references/onboarding.md`. Summary:
 ### Config changes via conversation
 
 Recognize phrases:
+
 - "Switch to weekly" → `frequency: "weekly"`
 - "Change time to X" → `deliveryTime: "X"`
 - "Translate to Chinese" → `language: "zh"`
@@ -504,6 +528,7 @@ Run manually before enabling the GitHub Action. Outputs `VERIFICATION PASSED` or
 ### Evals: `evals/evals.json` + `scripts/eval.js`
 
 Each eval entry has:
+
 - `prompt`: input text (e.g., `/money`)
 - `description`: human-readable intent
 - `checks[]`: machine-verifiable assertions
@@ -515,13 +540,18 @@ Each eval entry has:
   "description": "Triggers skill and runs digest immediately",
   "checks": [
     { "type": "contains", "value": "📋", "description": "13F section emoji present" },
-    { "type": "regex", "pattern": "https://www\\.sec\\.gov/.*primaryDoc.*", "description": "contains source URL" },
+    {
+      "type": "regex",
+      "pattern": "https://www\\.sec\\.gov/.*primaryDoc.*",
+      "description": "contains source URL"
+    },
     { "type": "min_length", "value": 200, "description": "digest is non-trivial" }
   ]
 }
 ```
 
 **Supported check types:**
+
 - `contains` / `not_contains` — string contains
 - `regex` — pattern match
 - `min_length` / `max_length` — output length
@@ -529,6 +559,7 @@ Each eval entry has:
 - `contains_url_from` — URL must come from feed's source list
 
 Eval runner (`scripts/eval.js`):
+
 - Reads evals.json
 - For each entry: invoke agent with prompt, capture output, run checks
 - Report pass/fail per check, exit non-zero if any fail
@@ -537,6 +568,7 @@ Eval runner (`scripts/eval.js`):
 ### LLM prompt output quality
 
 Beyond mechanical checks, prompt output quality is judged by:
+
 - Manual review during development
 - User feedback after first digest
 - Future: golden-output diff (deferred to v2)
@@ -551,8 +583,8 @@ Beyond mechanical checks, prompt output quality is judged by:
 name: Aggregate SEC Filings
 on:
   schedule:
-    - cron: '0 12 * * *'   # 08:00 ET
-    - cron: '0 0 * * *'    # 20:00 ET
+    - cron: '0 12 * * *' # 08:00 ET
+    - cron: '0 0 * * *' # 20:00 ET
   workflow_dispatch:
 jobs:
   aggregate:
@@ -587,6 +619,7 @@ jobs:
 **Cron schedule:** Twice daily (08:00 ET + 20:00 ET). Acceptable latency for "smart money digest" use case.
 
 **Required secrets:**
+
 - `SEC_EDGAR_USER_AGENT`: format `"AppName email@example.com"`, required by SEC
 - `GITHUB_TOKEN`: built-in, for commits
 
@@ -597,6 +630,7 @@ jobs:
 ### Concise, focused on execution
 
 SKILL.md (~100 lines) contains only what the agent needs **every time it runs**:
+
 - frontmatter (description for triggering)
 - Digest flow (core path)
 - Alert flow (core path)
@@ -639,7 +673,7 @@ None at time of writing. All 13 discussion points resolved.
 
 ## Revision History
 
-| Date | Author | Change |
-|---|---|---|
-| 2026-06-24 | initial brainstorm | design discussion |
-| 2026-06-25 | post-discussion | spec rewritten based on 13 resolved decisions |
+| Date       | Author             | Change                                        |
+| ---------- | ------------------ | --------------------------------------------- |
+| 2026-06-24 | initial brainstorm | design discussion                             |
+| 2026-06-25 | post-discussion    | spec rewritten based on 13 resolved decisions |

@@ -1,0 +1,7 @@
+node_modules/
+coverage/
+dist/
+course/
+course/index.html
+openspec/
+package-lock.json

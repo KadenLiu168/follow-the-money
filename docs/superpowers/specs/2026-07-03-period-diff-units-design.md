@@ -29,13 +29,17 @@
 ### 生产路径（scripts/prepare-digest.js）
 
 L42 已经对整份 feed 跑 `normalizeValueUnits`：
+
 ```js
 const normalizedFeed = f13.thirteenF.map((f) => normalizeValueUnits(f, defaultSources.thirteenF));
 ```
+
 然后才喂给 `periodDiff`：
+
 ```js
 const enriched = f13Filtered.map((f) => periodDiff(f, normalizedFeed));
 ```
+
 注释 L38-41 明说：「Normalize the full feed ONCE so periodDiff can find a prior entry that shares the same unit regime as the current entry」。
 
 **结论**：当前生产路径上，current 和 prior **都已经 normalized**，periodDiff 不会触发 BUG。**生产输出不受影响。**
@@ -44,12 +48,12 @@ const enriched = f13Filtered.map((f) => periodDiff(f, normalizedFeed));
 
 `grep -rn "periodDiff(" lib scripts tests` 显示：
 
-| 调用方 | 是否预 normalize | 是否触发 BUG |
-|---|---|---|
-| `scripts/prepare-digest.js` L45 | 预 normalize（双重保险）| 否 |
-| `tests/enrich/period-diff.test.js` L23/41/53/61/82（5 个绿测试）| prior 是 dollars-equivalent（valueUsd 量级 ≥$1B）| 否（巧合）|
-| `tests/enrich/period-diff.test.js` L102（红测试）| 不预 normalize（故意制造 mismatch）| **是（故意）**|
-| 其他 | 无 | 无 |
+| 调用方                                                           | 是否预 normalize                                  | 是否触发 BUG   |
+| ---------------------------------------------------------------- | ------------------------------------------------- | -------------- |
+| `scripts/prepare-digest.js` L45                                  | 预 normalize（双重保险）                          | 否             |
+| `tests/enrich/period-diff.test.js` L23/41/53/61/82（5 个绿测试） | prior 是 dollars-equivalent（valueUsd 量级 ≥$1B） | 否（巧合）     |
+| `tests/enrich/period-diff.test.js` L102（红测试）                | 不预 normalize（故意制造 mismatch）               | **是（故意）** |
+| 其他                                                             | 无                                                | 无             |
 
 **结论**：BUG 在仓库所有调用路径里**只有这个红测试触发**，且是**故意**触发的。无生产回归。
 
@@ -129,7 +133,7 @@ export function periodDiff(filerEntry, allFilings, configSources = []) {
   const priorEntry = findPriorEntry(filerEntry, allFilings);
   if (!priorEntry) return { ...filerEntry, summary: null };
 
-  const normalizedPrior = normalizeValueUnits(priorEntry, configSources);   // ← 新增
+  const normalizedPrior = normalizeValueUnits(priorEntry, configSources); // ← 新增
 
   const raw = compute13FSummary(filerEntry.holdings || [], normalizedPrior.holdings || []);
   // ... 其余逻辑不变（currHoldings 用 filerEntry.holdings，priorHoldings 用 normalizedPrior.holdings）...
@@ -162,20 +166,32 @@ const currHoldings = filerEntry.holdings || [];
 const newPositions = raw.newPositions
   .map((cusip) => lookupCusip(cusip, currHoldings))
   .filter(Boolean)
-  .map((h) => ({ cusip: h.cusip, issuerName: h.issuerName, shares: h.shares, valueUsd: h.valueUsd }));
+  .map((h) => ({
+    cusip: h.cusip,
+    issuerName: h.issuerName,
+    shares: h.shares,
+    valueUsd: h.valueUsd,
+  }));
 
 const closedPositions = raw.closedPositions
   .map((cusip) => lookupCusip(cusip, priorHoldings))
   .filter(Boolean)
-  .map((h) => ({ cusip: h.cusip, issuerName: h.issuerName, sharesAtClose: h.shares, valueUsdAtClose: h.valueUsd }));
+  .map((h) => ({
+    cusip: h.cusip,
+    issuerName: h.issuerName,
+    sharesAtClose: h.shares,
+    valueUsdAtClose: h.valueUsd,
+  }));
 
 const priorTotalValueUsd = priorHoldings.reduce((s, h) => s + (Number(h.valueUsd) || 0), 0);
-const deltaPct = priorTotalValueUsd === 0 ? 0 : (raw.totalValueUsd - priorTotalValueUsd) / priorTotalValueUsd;
+const deltaPct =
+  priorTotalValueUsd === 0 ? 0 : (raw.totalValueUsd - priorTotalValueUsd) / priorTotalValueUsd;
 
 return {
   ...filerEntry,
   summary: {
-    newPositions, closedPositions,
+    newPositions,
+    closedPositions,
     increasedPositions: raw.increasedPositions,
     decreasedPositions: raw.decreasedPositions,
     totalValueUsd: raw.totalValueUsd,
@@ -209,18 +225,19 @@ enriched entries (periodDiff output)
 
 ### 测试覆盖（tests/enrich/period-diff.test.js）
 
-| # | 名称 | 状态变化 |
-|---|---|---|
-| 1 | "produces rich newPositions/closedPositions with prior + delta fields" | 绿（不动）|
-| 2 | "returns summary: null when no prior period exists" | 绿（不动）|
-| 3 | "uses the most recent prior when multiple exist" | 绿（不动）|
-| 4 | "only diffs within same CIK (never cross-CIK)" | 绿（不动）|
-| 5 | "breaks periodOfReport ties by latestFilingDate desc" | 绿（不动）|
-| 6 | "normalizes prior entry units to match current (Baupost-style units mismatch)" | **红 → 绿** |
-| 7 | **新增**："returns identical result when prior entry is already in dollars (idempotency)" | 新增 |
-| 8 | **新增**："treats prior entry as small-fund style when its CIK matches small-fund config" | 新增 |
+| #   | 名称                                                                                      | 状态变化    |
+| --- | ----------------------------------------------------------------------------------------- | ----------- |
+| 1   | "produces rich newPositions/closedPositions with prior + delta fields"                    | 绿（不动）  |
+| 2   | "returns summary: null when no prior period exists"                                       | 绿（不动）  |
+| 3   | "uses the most recent prior when multiple exist"                                          | 绿（不动）  |
+| 4   | "only diffs within same CIK (never cross-CIK)"                                            | 绿（不动）  |
+| 5   | "breaks periodOfReport ties by latestFilingDate desc"                                     | 绿（不动）  |
+| 6   | "normalizes prior entry units to match current (Baupost-style units mismatch)"            | **红 → 绿** |
+| 7   | **新增**："returns identical result when prior entry is already in dollars (idempotency)" | 新增        |
+| 8   | **新增**："treats prior entry as small-fund style when its CIK matches small-fund config" | 新增        |
 
 测试 7（幂等性）验证：
+
 ```js
 const current = baseEntry('0001061768', '2026-03-31', [
   { cusip: '1', issuerName: 'X', shares: 100, valueUsd: 1000000000, ... },
@@ -234,6 +251,7 @@ expect(out.summary.priorTotalValueUsd).toBe(1100000000);  // sum≥$1B → 不×
 ```
 
 测试 8（small-fund）验证：
+
 ```js
 // 当前 size 30M dollars（不会被 normalize 触发），prior size 30 raw dollars（会被识别为 thousands）
 const current = baseEntry('0001061768', '2026-03-31', [

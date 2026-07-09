@@ -30,7 +30,9 @@ try {
 }
 const lastAlert = config.lastAlertTimestamp || '1970-01-01T00:00:00.000Z';
 
-const manifest = existsSync(FEED_13DG_DIR) ? readManifest(FEED_13DG_DIR) : { years: {}, currentYear: new Date().getUTCFullYear() };
+const manifest = existsSync(FEED_13DG_DIR)
+  ? readManifest(FEED_13DG_DIR)
+  : { years: {}, currentYear: new Date().getUTCFullYear() };
 // Spec §NDJSON robustness: validate line counts on startup
 if (existsSync(FEED_13DG_DIR)) {
   const v = validateManifest(FEED_13DG_DIR, manifest);
@@ -40,8 +42,13 @@ if (existsSync(FEED_13DG_DIR)) {
 // are not dropped on the year boundary. feed-ndjson.js defaults to
 // [currentYear, currentYear - 1] when no `years` is passed.
 const raw = read13DFilings(FEED_13DG_DIR, manifest);
-const newCritical = raw.entries.filter(f => ALERT_FORMS.has(f.formType) && f.filingDate > lastAlert);
-if (newCritical.length === 0) { process.stdout.write(JSON.stringify({ alerts: [], capped: false, summary: null })); process.exit(0); }
+const newCritical = raw.entries.filter(
+  (f) => ALERT_FORMS.has(f.formType) && f.filingDate > lastAlert,
+);
+if (newCritical.length === 0) {
+  process.stdout.write(JSON.stringify({ alerts: [], capped: false, summary: null }));
+  process.exit(0);
+}
 
 const groups = mergeByIssuer(newCritical);
 const alerts = mergeAmendmentsForAlert(groups);
@@ -51,7 +58,11 @@ let payload;
 if (alerts.length <= DETAIL_CAP) {
   payload = { alerts, capped: false, summary: null };
 } else {
-  payload = { alerts: alerts.slice(0, DETAIL_CAP), capped: true, summary: `📊 另 ${alerts.length - DETAIL_CAP} 条 13D/G 详见 digest` };
+  payload = {
+    alerts: alerts.slice(0, DETAIL_CAP),
+    capped: true,
+    summary: `📊 另 ${alerts.length - DETAIL_CAP} 条 13D/G 详见 digest`,
+  };
 }
 process.stdout.write(JSON.stringify(payload, null, 2));
 

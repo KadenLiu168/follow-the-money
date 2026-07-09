@@ -12,11 +12,17 @@
     "aggregate": "node scripts/aggregate.js",
     "digest": "node scripts/prepare-digest.js",
     "verify-edgar": "node scripts/verify-edgar.js",
-    "evals": "node scripts/eval.js"
+    "evals": "node scripts/eval.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^9.1.2",
+    "globals": "^15.15.0",
     "nock": "^14.0.0",
+    "prettier": "^3.9.4",
     "vitest": "^2.0.0"
-  },
-  "dependencies": {}
+  }
 }

@@ -10,11 +10,17 @@ describe('HttpClient', () => {
     client = createHttpClient({ userAgent: 'TestApp test@example.com', bucket });
     nock.disableNetConnect();
   });
-  afterEach(() => { nock.cleanAll(); nock.enableNetConnect(); });
+  afterEach(() => {
+    nock.cleanAll();
+    nock.enableNetConnect();
+  });
 
   it('adds User-Agent to every request', async () => {
-    const scope = nock('https://example.com', { reqheaders: { 'user-agent': 'TestApp test@example.com' } })
-      .get('/foo').reply(200, { ok: true });
+    const scope = nock('https://example.com', {
+      reqheaders: { 'user-agent': 'TestApp test@example.com' },
+    })
+      .get('/foo')
+      .reply(200, { ok: true });
     const res = await client.fetch('https://example.com/foo');
     expect(await res.json()).toEqual({ ok: true });
     expect(scope.isDone()).toBe(true);

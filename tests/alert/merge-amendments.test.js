@@ -2,9 +2,30 @@ import { describe, it, expect } from 'vitest';
 import { mergeAmendmentsForAlert } from '../../lib/alert/merge-amendments.js';
 import { mergeByIssuer } from '../../lib/feed/merge-by-issuer.js';
 
-const e1 = { filerCik: 'A', issuerCik: 'X', filingDate: '2026-06-20', ownershipPercent: 5.1, sharesOwned: 4000000, formType: 'SC 13D/A' };
-const e2 = { filerCik: 'A', issuerCik: 'X', filingDate: '2026-06-20', ownershipPercent: 6.8, sharesOwned: 4500000, formType: 'SC 13D/A' };
-const e3 = { filerCik: 'A', issuerCik: 'X', filingDate: '2026-06-20', ownershipPercent: 7.0, sharesOwned: 4600000, formType: 'SC 13D/A' };
+const e1 = {
+  filerCik: 'A',
+  issuerCik: 'X',
+  filingDate: '2026-06-20',
+  ownershipPercent: 5.1,
+  sharesOwned: 4000000,
+  formType: 'SC 13D/A',
+};
+const e2 = {
+  filerCik: 'A',
+  issuerCik: 'X',
+  filingDate: '2026-06-20',
+  ownershipPercent: 6.8,
+  sharesOwned: 4500000,
+  formType: 'SC 13D/A',
+};
+const e3 = {
+  filerCik: 'A',
+  issuerCik: 'X',
+  filingDate: '2026-06-20',
+  ownershipPercent: 7.0,
+  sharesOwned: 4600000,
+  formType: 'SC 13D/A',
+};
 
 describe('mergeAmendmentsForAlert', () => {
   it('produces count and summary across amendments in same group', () => {

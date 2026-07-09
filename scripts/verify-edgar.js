@@ -42,7 +42,7 @@ export async function runVerify(ua) {
   }
   const search = await check13DGSearch(client);
   console.log(`  ${search.ok ? '✓' : '✗'} 13D/G search returned ${search.count} results`);
-  const allOk = results.every(r => r.ok) && search.ok;
+  const allOk = results.every((r) => r.ok) && search.ok;
   console.log(allOk ? '\nVERIFICATION PASSED' : '\nVERIFICATION FAILED');
   return { results, search, allOk };
 }
@@ -50,11 +50,15 @@ export async function runVerify(ua) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const UA = process.env.SEC_EDGAR_USER_AGENT;
   if (!UA) {
-    console.error('ERROR: SEC_EDGAR_USER_AGENT env var required (format: "AppName email@example.com")');
+    console.error(
+      'ERROR: SEC_EDGAR_USER_AGENT env var required (format: "AppName email@example.com")',
+    );
     process.exit(1);
   }
-  runVerify(UA).then(r => process.exit(r.allOk ? 0 : 1)).catch(err => {
-    console.error('Fatal:', err);
-    process.exit(1);
-  });
+  runVerify(UA)
+    .then((r) => process.exit(r.allOk ? 0 : 1))
+    .catch((err) => {
+      console.error('Fatal:', err);
+      process.exit(1);
+    });
 }

@@ -18,10 +18,10 @@ The scripts read this to locate `prompts/`, `lib/`, and the local node_modules. 
 
 ## Recommended Schedule
 
-| Job | Frequency | Why |
-|---|---|---|
-| Digest | 1× per day at user's chosen time | Matches center's 2×/day aggregator |
-| Alert check | 4-6× per day | Catches 13D filings within hours |
+| Job         | Frequency                        | Why                                |
+| ----------- | -------------------------------- | ---------------------------------- |
+| Digest      | 1× per day at user's chosen time | Matches center's 2×/day aggregator |
+| Alert check | 4-6× per day                     | Catches 13D filings within hours   |
 
 The center updates the feed twice daily (08:00 ET + 20:00 ET). Local cron more frequent than that is harmless — `check-alerts.js` exits 0 silently when there's nothing new.
 
@@ -44,6 +44,7 @@ Add these lines (adjust times to your config):
 ```
 
 **Notes:**
+
 - Use absolute paths to `node` (run `which node` to find it)
 - `cd $FTM_SKILL_DIR` is required — scripts resolve relative paths from cwd
 - The default `--lookback` is 90 days (one quarter) — 13F is quarterly. To run "today only" instead, append `--lookback 1`.
@@ -172,6 +173,7 @@ After the first scheduled run:
 4. Wait for an SC 13D filing on a tracked issuer — verify the alert lands
 
 If nothing arrives:
+
 - Check `node` is on PATH for the cron user (cron has minimal env)
 - Verify `FTM_SKILL_DIR` is set in the cron's environment, not just your interactive shell
 - Run the script manually from the cron user's shell to reproduce
