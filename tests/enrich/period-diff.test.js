@@ -16,10 +16,12 @@ const baseEntry = (cik, period, holdings) => ({
 describe('periodDiff', () => {
   it('produces rich newPositions/closedPositions with prior + delta fields', () => {
     const current = baseEntry('0001067983', '2026-03-31', [aapl, goog]);
-    const prior = baseEntry('0001067983', '2025-12-31', [
+    // Prior is already normalized (valueUnitAdjusted) — periodDiff's defensive
+    // normalizeValueUnits must be a no-op on it (config-driven model).
+    const prior = { ...baseEntry('0001067983', '2025-12-31', [
       { ...aapl, shares: 200000000, valueUsd: 38800000000 },
       oldco,
-    ]);
+    ]), valueUnitAdjusted: true };
     const all = [current, prior];
     const out = periodDiff(current, all);
 
@@ -45,12 +47,12 @@ describe('periodDiff', () => {
 
   it('uses the most recent prior when multiple exist', () => {
     const current = baseEntry('0001067983', '2026-03-31', [aapl]);
-    const priorOld = baseEntry('0001067983', '2025-06-30', [
+    const priorOld = { ...baseEntry('0001067983', '2025-06-30', [
       { ...aapl, shares: 100000000, valueUsd: 19400000000 },
-    ]);
-    const priorRecent = baseEntry('0001067983', '2025-12-31', [
+    ]), valueUnitAdjusted: true };
+    const priorRecent = { ...baseEntry('0001067983', '2025-12-31', [
       { ...aapl, shares: 200000000, valueUsd: 38800000000 },
-    ]);
+    ]), valueUnitAdjusted: true };
     const all = [current, priorOld, priorRecent];
     const out = periodDiff(current, all);
     expect(out.summary.priorTotalValueUsd).toBe(38800000000);
@@ -69,6 +71,7 @@ describe('periodDiff', () => {
       ...baseEntry('0001067983', '2025-12-31', [
         { ...aapl, shares: 200000000, valueUsd: 38800000000 },
       ]),
+      valueUnitAdjusted: true,
       latestFilingDate: '2026-02-14', // earlier than priorTie
     };
     // Same periodOfReport as priorSame but later latestFilingDate
@@ -76,6 +79,7 @@ describe('periodDiff', () => {
       ...baseEntry('0001067983', '2025-12-31', [
         { ...aapl, shares: 150000000, valueUsd: 29100000000 },
       ]),
+      valueUnitAdjusted: true,
       latestFilingDate: '2026-05-15', // later than priorSame
     };
     const all = [current, priorSame, priorTie];
@@ -108,17 +112,18 @@ describe('periodDiff', () => {
     expect(out.summary.deltaPct).toBeCloseTo(-0.0909, 4);
   });
 
-  it('idempotent: leaves prior entry alone when already normalized to dollars (defense does not double-normalize)', () => {
-    // Simulate post-normalizeValueUnits state: sum ≥ $1B → dollars.
+  it('idempotent: leaves prior entry alone when already normalized (defense does not double-normalize)', () => {
+    // Simulate post-normalizeValueUnits state: prior already carries
+    // valueUnitAdjusted, so the defensive normalizeValueUnits short-circuits.
     const current = baseEntry('0001061768', '2026-03-31', [
       { cusip: '1', issuerName: 'X', shares: 100, valueUsd: 1000000000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
     ]);
-    const prior = baseEntry('0001061768', '2025-12-31', [
+    const prior = { ...baseEntry('0001061768', '2025-12-31', [
       { cusip: '1', issuerName: 'X', shares: 100, valueUsd: 1100000000, votingAuthority: { sole: 100, shared: 0, none: 0 } },
-    ]);
+    ]), valueUnitAdjusted: true };
     const cfg = [{ cik: '0001061768', name: 'Baupost Group', style: 'value' }];
     const out = periodDiff(current, [current, prior], cfg);
-    // valueUsd sum = 1.1B ≥ $1B → normalizeValueUnits should NOT ×1000.
+    // valueUnitAdjusted guard → prior valueUsd unchanged (no ×1000).
     expect(out.summary.priorTotalValueUsd).toBe(1100000000);
     // deltaPct = (1B - 1.1B) / 1.1B = -0.0909...
     expect(out.summary.deltaPct).toBeCloseTo(-0.0909, 4);

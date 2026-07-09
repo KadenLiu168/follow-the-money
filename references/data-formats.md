@@ -51,6 +51,16 @@ When a new `13F-HR/A` arrives with the same `(filerCik, periodOfReport)` as an e
 
 Delta (new/closed/increased/decreased) is always computed against the most recent entry with a **different** `periodOfReport`.
 
+### 13F value units (config contract)
+
+SEC EDGAR's 13F `<value>` field is officially expressed in **thousands of dollars**. `lib/enrich/normalize-value-units.js` resolves the unit from the `valueUnit` field declared per source in `config/default-sources.json` (`thirteenF[]`):
+
+- `valueUnit: "thousands"` → holdings `valueUsd` is multiplied by 1000 and the entry is marked `valueUnitAdjusted: true`.
+- `valueUnit: "dollars"` → holdings `valueUsd` is left unchanged.
+- A CIK with no matching source defaults to `"thousands"` (SEC 13F spec).
+
+The magnitude-based (`< $1B`) heuristic was removed; unit detection is now declarative and deterministic. See `openspec/specs/value-units-normalization`.
+
 ## `feed-13dg/manifest.json`
 
 ```json
