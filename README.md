@@ -162,7 +162,7 @@ node scripts/print.js --file digest.txt
 node scripts/prepare-digest.js --lookback 7 | node scripts/print.js --text "$(cat)"
 ```
 
-成功的话你会看到一份 markdown 摘要。
+成功的话你会看到一份 **digest JSON**（`prepare-digest.js` 输出 JSON，`print.js` 只是原样回显到 stdout，不做渲染）。🅱️ 本地模式只产出 JSON；中文/英文 markdown 摘要由 🅰️ agent 模式渲染（LLM 套用 `prompts/` 模板）。如果你想要本地渲染，可基于 `prompts/` 模板自行处理这份 JSON。
 
 #### 5. 装调度
 

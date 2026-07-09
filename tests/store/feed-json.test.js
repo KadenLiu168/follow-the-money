@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readFeedJson, writeFeedJson, upsert13FFiling, computeStats } from '../../lib/store/feed-json.js';
+import { readFeedJson, writeFeedJson, upsert13FFiling, merge13FFiling, computeStats } from '../../lib/store/feed-json.js';
 
 let dir;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ftm-')); });
@@ -76,5 +76,23 @@ describe('feed-json', () => {
     }));
     const f2 = readFeedJson(p);
     expect(f2.thirteenF[0].valueUnit).toBe('thousands');
+  });
+
+  it('merge13FFiling is pure: returns a new feed and does not mutate the input', () => {
+    const base = readFeedJson(join(dir, 'none.json'));
+    const before = JSON.parse(JSON.stringify(base.thirteenF));
+    const merged = merge13FFiling(base, newEntry());
+    expect(base.thirteenF).toEqual(before);            // input untouched
+    expect(merged).not.toBe(base);                      // distinct object
+    expect(merged.thirteenF).toHaveLength(1);
+    expect(merged.thirteenF[0].valueUnit).toBe('thousands');
+  });
+
+  it('merge13FFiling accumulates in memory: two filings yield two entries + correct stats', () => {
+    let feed = { schemaVersion: 1, generatedAt: '', lookbackDays: 90, thirteenF: [], stats: { thirteenFFilings: 0, thirteenFHoldings: 0 } };
+    feed = merge13FFiling(feed, newEntry({ periodOfReport: '2025-12-31' }));
+    feed = merge13FFiling(feed, newEntry({ periodOfReport: '2026-03-31' }));
+    expect(feed.thirteenF).toHaveLength(2);
+    expect(feed.stats.thirteenFFilings).toBe(2);
   });
 });

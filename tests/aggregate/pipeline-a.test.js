@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import nock from 'nock';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runPipelineA } from '../../lib/aggregate/pipeline-a.js';
+import * as feedJson from '../../lib/store/feed-json.js';
 import { createHttpClient } from '../../lib/http-client.js';
 import { TokenBucket } from '../../lib/token-bucket.js';
 
@@ -102,5 +103,29 @@ describe('runPipelineA', () => {
     expect(q1.summary.newPositions).toContain('02079K305');        // GOOG is new
     expect(q1.summary.closedPositions).toEqual([]);                // nothing closed
     expect(q1.summary.increasedPositions).toBe(1);                 // AAPL increased
+  });
+
+  it('writes feed-13f.json exactly once per run (O(1), not per filing)', async () => {
+    const spy = vi.spyOn(feedJson, 'writeFeedJson');
+    nock('https://data.sec.gov').get('/submissions/CIK0001067983.json').reply(200, {
+      filings: { recent: {
+        form: ['13F-HR', '13F-HR'],
+        filingDate: ['2025-11-14', '2026-05-15'],
+        accessionNumber: ['0001067983-25-999001', '0001067983-26-000123'],
+        primaryDocument: ['form13fData.xml', 'form13fData.xml'],
+        reportDate: ['2025-09-30', '2026-03-31'],
+      } },
+    });
+    const xmlQ4 = '<?xml version="1.0"?><informationTable><infoTable><nameOfIssuer>APPLE INC</nameOfIssuer><cusip>037833100</cusip><value>1000</value><shrsOrPrnAmt><sshPrnamt>100</sshPrnamt></shrsOrPrnAmt><votingAuthority><Sole>100</Sole><Shared>0</Shared><None>0</None></votingAuthority></infoTable></informationTable>';
+    const xmlQ1 = '<?xml version="1.0"?><informationTable><infoTable><nameOfIssuer>APPLE INC</nameOfIssuer><cusip>037833100</cusip><value>2000</value><shrsOrPrnAmt><sshPrnamt>200</sshPrnamt></shrsOrPrnAmt><votingAuthority><Sole>200</Sole><Shared>0</Shared><None>0</None></votingAuthority></infoTable></informationTable>';
+    nock('https://www.sec.gov').get('/Archives/edgar/data/1067983/000106798325999001/index.json').reply(200, { directory: { item: [ { name: 'form13fInfoTable.xml', size: 5000 } ] } });
+    nock('https://www.sec.gov').get('/Archives/edgar/data/1067983/000106798325999001/form13fInfoTable.xml').reply(200, xmlQ4);
+    nock('https://www.sec.gov').get('/Archives/edgar/data/1067983/000106798326000123/index.json').reply(200, { directory: { item: [ { name: 'form13fInfoTable.xml', size: 5000 } ] } });
+    nock('https://www.sec.gov').get('/Archives/edgar/data/1067983/000106798326000123/form13fInfoTable.xml').reply(200, xmlQ1);
+    const r = await runPipelineA({ httpClient, config, feedPath: join(dir, 'feed-13f.json'), statePath: join(dir, 'state-13f.json') });
+    expect(r.added).toBe(2);
+    // The aggregator must accumulate in memory and flush the feed once, not once per filing.
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
   });
 });
