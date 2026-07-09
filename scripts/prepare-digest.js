@@ -62,7 +62,7 @@ if (existsSync(FEED_13DG_DIR)) {
   if (!v.ok) console.warn(`[prepare-digest] feed-13dg manifest mismatch: ${v.warnings.join('; ')}`);
 }
 const dgRaw = read13DFilings(FEED_13DG_DIR, manifest);
-const dgFiltered = filterByLookback(dgRaw, { lookbackDays, now });
+const dgFiltered = filterByLookback(dgRaw.entries, { lookbackDays, now });
 
 // Normalize the full feed ONCE so periodDiff can find a prior entry that
 // shares the same unit regime as the current entry. If only the current
@@ -94,6 +94,7 @@ const out = {
   diagnostics: {
     valueUnitsAdjusted: enriched.filter((f) => f.valueUnitAdjusted).map((f) => f.filerName),
     summaryMissing: enriched.filter((f) => f.summary === null).map((f) => f.filerName),
+    thirteenDGSkipped: dgRaw.skipped,
   },
 };
 process.stdout.write(JSON.stringify(out, null, 2));

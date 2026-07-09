@@ -40,7 +40,7 @@ if (existsSync(FEED_13DG_DIR)) {
 // are not dropped on the year boundary. feed-ndjson.js defaults to
 // [currentYear, currentYear - 1] when no `years` is passed.
 const raw = read13DFilings(FEED_13DG_DIR, manifest);
-const newCritical = raw.filter(f => ALERT_FORMS.has(f.formType) && f.filingDate > lastAlert);
+const newCritical = raw.entries.filter(f => ALERT_FORMS.has(f.formType) && f.filingDate > lastAlert);
 if (newCritical.length === 0) { process.stdout.write(JSON.stringify({ alerts: [], capped: false, summary: null })); process.exit(0); }
 
 const groups = mergeByIssuer(newCritical);
