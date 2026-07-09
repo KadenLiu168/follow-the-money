@@ -225,7 +225,7 @@ tail -50 ~/.follow-the-money/cron.log   # 看 cron 执行日志
 
 ## 数据从哪儿来
 
-所有数据来自 **SEC EDGAR**（美国证监会公开电子数据库）。本项目有一个 GitHub Actions 每天抓两次（08:00 + 20:00 美东），把 SEC 数据落盘到仓库的 `feed-13f.json` / `feed-13dg/`，任何人都能读。
+所有数据来自 **SEC EDGAR**（美国证监会公开电子数据库）。本项目有一个 GitHub Actions 每天抓两次（cron `0 12 * * *` + `0 0 * * *` UTC，约 08:00 美东、DST 下会有约 1 小时偏差），把 SEC 数据落盘到仓库的 `feed-13f.json` / `feed-13dg/`，任何人都能读。
 
 **关键含义**：
 - 🅰️ agent 模式：agent 读仓库的 feed 文件即可，**不打 SEC**

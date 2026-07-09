@@ -4,6 +4,8 @@ What triggers an immediate push vs. what waits for the next digest. Load this wh
 
 ## Three-Level Classification
 
+> **Taxonomy, not a classifier.** This is a *behavior* taxonomy derived from form type plus the merge pipeline — it is **not** a 3-way `classify()` output. `lib/alert/classify.js` returns only two values: `alert` and `digest`. The "merged alert" level *emerges* from `merge-by-issuer` + `merge-amendments`, and `intent` (`active`/`passive`) is written by the parsers (see *Intent Field* below), not by `classify`.
+
 | Form | Treatment | Rationale |
 |---|---|---|
 | SC 13D | Always alert (full details) | Active investor, 5% threshold cross, rare & important |

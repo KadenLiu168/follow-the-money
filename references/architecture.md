@@ -17,7 +17,7 @@ Four-layer data flow, layer responsibilities, and key design decisions. Load thi
 | Layer | Runs where | Job |
 |---|---|---|
 | 1. SEC EDGAR | SEC servers | Source of truth for 13F + 13D/G filings |
-| 2. Center aggregator | GitHub Actions cron (08:00 ET + 20:00 ET) | Pull from EDGAR, write feed + state files, commit |
+| 2. Center aggregator | GitHub Actions cron (`0 12 * * *` + `0 0 * * *` UTC, ≈08:00 ET DST-naive) | Pull from EDGAR, write feed + state files, commit |
 | 3. Local skill | User's machine (on cron) | Read feed, prepare digest, detect alerts, dispatch |
 | 4. Output | stdout | Periodic digest + immediate 13D alerts |
 
@@ -28,7 +28,7 @@ Four-layer data flow, layer responsibilities, and key design decisions. Load thi
 - 13D/G data: EDGAR full-text search API + daily filing index
 
 ### Layer 2 — Center aggregator (`scripts/aggregate.js`)
-- Triggered by cron (08:00 ET + 20:00 ET) + `workflow_dispatch`
+- Triggered by cron (`0 12 * * *` + `0 0 * * *` UTC, ≈08:00 ET DST-naive) + `workflow_dispatch`
 - Single secret: `SEC_EDGAR_USER_AGENT` (format `"AppName email@example.com"`)
 - Two parallel pipelines:
   - **A** (13F): CIK-driven, one entry per fund
@@ -44,7 +44,7 @@ Four-layer data flow, layer responsibilities, and key design decisions. Load thi
 
 As of 2026-07-03, the skill no longer reads `feed-13f.json` from `cwd`. Instead:
 
-1. `scripts/fetch-feed.js` downloads the 5 data files from `raw.githubusercontent.com` into `$FOLLOW_THE_MONEY_FEED_DIR` (default: `$XDG_CACHE_HOME/follow-the-money/feed/` on Linux, `~/Library/Caches/follow-the-money/feed/` on macOS).
+1. `scripts/fetch-feed.js` downloads 4 static data files plus per-year NDJSON discovered from the manifest, from `raw.githubusercontent.com` into `$FOLLOW_THE_MONEY_FEED_DIR` (default: `$XDG_CACHE_HOME/follow-the-money/feed/` on Linux, `~/Library/Caches/follow-the-money/feed/` on macOS).
 2. `prepare-digest.js` and `check-alerts.js` read from that env var (fallback to `cwd` for local mode).
 3. CI's `aggregate.yml` uses `git add -f` to publish data files to `main` despite `.gitignore` excluding them for local development.
 4. The repo is public, so raw URLs need no authentication.

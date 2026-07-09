@@ -25,7 +25,7 @@ Single JSON file. Top-level fields:
 | `schemaVersion` | number | Always `1` |
 | `generatedAt` | string (ISO 8601) | When aggregator ran |
 | `lookbackDays` | number | Default 90 |
-| `thirteenF` | array | One entry per filer (max 8) |
+| `thirteenF` | array | One entry per (filerCik, periodOfReport); upsert keyed by filerCik + periodOfReport, so one entry per filer per quarter (can exceed 8) |
 | `stats` | object | `{ thirteenFFilings, thirteenFHoldings }` |
 
 Each `thirteenF[]` entry:

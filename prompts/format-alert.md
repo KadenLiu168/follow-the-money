@@ -9,7 +9,7 @@
 ## 模板
 🚨 **{filerName} 举牌 {issuerName}（{ticker}）**
 - 持股：**{ownershipPercent}%**（{sharesOwned} 股）
-- {if count > 1: 修订 {count} 次，{summary}}
+- {if count > 1: {summary}}
 - [SEC 文件]({primaryDocUrl})
 
 ## 严格规则
