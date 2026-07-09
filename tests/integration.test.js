@@ -43,8 +43,16 @@ globalThis.fetch = async (url, opts = {}) => {
   if (m) {
     return new Response(JSON.stringify(fixtures.submissions), { status: 200 });
   }
-  // 13F XML
-  m = u.match(/^https:\\/\\/www\\.sec\\.gov\\/Archives\\/edgar\\/data\\/1067983\\/000106798326000123\\/form13fData\\.xml$/);
+  // 13F index.json — holdings live in form13fInfoTable.xml (not the cover page)
+  m = u.match(/^https:\\/\\/www\\.sec\\.gov\\/Archives\\/edgar\\/data\\/1067983\\/000106798326000123\\/index\\.json$/);
+  if (m) {
+    return new Response(JSON.stringify({ directory: { item: [
+      { name: 'form13fInfoTable.xml', size: 5000 },
+      { name: 'primary_doc.xml', size: 3000 },
+    ] } }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
+  // 13F XML (information table)
+  m = u.match(/^https:\\/\\/www\\.sec\\.gov\\/Archives\\/edgar\\/data\\/1067983\\/000106798326000123\\/form13fInfoTable\\.xml$/);
   if (m) {
     return new Response(fixtures.form13fXml, { status: 200, headers: { 'content-type': 'text/xml' } });
   }

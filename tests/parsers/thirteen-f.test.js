@@ -20,8 +20,12 @@ describe('parseThirteenF', () => {
     });
   });
 
-  it('returns [] on empty <informationTable/>', () => {
-    expect(parseThirteenF('<?xml version="1.0"?><informationTable/>')).toEqual([]);
+  it('throws on empty <informationTable/> instead of silently returning []', () => {
+    expect(() => parseThirteenF('<?xml version="1.0"?><informationTable/>')).toThrow(/0 holdings/);
+  });
+
+  it('throws when XML has no <infoTable> at all (cover page parsed as holdings)', () => {
+    expect(() => parseThirteenF('<?xml version="1.0"?><form13F><coverPage/></form13F>')).toThrow(/0 holdings/);
   });
 
   it('handles namespaced infoTable elements (Baupost, some filers use xmlns:ns1)', () => {

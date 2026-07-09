@@ -35,16 +35,49 @@ describe('fetchThirteenFXml', () => {
     expect(out).toBe(infoTableXml);
   });
 
-  it('returns primaryDocument directly when index.json is unavailable (older filings)', async () => {
-    // Fallback: if index.json 404s, try primaryDocument as before.
-    const xml = '<?xml version="1.0"?><informationTable/>';
+  it('prefers canonical form13fInfoTable.xml even when the cover page is larger', async () => {
+    const infoTableXml = '<?xml version="1.0"?><informationTable><infoTable><cusip>037833100</cusip></infoTable></informationTable>';
+    nock('https://www.sec.gov')
+      .get('/Archives/edgar/data/1067983/000119312526226661/index.json')
+      .reply(200, {
+        directory: {
+          item: [
+            { name: 'form13fInfoTable.xml', size: 10000 }, // canonical, smaller
+            { name: 'primary_doc.xml', size: 50000 },      // cover page, larger
+          ],
+        },
+      });
+    nock('https://www.sec.gov')
+      .get('/Archives/edgar/data/1067983/000119312526226661/form13fInfoTable.xml')
+      .reply(200, infoTableXml);
+    const out = await fetchThirteenFXml(client, '0001067983', '0001193125-26-226661', 'primary_doc.xml');
+    expect(out).toBe(infoTableXml);
+  });
+
+  it('throws when index.json is unavailable (no primaryDocument cover-page fallback)', async () => {
+    // Old behavior fell back to primaryDocument; the cover page is not a
+    // holdings source, so we now throw instead of parsing it as holdings.
     nock('https://www.sec.gov')
       .get('/Archives/edgar/data/1067983/000106798326000123/index.json')
       .reply(404);
+    await expect(
+      fetchThirteenFXml(client, '0001067983', '0001067983-26-000123', 'form13fData.xml')
+    ).rejects.toThrow(/infoTable file not found/);
+  });
+
+  it('throws when index.json has no usable .xml infoTable file', async () => {
     nock('https://www.sec.gov')
-      .get('/Archives/edgar/data/1067983/000106798326000123/form13fData.xml')
-      .reply(200, xml);
-    const out = await fetchThirteenFXml(client, '0001067983', '0001067983-26-000123', 'form13fData.xml');
-    expect(out).toBe(xml);
+      .get('/Archives/edgar/data/1067983/000119312526226661/index.json')
+      .reply(200, {
+        directory: {
+          item: [
+            { name: 'primary_doc.html', size: 50000 },
+            { name: 'form13f.hr', size: 2000 },
+          ],
+        },
+      });
+    await expect(
+      fetchThirteenFXml(client, '0001067983', '0001193125-26-226661', 'primary_doc.xml')
+    ).rejects.toThrow(/infoTable file not found/);
   });
 });
