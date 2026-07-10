@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   readFeedJson,
-  writeFeedJson,
   upsert13FFiling,
   merge13FFiling,
   computeStats,

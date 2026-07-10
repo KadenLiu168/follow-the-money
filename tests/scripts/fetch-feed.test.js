@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { execSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -62,7 +61,7 @@ describe('scripts/fetch-feed.js (CLI execSync)', () => {
     }));
     const { main } = await import('../../scripts/fetch-feed.js');
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+    vi.spyOn(process, 'exit').mockImplementation((code) => {
       throw new Error(`__exit_${code}__`);
     });
     await expect(main()).rejects.toThrow('__exit_0__');
@@ -84,7 +83,7 @@ describe('scripts/fetch-feed.js (CLI execSync)', () => {
     }));
     const { main } = await import('../../scripts/fetch-feed.js');
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+    vi.spyOn(process, 'exit').mockImplementation((code) => {
       throw new Error(`__exit_${code}__`);
     });
     await expect(main()).rejects.toThrow('__exit_1__');
