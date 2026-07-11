@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { filterByLookback } from '../lib/feed/filter-by-lookback.js';
-import { readFeedJson } from '../lib/store/feed-json.js';
+import { readFeedJsonStrict } from '../lib/store/feed-json.js';
 import { read13DFilings, validateManifest } from '../lib/store/feed-ndjson.js';
 import { readManifest } from '../lib/store/manifest.js';
 import { normalizeValueUnits } from '../lib/enrich/normalize-value-units.js';
@@ -71,21 +71,35 @@ if (nowSource !== 'wall' && Number.isNaN(now.getTime())) {
   process.exit(1);
 }
 
-const f13 = existsSync(FEED_13F) ? readFeedJson(FEED_13F) : { thirteenF: [] };
-const manifest = existsSync(FEED_13DG_DIR)
-  ? readManifest(FEED_13DG_DIR)
-  : { years: {}, currentYear: now.getUTCFullYear() };
+// Source-presence pre-flight (P3): any of the three failure modes below is a
+// hard stop — emit nothing to stdout and exit non-zero so the SKILL reports the
+// stderr and stops, rather than publishing a blank/partial digest ("Partial
+// output is worse than no output").
+if (!existsSync(FEED_13F)) {
+  console.error('[prepare-digest] feed-13f.json missing — run fetch-feed.js or aggregate.js');
+  process.exit(1);
+}
+if (!existsSync(FEED_13DG_DIR)) {
+  console.error('[prepare-digest] feed-13dg/ missing — run fetch-feed.js or aggregate.js');
+  process.exit(1);
+}
+let f13;
+try {
+  f13 = readFeedJsonStrict(FEED_13F);
+} catch (e) {
+  console.error(`[prepare-digest] ${e.message}`);
+  process.exit(1);
+}
+const manifest = readManifest(FEED_13DG_DIR);
 // Spec §NDJSON robustness: validate line counts on startup. Collect the
 // degradation warnings into `warnings` so the rendering LLM can see them in
 // the output JSON (console.warn is kept for terminal visibility, but the
 // signal must also land in the JSON — see openspec/specs/digest-output).
 const warnings = [];
-if (existsSync(FEED_13DG_DIR)) {
-  const v = validateManifest(FEED_13DG_DIR, manifest);
-  if (!v.ok) {
-    console.warn(`[prepare-digest] feed-13dg manifest mismatch: ${v.warnings.join('; ')}`);
-    warnings.push(...v.warnings);
-  }
+const v = validateManifest(FEED_13DG_DIR, manifest);
+if (!v.ok) {
+  console.warn(`[prepare-digest] feed-13dg manifest mismatch: ${v.warnings.join('; ')}`);
+  warnings.push(...v.warnings);
 }
 const dgRaw = read13DFilings(FEED_13DG_DIR, manifest);
 const dgFiltered = filterByLookback(dgRaw.entries, { lookbackDays, now });

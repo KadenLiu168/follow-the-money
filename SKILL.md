@@ -99,6 +99,7 @@ Triggers when `~/.follow-the-money/config.json` is missing or `onboardingComplet
 ## Error handling
 
 - `prepare-digest.js` exits non-zero → surface the error verbatim, do not run `print.js` or `check-alerts.js`, do not update `lastAlertTimestamp`.
+- Source guard (D3): `prepare-digest.js` exits non-zero with no stdout when `feed-13f.json` or `feed-13dg/` is missing, or when `feed-13f.json` is corrupt (JSON parse failure). Never paper over this with a blank digest — surface the stderr (it points at the missing/corrupt source and tells the user to run `fetch-feed.js` or `aggregate.js`) and stop. This enforces the iron rule "Partial output is worse than no output".
 - `check-alerts.js` exits non-zero → continue the digest print path, but log the alert-check failure into the digest footer so the user knows alert data may be stale.
 - `print.js` exits non-zero → surface the error verbatim. There are no transient failure modes (no network calls); retry is not appropriate.
 - Missing references file → do not crash. Skip the section that depends on it and note "reference not loaded" in the digest footer.

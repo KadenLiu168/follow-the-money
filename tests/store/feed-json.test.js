@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  readFeedJson,
+  readFeedJsonOrInit,
+  readFeedJsonStrict,
   upsert13FFiling,
   merge13FFiling,
   computeStats,
@@ -49,15 +50,25 @@ const newEntry = (over = {}) => ({
 
 describe('feed-json', () => {
   it('returns defaults when missing', () => {
-    const f = readFeedJson(join(dir, 'missing.json'));
+    const f = readFeedJsonOrInit(join(dir, 'missing.json'));
     expect(f.thirteenF).toEqual([]);
     expect(f.schemaVersion).toBe(1);
+  });
+
+  it('readFeedJsonStrict throws when file is missing', () => {
+    expect(() => readFeedJsonStrict(join(dir, 'missing.json'))).toThrow(/missing/);
+  });
+
+  it('readFeedJsonStrict throws when file is corrupt', () => {
+    const p = join(dir, 'corrupt.json');
+    writeFileSync(p, '{ not valid json');
+    expect(() => readFeedJsonStrict(p)).toThrow(/corrupt/);
   });
 
   it('upsert new entry when no matching (filer, period)', () => {
     const p = join(dir, 'f.json');
     upsert13FFiling(p, newEntry());
-    const f = readFeedJson(p);
+    const f = readFeedJsonOrInit(p);
     expect(f.thirteenF).toHaveLength(1);
   });
 
@@ -87,7 +98,7 @@ describe('feed-json', () => {
       },
     });
     upsert13FFiling(p, amended);
-    const f = readFeedJson(p);
+    const f = readFeedJsonOrInit(p);
     expect(f.thirteenF).toHaveLength(1);
     expect(f.thirteenF[0].latestFormType).toBe('13F-HR/A');
     expect(f.thirteenF[0].holdings[0].shares).toBe(310000000);
@@ -100,7 +111,7 @@ describe('feed-json', () => {
     const p = join(dir, 'f.json');
     upsert13FFiling(p, newEntry({ periodOfReport: '2025-12-31' }));
     upsert13FFiling(p, newEntry({ periodOfReport: '2026-03-31' }));
-    expect(readFeedJson(p).thirteenF).toHaveLength(2);
+    expect(readFeedJsonOrInit(p).thirteenF).toHaveLength(2);
   });
 
   it('computeStats counts holdings across all filers', () => {
@@ -113,7 +124,7 @@ describe('feed-json', () => {
   it('stamps valueUnit: thousands on every upserted entry (prevent recurrence)', () => {
     const p = join(dir, 'f.json');
     upsert13FFiling(p, newEntry());
-    const f = readFeedJson(p);
+    const f = readFeedJsonOrInit(p);
     // Source entries don't declare valueUnit; the 13F feed writer MUST stamp it.
     expect(f.thirteenF[0].valueUnit).toBe('thousands');
     // Amendment path also stamps.
@@ -125,12 +136,12 @@ describe('feed-json', () => {
         latestAccessionNumber: '0001067983-26-000456',
       }),
     );
-    const f2 = readFeedJson(p);
+    const f2 = readFeedJsonOrInit(p);
     expect(f2.thirteenF[0].valueUnit).toBe('thousands');
   });
 
   it('merge13FFiling is pure: returns a new feed and does not mutate the input', () => {
-    const base = readFeedJson(join(dir, 'none.json'));
+    const base = readFeedJsonOrInit(join(dir, 'none.json'));
     const before = JSON.parse(JSON.stringify(base.thirteenF));
     const merged = merge13FFiling(base, newEntry());
     expect(base.thirteenF).toEqual(before); // input untouched

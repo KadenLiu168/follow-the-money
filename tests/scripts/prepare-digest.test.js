@@ -173,19 +173,108 @@ describe('prepare-digest.js', () => {
     }
   });
 
-  it('reads from envDir when set, even if envDir is empty (regression: env var not silently ignored)', async () => {
+  it('fails hard when FOLLOW_THE_MONEY_FEED_DIR points to an empty dir (env var respected, no silent cwd fallback)', async () => {
     const envDir = mkdtempSync(join(tmpdir(), 'ftm-prepdigest-missing-'));
     try {
-      // envDir is empty — cwd (repoCwd) has the real feed.
-      // After the fix, env var must be respected, so output should be empty feed,
-      // NOT the real repo feed. Before the fix, output would contain the real feed.
-      const out = execSync('node scripts/prepare-digest.js', {
-        cwd: repoCwd,
-        env: { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: envDir },
-        stdio: 'pipe',
-      }).toString();
-      const parsed = JSON.parse(out);
-      expect(parsed.thirteenF).toEqual([]);
+      // envDir is empty — cwd (repoCwd) has the real feed. Under P3 the env var
+      // MUST be respected: a missing source is a hard failure (exit 1, empty
+      // stdout), NOT a silent fall-back to the real repo feed. This preserves
+      // the original regression intent "env var not silently ignored".
+      let err;
+      try {
+        execSync('node scripts/prepare-digest.js', {
+          cwd: repoCwd,
+          env: { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: envDir },
+          stdio: 'pipe',
+        });
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeTruthy();
+      expect(err.status).not.toBe(0);
+      expect(String(err.stderr)).toContain('missing');
+      // No digest emitted on failure.
+      expect(String(err.stdout ?? '')).toBe('');
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+    }
+  });
+
+  // --- D3 hard-failure (openspec/changes/no-silent-empty-digest, P3) ---
+
+  it('fails hard when feed-13f.json is missing', async () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-d3-nof13-'));
+    try {
+      mkdirSync(join(envDir, 'feed-13dg'), { recursive: true });
+      writeFileSync(
+        join(envDir, 'feed-13dg', 'manifest.json'),
+        JSON.stringify({ schemaVersion: 1, currentYear: 2026, years: {} }),
+      );
+      let err;
+      try {
+        execSync('node scripts/prepare-digest.js', {
+          cwd: repoCwd,
+          env: { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: envDir },
+          stdio: 'pipe',
+        });
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeTruthy();
+      expect(err.status).not.toBe(0);
+      expect(String(err.stderr)).toContain('feed-13f.json missing');
+      expect(String(err.stdout ?? '')).toBe('');
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails hard when feed-13dg/ is missing', async () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-d3-nodg-'));
+    try {
+      writeFileSync(join(envDir, 'feed-13f.json'), JSON.stringify({ thirteenF: [] }));
+      let err;
+      try {
+        execSync('node scripts/prepare-digest.js', {
+          cwd: repoCwd,
+          env: { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: envDir },
+          stdio: 'pipe',
+        });
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeTruthy();
+      expect(err.status).not.toBe(0);
+      expect(String(err.stderr)).toContain('feed-13dg/ missing');
+      expect(String(err.stdout ?? '')).toBe('');
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails hard when feed-13f.json is corrupt', async () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-d3-corrupt-'));
+    try {
+      writeFileSync(join(envDir, 'feed-13f.json'), '{ not valid json');
+      mkdirSync(join(envDir, 'feed-13dg'), { recursive: true });
+      writeFileSync(
+        join(envDir, 'feed-13dg', 'manifest.json'),
+        JSON.stringify({ schemaVersion: 1, currentYear: 2026, years: {} }),
+      );
+      let err;
+      try {
+        execSync('node scripts/prepare-digest.js', {
+          cwd: repoCwd,
+          env: { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: envDir },
+          stdio: 'pipe',
+        });
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeTruthy();
+      expect(err.status).not.toBe(0);
+      expect(String(err.stderr)).toContain('corrupt');
+      expect(String(err.stdout ?? '')).toBe('');
     } finally {
       rmSync(envDir, { recursive: true, force: true });
     }
