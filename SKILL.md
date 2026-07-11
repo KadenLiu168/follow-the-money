@@ -30,11 +30,18 @@ If a step in this skill fails, surface the exact stderr from the failing script 
 
    Resolves `$FOLLOW_THE_MONEY_FEED_DIR` (default: `$XDG_CACHE_HOME/follow-the-money/feed/` on Linux, `~/Library/Caches/follow-the-money/feed/` on macOS). Downloads `feed-13f.json`, `state-13f.json`, `feed-13dg/`, `state-13dg.ndjson` from `raw.githubusercontent.com/KadenLiu168/follow-the-money/main/`.
 
-   On failure: log warning to stderr, fall through to local mode (step 3 reads from `cwd`). Suitable when the user has already run `node scripts/aggregate.js` locally.
+   On failure: log the warning to stderr. If `fetch-feed.js` itself is unavailable, steps 3/6 fall back to `cwd` (local mode). A fetch that runs but leaves a stale cache is handled separately (empty-feed guard, out of scope for D1).
 
 3. **Prepare digest**:
    ```bash
-   FOLLOW_THE_MONEY_FEED_DIR=$FOLLOW_THE_MONEY_FEED_DIR node scripts/prepare-digest.js
+   # Resolve the exact cache dir Step 2 wrote to (single source of truth), then
+   # run prepare in skill mode. If fetch-feed.js is unavailable, fall back to
+   # cwd (local mode). Inlining keeps each step self-contained across shells.
+   if FEED_DIR="$(node scripts/fetch-feed.js --print-dir)" && [ -n "$FEED_DIR" ]; then
+     FOLLOW_THE_MONEY_FEED_DIR="$FEED_DIR" node scripts/prepare-digest.js
+   else
+     node scripts/prepare-digest.js
+   fi
    ```
    Default lookback is 90 days (one quarter) — 13F is quarterly, so a 1-day lookback returns nothing on non-filing days. Use `--lookback 1` if the user explicitly asks for "today only".
    Reads `feed-13f.json` + `feed-13dg/manifest.json` + current year NDJSON from `$FOLLOW_THE_MONEY_FEED_DIR`, filters by lookback, emits unified JSON to stdout.
@@ -43,9 +50,13 @@ If a step in this skill fails, surface the exact stderr from the failing script 
    ```bash
    node scripts/print.js --text "<digest>"
    ```
-6. **Check alerts** (uses `$FOLLOW_THE_MONEY_FEED_DIR` via env var):
+6. **Check alerts** (resolves the same cache dir as Step 2/3):
    ```bash
-   FOLLOW_THE_MONEY_FEED_DIR=$FOLLOW_THE_MONEY_FEED_DIR node scripts/check-alerts.js
+   if FEED_DIR="$(node scripts/fetch-feed.js --print-dir)" && [ -n "$FEED_DIR" ]; then
+     FOLLOW_THE_MONEY_FEED_DIR="$FEED_DIR" node scripts/check-alerts.js
+   else
+     node scripts/check-alerts.js
+   fi
    ```
    For each alert, apply `prompts/format-alert` and deliver individually.
    (The script atomically persists `config.lastAlertTimestamp` itself — do NOT write it here; the script is the single owner.)

@@ -22,7 +22,14 @@ export function defaultTargetDir() {
     : join(home, '.cache', 'follow-the-money', 'feed');
 }
 
-async function main() {
+async function main(args = process.argv.slice(2)) {
+  if (args.includes('--print-dir')) {
+    // Resolve-only mode: print the single source of truth for the feed dir and
+    // exit without any network I/O. SKILL.md uses this to point consumers
+    // (prepare-digest / check-alerts) at the exact dir fetch wrote to.
+    process.stdout.write(defaultTargetDir() + '\n');
+    return;
+  }
   const targetDir = defaultTargetDir();
   const result = await fetchFeed({
     repoOwner: REPO_OWNER,

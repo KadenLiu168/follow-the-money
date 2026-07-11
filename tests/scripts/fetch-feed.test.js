@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const repoCwd = join(__dirname, '..', '..');
 
 let targetDir;
 beforeEach(() => {
@@ -91,5 +96,40 @@ describe('scripts/fetch-feed.js (CLI execSync)', () => {
     const parsed = JSON.parse(out);
     expect(parsed.ok).toBe(false);
     expect(parsed.reason).toMatch(/404/);
+  });
+});
+
+describe('scripts/fetch-feed.js (--print-dir)', () => {
+  it('prints defaultTargetDir() and exits 0 with no network I/O', async () => {
+    const out = execSync('node scripts/fetch-feed.js --print-dir', {
+      cwd: repoCwd,
+      encoding: 'utf8',
+    });
+    const { defaultTargetDir } = await import('../../scripts/fetch-feed.js');
+    expect(out.trim()).toBe(defaultTargetDir());
+  });
+
+  it('honors FOLLOW_THE_MONEY_FEED_DIR override (single source of truth)', () => {
+    const custom = mkdtempSync(join(tmpdir(), 'ftm-printdir-'));
+    try {
+      const out = execSync('node scripts/fetch-feed.js --print-dir', {
+        cwd: repoCwd,
+        env: { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: custom },
+        encoding: 'utf8',
+      });
+      expect(out.trim()).toBe(custom);
+    } finally {
+      rmSync(custom, { recursive: true, force: true });
+    }
+  });
+
+  it('does not invoke fetchFeed when --print-dir is passed', async () => {
+    const fetchFeedMock = vi.fn();
+    vi.doMock('../../lib/fetch/fetch-feed.js', () => ({ fetchFeed: fetchFeedMock }));
+    const { main } = await import('../../scripts/fetch-feed.js');
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    await main(['--print-dir']);
+    expect(fetchFeedMock).not.toHaveBeenCalled();
+    expect(writeSpy).toHaveBeenCalled();
   });
 });
