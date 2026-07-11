@@ -1,33 +1,28 @@
-import { readFileSync, existsSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
+import { writeFileSync, renameSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { homedir } from 'node:os';
 import { read13DFilings, validateManifest } from '../lib/store/feed-ndjson.js';
 import { readManifest } from '../lib/store/manifest.js';
 import { ALERT_FORMS } from '../lib/alert/classify.js';
 import { mergeByIssuer } from '../lib/feed/merge-by-issuer.js';
 import { mergeAmendmentsForAlert } from '../lib/alert/merge-amendments.js';
+import { loadUserConfig, USER_CONFIG_PATH } from '../lib/config/load-user-config.js';
 
 const REPO = process.cwd();
 const FEED_DIR = process.env.FOLLOW_THE_MONEY_FEED_DIR || REPO;
 const FEED_13DG_DIR = join(FEED_DIR, 'feed-13dg');
-const CONFIG_PATH = join(homedir(), '.follow-the-money', 'config.json');
 
 // Atomic write (temp file + rename) so a crash mid-write never leaves a
 // half-written config.json. Matches the contract documented in alert-rules.md.
 function atomicWriteConfig(cfg) {
-  mkdirSync(dirname(CONFIG_PATH), { recursive: true });
-  const tmp = `${CONFIG_PATH}.tmp`;
+  mkdirSync(dirname(USER_CONFIG_PATH), { recursive: true });
+  const tmp = `${USER_CONFIG_PATH}.tmp`;
   writeFileSync(tmp, JSON.stringify(cfg, null, 2));
-  renameSync(tmp, CONFIG_PATH);
+  renameSync(tmp, USER_CONFIG_PATH);
 }
 
-let config = {};
-try {
-  config = existsSync(CONFIG_PATH) ? JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) : {};
-} catch (err) {
-  console.error(`[check-alerts] failed to parse ${CONFIG_PATH}: ${err.message}`);
-  process.exit(1);
-}
+// Shared safe loader: missing/corrupt config falls back to defaults and never
+// throws (unified-loader contract). Replaces the previous inline read.
+const config = loadUserConfig();
 const lastAlert = config.lastAlertTimestamp || '1970-01-01T00:00:00.000Z';
 
 const manifest = existsSync(FEED_13DG_DIR)

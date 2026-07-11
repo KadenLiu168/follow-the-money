@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { filterByLookback } from '../lib/feed/filter-by-lookback.js';
 import { readFeedJson } from '../lib/store/feed-json.js';
 import { read13DFilings, validateManifest } from '../lib/store/feed-ndjson.js';
@@ -7,6 +8,8 @@ import { readManifest } from '../lib/store/manifest.js';
 import { normalizeValueUnits } from '../lib/enrich/normalize-value-units.js';
 import { periodDiff, buildCikIndex } from '../lib/enrich/period-diff.js';
 import { loadDefaultSources } from '../lib/config/load-default-sources.js';
+import { loadUserConfig } from '../lib/config/load-user-config.js';
+import { resolvePrompts } from '../lib/prompts/resolve.js';
 
 const defaultSources = loadDefaultSources();
 
@@ -14,6 +17,16 @@ const REPO = process.cwd();
 const FEED_DIR = process.env.FOLLOW_THE_MONEY_FEED_DIR || REPO;
 const FEED_13F = join(FEED_DIR, 'feed-13f.json');
 const FEED_13DG_DIR = join(FEED_DIR, 'feed-13dg');
+
+// Render context basis: language from user config + the 5 render prompts,
+// resolved by the single user>repo priority rule (lib/prompts/resolve.js).
+const PROMPT_NAMES = [
+  'digest-intro.md',
+  'format-13f.md',
+  'format-13dg.md',
+  'format-alert.md',
+  'translate.md',
+];
 
 const args = process.argv.slice(2);
 const lookbackIdx = args.indexOf('--lookback');
@@ -62,10 +75,17 @@ const f13 = existsSync(FEED_13F) ? readFeedJson(FEED_13F) : { thirteenF: [] };
 const manifest = existsSync(FEED_13DG_DIR)
   ? readManifest(FEED_13DG_DIR)
   : { years: {}, currentYear: now.getUTCFullYear() };
-// Spec §NDJSON robustness: validate line counts on startup
+// Spec §NDJSON robustness: validate line counts on startup. Collect the
+// degradation warnings into `warnings` so the rendering LLM can see them in
+// the output JSON (console.warn is kept for terminal visibility, but the
+// signal must also land in the JSON — see openspec/specs/digest-output).
+const warnings = [];
 if (existsSync(FEED_13DG_DIR)) {
   const v = validateManifest(FEED_13DG_DIR, manifest);
-  if (!v.ok) console.warn(`[prepare-digest] feed-13dg manifest mismatch: ${v.warnings.join('; ')}`);
+  if (!v.ok) {
+    console.warn(`[prepare-digest] feed-13dg manifest mismatch: ${v.warnings.join('; ')}`);
+    warnings.push(...v.warnings);
+  }
 }
 const dgRaw = read13DFilings(FEED_13DG_DIR, manifest);
 const dgFiltered = filterByLookback(dgRaw.entries, { lookbackDays, now });
@@ -94,6 +114,21 @@ const enriched = f13Filtered.map((f) =>
   periodDiff(f, normalizedFeed, defaultSources.thirteenF, cikIndex),
 );
 
+// Render context: declare the render basis so the LLM does not have to rely
+// on scattered doc conventions. Only metadata (source + content hash) is
+// embedded — never prompt bodies or config state. See openspec/specs/digest-output.
+const userConfig = loadUserConfig();
+const resolvedPrompts = resolvePrompts({
+  names: PROMPT_NAMES,
+  userDir: join(homedir(), '.follow-the-money', 'prompts'),
+  repoDir: join(REPO, 'prompts'),
+});
+// Strip `text` so prompt bodies never enter the data contract.
+const prompts = {};
+for (const [key, { source, hash }] of Object.entries(resolvedPrompts)) {
+  prompts[key] = { source, hash };
+}
+
 const out = {
   schemaVersion: 1,
   generatedAt: now.toISOString(),
@@ -108,6 +143,11 @@ const out = {
     valueUnitsAdjusted: enriched.filter((f) => f.valueUnitAdjusted).map((f) => f.filerName),
     summaryMissing: enriched.filter((f) => f.summary === null).map((f) => f.filerName),
     thirteenDGSkipped: dgRaw.skipped,
+  },
+  warnings,
+  renderContext: {
+    language: userConfig.language,
+    prompts,
   },
 };
 process.stdout.write(JSON.stringify(out, null, 2));

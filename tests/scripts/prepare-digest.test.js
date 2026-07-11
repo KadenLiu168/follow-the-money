@@ -311,4 +311,180 @@ describe('prepare-digest.js', () => {
       rmSync(envDir, { recursive: true, force: true });
     }
   });
+
+  // --- digest-output self-describing (openspec/changes/digest-output-self-describing) ---
+
+  function writeFeedDir(envDir, { manifest, ndjson } = {}) {
+    writeFileSync(join(envDir, 'feed-13f.json'), JSON.stringify({ thirteenF: [] }));
+    mkdirSync(join(envDir, 'feed-13dg'), { recursive: true });
+    if (manifest) {
+      writeFileSync(join(envDir, 'feed-13dg', 'manifest.json'), JSON.stringify(manifest));
+    }
+    if (ndjson) {
+      for (const [year, lines] of Object.entries(ndjson)) {
+        writeFileSync(join(envDir, 'feed-13dg', `${year}.ndjson`), lines.join('\n') + '\n');
+      }
+    }
+  }
+
+  it('surfaces manifest count mismatch in warnings[] (regression: D2-B)', () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-warn-mismatch-'));
+    const home = mkdtempSync(join(tmpdir(), 'ftm-warn-home-'));
+    try {
+      writeFeedDir(envDir, {
+        manifest: {
+          schemaVersion: 1,
+          currentYear: 2026,
+          years: { 2026: { file: 'feed-13dg/2026.ndjson', count: 5 } },
+        },
+        ndjson: {
+          2026: [
+            '{"filingDate":"2026-01-01"}',
+            '{"filingDate":"2026-02-01"}',
+            '{"filingDate":"2026-03-01"}',
+          ],
+        },
+      });
+      const out = execSync('node scripts/prepare-digest.js', {
+        cwd: repoCwd,
+        env: { ...process.env, HOME: home, FOLLOW_THE_MONEY_FEED_DIR: envDir },
+        encoding: 'utf8',
+      });
+      const j = JSON.parse(out);
+      expect(Array.isArray(j.warnings)).toBe(true);
+      expect(j.warnings.length).toBeGreaterThan(0);
+      expect(j.warnings.some((w) => /manifest says 5, file has 3/.test(w))).toBe(true);
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('surfaces missing year file in warnings[]', () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-warn-missing-'));
+    const home = mkdtempSync(join(tmpdir(), 'ftm-warn-home2-'));
+    try {
+      writeFeedDir(envDir, {
+        manifest: {
+          schemaVersion: 1,
+          currentYear: 2026,
+          years: { 2025: { file: 'feed-13dg/2025.ndjson', count: 1 } },
+        },
+        // 2025.ndjson intentionally not written
+      });
+      const out = execSync('node scripts/prepare-digest.js', {
+        cwd: repoCwd,
+        env: { ...process.env, HOME: home, FOLLOW_THE_MONEY_FEED_DIR: envDir },
+        encoding: 'utf8',
+      });
+      const j = JSON.parse(out);
+      expect(j.warnings.some((w) => /2025: file missing/.test(w))).toBe(true);
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('produces empty warnings on a clean run', () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-warn-clean-'));
+    const home = mkdtempSync(join(tmpdir(), 'ftm-warn-home3-'));
+    try {
+      writeFeedDir(envDir, { manifest: { schemaVersion: 1, currentYear: 2026, years: {} } });
+      const out = execSync('node scripts/prepare-digest.js', {
+        cwd: repoCwd,
+        env: { ...process.env, HOME: home, FOLLOW_THE_MONEY_FEED_DIR: envDir },
+        encoding: 'utf8',
+      });
+      const j = JSON.parse(out);
+      expect(j.warnings).toEqual([]);
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('renderContext.language falls back to "en" when user config missing', () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-rc-lang-'));
+    const home = mkdtempSync(join(tmpdir(), 'ftm-rc-home-'));
+    try {
+      writeFeedDir(envDir, { manifest: { schemaVersion: 1, currentYear: 2026, years: {} } });
+      const out = execSync('node scripts/prepare-digest.js', {
+        cwd: repoCwd,
+        env: { ...process.env, HOME: home, FOLLOW_THE_MONEY_FEED_DIR: envDir },
+        encoding: 'utf8',
+      });
+      const j = JSON.parse(out);
+      expect(j.renderContext.language).toBe('en');
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('renderContext.language reflects user config when present', () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-rc-lang2-'));
+    const home = mkdtempSync(join(tmpdir(), 'ftm-rc-home2-'));
+    try {
+      mkdirSync(join(home, '.follow-the-money'), { recursive: true });
+      writeFileSync(
+        join(home, '.follow-the-money', 'config.json'),
+        JSON.stringify({ language: 'zh' }),
+      );
+      writeFeedDir(envDir, { manifest: { schemaVersion: 1, currentYear: 2026, years: {} } });
+      const out = execSync('node scripts/prepare-digest.js', {
+        cwd: repoCwd,
+        env: { ...process.env, HOME: home, FOLLOW_THE_MONEY_FEED_DIR: envDir },
+        encoding: 'utf8',
+      });
+      const j = JSON.parse(out);
+      expect(j.renderContext.language).toBe('zh');
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('renderContext.prompts reports user override when user copy exists', () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-rc-user-'));
+    const home = mkdtempSync(join(tmpdir(), 'ftm-rc-home3-'));
+    try {
+      mkdirSync(join(home, '.follow-the-money', 'prompts'), { recursive: true });
+      writeFileSync(join(home, '.follow-the-money', 'prompts', 'format-13f.md'), '# user override');
+      writeFeedDir(envDir, { manifest: { schemaVersion: 1, currentYear: 2026, years: {} } });
+      const out = execSync('node scripts/prepare-digest.js', {
+        cwd: repoCwd,
+        env: { ...process.env, HOME: home, FOLLOW_THE_MONEY_FEED_DIR: envDir },
+        encoding: 'utf8',
+      });
+      const j = JSON.parse(out);
+      expect(j.renderContext.prompts.format_13f.source).toBe('user');
+      expect(j.renderContext.prompts.format_13f.hash).toMatch(/^[0-9a-f]{16}$/);
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('renderContext.prompts reports repo when no user override and never embeds text', () => {
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-rc-repo-'));
+    const home = mkdtempSync(join(tmpdir(), 'ftm-rc-home4-'));
+    try {
+      writeFeedDir(envDir, { manifest: { schemaVersion: 1, currentYear: 2026, years: {} } });
+      const out = execSync('node scripts/prepare-digest.js', {
+        cwd: repoCwd,
+        env: { ...process.env, HOME: home, FOLLOW_THE_MONEY_FEED_DIR: envDir },
+        encoding: 'utf8',
+      });
+      const j = JSON.parse(out);
+      expect(j.renderContext.prompts.format_13f.source).toBe('repo');
+      // Requirement: output SHALL NOT embed prompt text or config state.
+      expect(j.renderContext.prompts.format_13f).not.toHaveProperty('text');
+      expect(j.renderContext).toEqual({ language: 'en', prompts: j.renderContext.prompts });
+      expect(j.renderContext).not.toHaveProperty('lastAlertTimestamp');
+      expect(j.renderContext).not.toHaveProperty('frequency');
+    } finally {
+      rmSync(envDir, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
 });

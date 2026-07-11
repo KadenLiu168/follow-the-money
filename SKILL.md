@@ -45,7 +45,7 @@ If a step in this skill fails, surface the exact stderr from the failing script 
    ```
    Default lookback is 90 days (one quarter) — 13F is quarterly, so a 1-day lookback returns nothing on non-filing days. Use `--lookback 1` if the user explicitly asks for "today only".
    Reads `feed-13f.json` + `feed-13dg/manifest.json` + current year NDJSON from `$FOLLOW_THE_MONEY_FEED_DIR`, filters by lookback, emits unified JSON to stdout.
-4. **Render**: apply `prompts/digest-intro` + `prompts/format-13f` + `prompts/format-13dg` + `prompts/translate` (if `config.language != 'en'`) to the JSON. Output is a Markdown digest.
+4. **Render**: read `renderContext` from the prepare output first — it declares the render basis so you don't rely on scattered conventions. Use `renderContext.language` as the target language. For each prompt, pick the copy declared by `renderContext.prompts.<name>.source` (`user` = `~/.follow-the-money/prompts/`, `repo` = this skill's `prompts/`), and confirm the file's sha256 prefix matches `renderContext.prompts.<name>.hash` so you render the exact version `prepare-digest.js` resolved (priority is enforced in `lib/prompts/resolve.js`, not by memory). Then apply `digest-intro` + `format-13f` + `format-13dg` + `translate` (if `renderContext.language != 'en'`) to the JSON. Output is a Markdown digest.
 5. **Print**:
    ```bash
    node scripts/print.js --text "<digest>"
