@@ -52,6 +52,7 @@ describe('integration: aggregate → digest → alert', () => {
                 display_names: ['ICAHN CARL C', 'Jet.AI Inc'],
                 file_date: '2026-06-29',
                 form: 'SC 13D',
+                root_forms: ['SC 13D'],
                 adsh: '0000932470-26-000045',
                 tickers: ['JTAI'],
               },

@@ -23,7 +23,7 @@ afterEach(() => {
 describe('runPipelineB', () => {
   it('appends new 13D and dedups via state', async () => {
     nock('https://efts.sec.gov')
-      .get(/LATEST\/search-index.*forms=SC\+13D.*/)
+      .get(/LATEST\/search-index.*q=%22SC\+13D%22.*/)
       .reply(200, {
         hits: {
           hits: [
@@ -33,6 +33,7 @@ describe('runPipelineB', () => {
                 display_names: ['ICAHN CARL C', 'Jet.AI Inc'],
                 file_date: '2026-06-20',
                 form: 'SC 13D',
+                root_forms: ['SC 13D'],
                 adsh: '0000932470-26-000045',
                 tickers: ['JTAI'],
               },
@@ -41,13 +42,13 @@ describe('runPipelineB', () => {
         },
       });
     nock('https://efts.sec.gov')
-      .get(/forms=SC\+13D%2FA.*/)
+      .get(/q=%22SC\+13D%2FA%22.*/)
       .reply(200, { hits: { hits: [] } });
     nock('https://efts.sec.gov')
-      .get(/forms=SC\+13G.*/)
+      .get(/q=%22SC\+13G%22.*/)
       .reply(200, { hits: { hits: [] } });
     nock('https://efts.sec.gov')
-      .get(/forms=SC\+13G%2FA.*/)
+      .get(/q=%22SC\+13G%2FA%22.*/)
       .reply(200, { hits: { hits: [] } });
     nock('https://www.sec.gov')
       .get(/Archives\/edgar\/data\/932470\/000093247026000045\/primary_doc\.html/)
@@ -82,6 +83,7 @@ describe('runPipelineB', () => {
                 display_names: ['ICAHN CARL C', 'Jet.AI Inc'],
                 file_date: '2026-06-20',
                 form: 'SC 13D',
+                root_forms: ['SC 13D'],
                 adsh: '0000932470-26-000045',
                 tickers: ['JTAI'],
               },
@@ -102,7 +104,7 @@ describe('runPipelineB', () => {
   it('resolves primary doc via index.json (not hardcoded primary_doc.html)', async () => {
     // Simulate a filing where the actual doc is `abc_sc13d.htm`, not primary_doc.html.
     nock('https://efts.sec.gov')
-      .get(/forms=SC\+13D.*/)
+      .get(/q=%22SC\+13D%22.*/)
       .reply(200, {
         hits: {
           hits: [
@@ -112,6 +114,7 @@ describe('runPipelineB', () => {
                 display_names: ['ICAHN CARL C', 'Jet.AI Inc'],
                 file_date: '2026-06-20',
                 form: 'SC 13D',
+                root_forms: ['SC 13D'],
                 adsh: '0000932470-26-000045',
                 tickers: ['JTAI'],
               },
@@ -120,13 +123,13 @@ describe('runPipelineB', () => {
         },
       });
     nock('https://efts.sec.gov')
-      .get(/forms=SC\+13D%2FA.*/)
+      .get(/q=%22SC\+13D%2FA%22.*/)
       .reply(200, { hits: { hits: [] } });
     nock('https://efts.sec.gov')
-      .get(/forms=SC\+13G.*/)
+      .get(/q=%22SC\+13G%22.*/)
       .reply(200, { hits: { hits: [] } });
     nock('https://efts.sec.gov')
-      .get(/forms=SC\+13G%2FA.*/)
+      .get(/q=%22SC\+13G%2FA%22.*/)
       .reply(200, { hits: { hits: [] } });
     // Old hardcoded URL would 404 — assert we DON'T fetch it.
     nock('https://www.sec.gov')

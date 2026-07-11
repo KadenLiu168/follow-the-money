@@ -16,7 +16,7 @@ export async function checkCik(cik, client) {
 }
 
 export async function check13DGSearch(client) {
-  const url = `https://efts.sec.gov/LATEST/search-index?q=%22SC+13D%22&dateRange=custom&startDate=2026-06-22&endDate=2026-06-25&forms=SC+13D`;
+  const url = `https://efts.sec.gov/LATEST/search-index?q=%22SC+13D%22&dateRange=custom&startdt=2026-06-22&enddt=2026-06-25`;
   const res = await client.fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
   const data = await res.json();
