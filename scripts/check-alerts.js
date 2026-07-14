@@ -41,7 +41,7 @@ const newCritical = raw.entries.filter(
   (f) => ALERT_FORMS.has(f.formType) && f.filingDate > lastAlert,
 );
 if (newCritical.length === 0) {
-  process.stdout.write(JSON.stringify({ alerts: [], capped: false, summary: null }));
+  process.stdout.write(JSON.stringify({ alerts: [], capped: false, summary: null, feedDir: FEED_DIR }));
   process.exit(0);
 }
 
@@ -54,12 +54,13 @@ const alerts = mergeAmendmentsForAlert(groups);
 const DETAIL_CAP = 8;
 let payload;
 if (alerts.length <= DETAIL_CAP) {
-  payload = { alerts, capped: false, summary: null };
+  payload = { alerts, capped: false, summary: null, feedDir: FEED_DIR };
 } else {
   payload = {
     alerts: alerts.slice(0, DETAIL_CAP),
     capped: true,
     summary: `📊 另 ${alerts.length - DETAIL_CAP} 条 13D/G 详见 digest`,
+    feedDir: FEED_DIR,
   };
 }
 process.stdout.write(JSON.stringify(payload, null, 2));

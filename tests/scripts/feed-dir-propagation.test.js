@@ -87,12 +87,14 @@ describe('feed-dir propagation (D1)', () => {
       // Marker only exists in envDir → its presence proves prepare read envDir,
       // not the repo cwd (which is the pre-fix bug).
       expect(marker).toBeDefined();
+      // feedDir is surfaced for transparency (feed-dir-transparency change).
+      expect(parsed.feedDir).toBe(envDir);
     } finally {
       rmSync(envDir, { recursive: true, force: true });
     }
   });
 
-  it('unset env lets prepare fall back to cwd (local mode preserved)', () => {
+  it('unset env lets prepare fall back to cwd and reports cwd as feedDir', () => {
     const env = { ...process.env };
     delete env.FOLLOW_THE_MONEY_FEED_DIR;
     const out = execSync('node scripts/prepare-digest.js --lookback 90', {
@@ -103,5 +105,7 @@ describe('feed-dir propagation (D1)', () => {
     const parsed = JSON.parse(out);
     // Repo cwd carries the real committed feed → real filers present (control).
     expect(parsed.thirteenF.length).toBeGreaterThan(0);
+    // Without env, feedDir SHALL report process.cwd() (the dir actually read).
+    expect(parsed.feedDir).toBe(repoCwd);
   });
 });

@@ -34,9 +34,9 @@ If a step in this skill fails, surface the exact stderr from the failing script 
 
 3. **Prepare digest**:
    ```bash
-   # Resolve the exact cache dir Step 2 wrote to (single source of truth), then
-   # run prepare in skill mode. If fetch-feed.js is unavailable, fall back to
-   # cwd (local mode). Inlining keeps each step self-contained across shells.
+   # Feed-dir bridge (single definition — also used by Step 6). Resolves the
+   # exact cache dir Step 2 wrote to (single source of truth); if fetch-feed.js
+   # is unavailable, fall back to cwd (local mode).
    if FEED_DIR="$(node scripts/fetch-feed.js --print-dir)" && [ -n "$FEED_DIR" ]; then
      FOLLOW_THE_MONEY_FEED_DIR="$FEED_DIR" node scripts/prepare-digest.js
    else
@@ -44,10 +44,10 @@ If a step in this skill fails, surface the exact stderr from the failing script 
    fi
    ```
    Default lookback is 90 days (one quarter) — 13F is quarterly, so a 1-day lookback returns nothing on non-filing days. Use `--lookback 1` if the user explicitly asks for "today only".
-   Reads `feed-13f.json` + `feed-13dg/manifest.json` + current year NDJSON from `$FOLLOW_THE_MONEY_FEED_DIR`, filters by lookback, emits unified JSON to stdout.
+   Reads `feed-13f.json` + `feed-13dg/manifest.json` + current year NDJSON from `$FOLLOW_THE_MONEY_FEED_DIR`, filters by lookback, emits unified JSON to stdout. The output includes a top-level `feedDir` (the dir actually read) — surface it in the digest footer so the user can tell whether the digest used the fresh fetch or the committed cwd feed.
 4. **Render**: read `renderContext` from the prepare output first — it declares the render basis so you don't rely on scattered conventions. Use `renderContext.language` as the target language. For each prompt, read the already-embedded body `renderContext.prompts.<name>.text` and apply it directly — do NOT re-read any prompt file from disk, and do NOT verify a `hash` (none is emitted). `source` (`user` | `remote` | `repo` | `missing`) is informational only: it tells you which tier `prepare-digest.js` resolved the prompt from, but maps to no filesystem path (in particular, `remote` has no local file to open). Then apply `digest-intro` + `format-13f` + `format-13dg` + `translate` (if `renderContext.language != 'en'`) to the JSON. Output is a Markdown digest.
 5. **Output**: agent 直接把渲染后的 Markdown 摘要输出到会话 stdout，无需任何脚本。
-6. **Check alerts** (resolves the same cache dir as Step 2/3):
+6. **Check alerts** (uses the same feed-dir bridge defined in Step 3):
    ```bash
    if FEED_DIR="$(node scripts/fetch-feed.js --print-dir)" && [ -n "$FEED_DIR" ]; then
      FOLLOW_THE_MONEY_FEED_DIR="$FEED_DIR" node scripts/check-alerts.js
@@ -55,7 +55,9 @@ If a step in this skill fails, surface the exact stderr from the failing script 
      node scripts/check-alerts.js
    fi
    ```
-   For each alert, apply `prompts/format-alert` and deliver individually.
+   For each alert, apply `prompts/format-alert` and deliver individually. The check-alerts
+   output also includes a top-level `feedDir` — use it to confirm the alert scan read the
+   same dir as the digest (Step 3) rather than diverging to cwd.
    (The script atomically persists `config.lastAlertTimestamp` itself — do NOT write it here; the script is the single owner.)
 
 ### Feed freshness model

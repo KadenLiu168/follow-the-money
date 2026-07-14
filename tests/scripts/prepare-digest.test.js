@@ -79,6 +79,13 @@ describe('prepare-digest.js', () => {
     expect(j).toHaveProperty('thirteenDG');
   });
 
+  it('surfaces feedDir at top level equal to cwd when env unset (feed-dir-transparency)', () => {
+    const cwd = join(__dirname, '..', '..');
+    const out = execSync('node scripts/prepare-digest.js --lookback 7', { cwd, encoding: 'utf8' });
+    const j = JSON.parse(out);
+    expect(j.feedDir).toBe(cwd);
+  });
+
   it('defaults to 90-day lookback (one quarter) so 13F filings appear', () => {
     const cwd = join(__dirname, '..', '..');
     const out = execSync('node scripts/prepare-digest.js', { cwd, encoding: 'utf8' });

@@ -150,6 +150,7 @@ for (const [key, { source, text }] of Object.entries(resolvedPrompts)) {
 const out = {
   schemaVersion: 1,
   generatedAt: now.toISOString(),
+  feedDir: FEED_DIR,
   lookbackDays,
   thirteenF: enriched,
   thirteenDG: dgFiltered,

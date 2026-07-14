@@ -47,6 +47,26 @@ describe('check-alerts.js', () => {
     expect(payload.alerts.length).toBeGreaterThan(0);
   });
 
+  it('surfaces feedDir at top level equal to FOLLOW_THE_MONEY_FEED_DIR (feed-dir-transparency)', () => {
+    writeFileSync(
+      join(fakeroot, 'config.json'),
+      JSON.stringify({ lastAlertTimestamp: '2026-01-01T00:00:00.000Z' }),
+    );
+    const envDir = mkdtempSync(join(tmpdir(), 'ftm-alerts-feeddir-'));
+    mkdirSync(join(envDir, 'feed-13dg'), { recursive: true });
+    writeFileSync(
+      join(envDir, 'feed-13dg', 'manifest.json'),
+      JSON.stringify({ schemaVersion: 1, currentYear: 2026, years: {} }),
+    );
+    const out = execSync(`HOME=${fakeroot} node ${join(REPO, 'scripts', 'check-alerts.js')}`, {
+      cwd: repoRoot,
+      env: { ...process.env, FOLLOW_THE_MONEY_FEED_DIR: envDir, HOME: fakeroot },
+      encoding: 'utf8',
+    });
+    const payload = JSON.parse(out);
+    expect(payload.feedDir).toBe(envDir);
+  });
+
   it('reads from FOLLOW_THE_MONEY_FEED_DIR when set', async () => {
     const envDir = mkdtempSync(join(tmpdir(), 'ftm-alerts-env-'));
     try {
