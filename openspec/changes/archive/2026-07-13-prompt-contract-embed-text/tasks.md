@@ -14,8 +14,8 @@
 
 ## 2. prepare-digest.js:嵌入正文,删 hash
 
-- [x] 2.1 第 135 行改为 `const resolvedPrompts = await resolvePrompts({ names: PROMPT_NAMES, userDir: join(homedir(),'.follow-the-money','prompts'), repoDir: join(REPO,'prompts'), remoteBaseUrl: 'https://raw.githubusercontent.com/KadenLiu168/follow-the-money/main/prompts' });`(顶层 `await`,`package.json` 为 `"type":"module"` 且 `engines.node >=20.19`,合法)。
-- [x] 2.2 第 141-144 行改为 `prompts[key] = { source: r.source, text: r.text }`(无 `hash`);
+- [x] 2.1 第 137 行改为 `const resolvedPrompts = await resolvePrompts({ names: PROMPT_NAMES, userDir: join(homedir(),'.follow-the-money','prompts'), repoDir: join(REPO,'prompts'), remoteBaseUrl: 'https://raw.githubusercontent.com/KadenLiu168/follow-the-money/main/prompts' });`(顶层 `await`,`package.json` 为 `"type":"module"` 且 `engines.node >=20.19`,合法)。
+- [x] 2.2 第 145-148 行改为 `prompts[key] = { source: r.source, text: r.text }`(无 `hash`);
   保持 `renderContext = { language, prompts }` 入 `out`。
 
 ## 3. SKILL.md:直接消费 text
@@ -54,4 +54,4 @@
   - **确定性(time-seam)测试注意**:`produces identical output across runs` 等经 `execSync` 运行、未 mock
     `fetch`,远程层可能触达真实 GitHub。两连跑在「均离线→repo」或「均在线→remote(内容毫秒级稳定)」时
     一致;若 CI 出现 flake,应将相关断言改为 in-process 变体并 mock `fetch`(与 5.1 同机制),而非依赖实时网络。
-- [x] 5.3 运行 `npm test` 与 `npx openspec validate 2026-07-13-prompt-contract-embed-text` 全绿(196/196 测试通过,lint 干净,change valid)。
+- [x] 5.3 运行 `npm test` 与 `openspec validate 2026-07-13-prompt-contract-embed-text` 全绿(196/196 测试通过,lint 干净,change valid)。
