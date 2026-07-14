@@ -18,7 +18,7 @@ Four-layer data flow, layer responsibilities, and key design decisions. Load thi
 | -------------------- | ------------------------------------------------------------------------- | -------------------------------------------------- |
 | 1. SEC EDGAR         | SEC servers                                                               | Source of truth for 13F + 13D/G filings            |
 | 2. Center aggregator | GitHub Actions cron (`0 12 * * *` + `0 0 * * *` UTC, ≈08:00 ET DST-naive) | Pull from EDGAR, write feed + state files, commit  |
-| 3. Local skill       | User's machine (on cron)                                                  | Read feed, prepare digest, detect alerts, dispatch |
+| 3. Local skill       | User's machine (agent runtime, on demand)                                 | Read feed, prepare digest, detect alerts, dispatch |
 | 4. Output            | stdout                                                                    | Periodic digest + immediate 13D alerts             |
 
 ## Layer Responsibilities
@@ -41,7 +41,6 @@ Four-layer data flow, layer responsibilities, and key design decisions. Load thi
 
 - `scripts/prepare-digest.js` — pull feed + read config + filter by lookback
 - `scripts/check-alerts.js` — read feed + filter new 13D/13D/A → alert list
-- `scripts/print.js` — emit digest/alert text to stdout
 
 ### Skill-mode data freshness
 
@@ -52,7 +51,7 @@ As of 2026-07-03, the skill no longer reads `feed-13f.json` from `cwd`. Instead:
 3. CI's `aggregate.yml` uses `git add -f` to publish data files to `main` despite `.gitignore` excluding them for local development.
 4. The repo is public, so raw URLs need no authentication.
 
-Local deployments are unaffected: `node scripts/aggregate.js` still writes to `cwd`, which the scripts read when `FOLLOW_THE_MONEY_FEED_DIR` is unset.
+Running `aggregate.js` locally still works: it writes to `cwd`, which the scripts read when `FOLLOW_THE_MONEY_FEED_DIR` is unset.
 
 ### Layer 4 — Output
 

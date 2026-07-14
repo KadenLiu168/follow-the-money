@@ -46,10 +46,7 @@ If a step in this skill fails, surface the exact stderr from the failing script 
    Default lookback is 90 days (one quarter) — 13F is quarterly, so a 1-day lookback returns nothing on non-filing days. Use `--lookback 1` if the user explicitly asks for "today only".
    Reads `feed-13f.json` + `feed-13dg/manifest.json` + current year NDJSON from `$FOLLOW_THE_MONEY_FEED_DIR`, filters by lookback, emits unified JSON to stdout.
 4. **Render**: read `renderContext` from the prepare output first — it declares the render basis so you don't rely on scattered conventions. Use `renderContext.language` as the target language. For each prompt, read the already-embedded body `renderContext.prompts.<name>.text` and apply it directly — do NOT re-read any prompt file from disk, and do NOT verify a `hash` (none is emitted). `source` (`user` | `remote` | `repo` | `missing`) is informational only: it tells you which tier `prepare-digest.js` resolved the prompt from, but maps to no filesystem path (in particular, `remote` has no local file to open). Then apply `digest-intro` + `format-13f` + `format-13dg` + `translate` (if `renderContext.language != 'en'`) to the JSON. Output is a Markdown digest.
-5. **Print**:
-   ```bash
-   node scripts/print.js --text "<digest>"
-   ```
+5. **Output**: agent 直接把渲染后的 Markdown 摘要输出到会话 stdout，无需任何脚本。
 6. **Check alerts** (resolves the same cache dir as Step 2/3):
    ```bash
    if FEED_DIR="$(node scripts/fetch-feed.js --print-dir)" && [ -n "$FEED_DIR" ]; then
@@ -71,9 +68,6 @@ The skill uses a **fetch-then-digest** pattern:
   run `node scripts/aggregate.js` locally).
 - The repo's `.gitignore` excludes the data files for local development, but the CI workflow
   uses `git add -f` to keep publishing them to `main`.
-
-**Local deployment:** `git clone` gets code only (no data). Run `node scripts/aggregate.js`
-once to populate `cwd` with data; optionally schedule via cron for freshness.
 
 ## Manual trigger
 
@@ -98,10 +92,9 @@ Triggers when `~/.follow-the-money/config.json` is missing or `onboardingComplet
 
 ## Error handling
 
-- `prepare-digest.js` exits non-zero → surface the error verbatim, do not run `print.js` or `check-alerts.js`, do not update `lastAlertTimestamp`.
+- `prepare-digest.js` exits non-zero → surface the error verbatim, do not run `check-alerts.js`, do not update `lastAlertTimestamp`.
 - Source guard (D3): `prepare-digest.js` exits non-zero with no stdout when `feed-13f.json` or `feed-13dg/` is missing, or when `feed-13f.json` is corrupt (JSON parse failure). Never paper over this with a blank digest — surface the stderr (it points at the missing/corrupt source and tells the user to run `fetch-feed.js` or `aggregate.js`) and stop. This enforces the iron rule "Partial output is worse than no output".
 - `check-alerts.js` exits non-zero → continue the digest print path, but log the alert-check failure into the digest footer so the user knows alert data may be stale.
-- `print.js` exits non-zero → surface the error verbatim. There are no transient failure modes (no network calls); retry is not appropriate.
 - Missing references file → do not crash. Skip the section that depends on it and note "reference not loaded" in the digest footer.
 
 ## Platform detection
@@ -115,5 +108,4 @@ This skill MUST work in any agent runtime. If a shell command is needed, use gen
 - `references/edgar-fetching.md` — API endpoints, rate limits
 - `references/alert-rules.md` — three-level alert policy rationale
 - `references/onboarding.md` — 8-step first-run flow
-- `references/cron-setup.md` — crontab examples per OS
 - `references/prompt-customization.md` — how to override prompts

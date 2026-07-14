@@ -24,8 +24,8 @@ This avoids "alert storms" when a filer amends the same filing several times in 
 
 ## Soft Cap (anti-spam)
 
-- Single cron run produces ≤ 8 alerts → push all in detail
-- Single cron run produces > 8 alerts → push first 8 in detail, then append one summary line:
+- Single agent invocation produces ≤ 8 alerts → push all in detail
+- Single agent invocation produces > 8 alerts → push first 8 in detail, then append one summary line:
 
   `📊 另 N 条 13D/G 详见 digest`
 
@@ -65,22 +65,22 @@ atomicWriteConfig(config);
 
 ## Push Timing
 
-Alerts run on **every cron tick** of the local skill, not just on digest schedule. Typical local cron: 4-6× per day (more frequent than the center's 2× per day) so 13D alerts land within minutes of the feed update.
+Alerts run on **every agent invocation** of `check-alerts.js`, not just on digest schedule. Typical agent schedule: 4-6× per day (more frequent than the center's 2× per day) so 13D alerts land within minutes of the feed update.
 
-| Center cron (GitHub Actions) | Local cron (user machine)                                   |
+| Center cron (GitHub Actions) | Agent schedule (user's machine)                             |
 | ---------------------------- | ----------------------------------------------------------- |
 | 08:00 ET + 20:00 ET          | User choice (typical: every 2-4h, plus alert checks hourly) |
 
-If the center hasn't updated since the last local cron run, no new alerts are generated. `check-alerts.js` exits 0 silently.
+If the center hasn't updated since the last agent invocation, no new alerts are generated. `check-alerts.js` exits 0 silently.
 
 ## Failure Handling
 
-| Failure                                 | Behavior                                         |
-| --------------------------------------- | ------------------------------------------------ |
-| Print errors (file read failure)        | Surface stderr to agent session                  |
-| Crash between print and timestamp write | Next run re-prints last item; acceptable         |
-| Feed files missing                      | `check-alerts.js` exits 0 with "no data" message |
-| Config.json missing                     | Onboarding triggered (see `onboarding.md`)       |
-| Bad NDJSON line in feed                 | Skip line, log, continue                         |
+| Failure                                        | Behavior                                         |
+| ---------------------------------------------- | ------------------------------------------------ |
+| Output/write errors (file read failure)        | Surface stderr to agent session                  |
+| Crash between stdout write and timestamp write | Next run re-prints last item; acceptable         |
+| Feed files missing                             | `check-alerts.js` exits 0 with "no data" message |
+| Config.json missing                            | Onboarding triggered (see `onboarding.md`)       |
+| Bad NDJSON line in feed                        | Skip line, log, continue                         |
 
 See `data-formats.md` for the `lastAlertTimestamp` field location in config.

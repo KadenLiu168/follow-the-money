@@ -86,7 +86,7 @@ Display the full source list:
 
 **13D/G Scope**: Full US market. Any filer, any company. Forms: SC 13D, SC 13D/A, SC 13G, SC 13G/A.
 
-### Step 7 — Settings Reminder + Cron Setup
+### Step 7 — Settings Reminder
 
 Tell the user:
 
@@ -97,13 +97,11 @@ Tell the user:
 > - "翻译成中文"
 > - "显示我的设置"
 
-Then point them to `references/cron-setup.md` for the OS-specific cron install.
-
-After cron is set, run the **welcome digest** immediately:
+Run the **welcome digest** immediately:
 
 - `node scripts/prepare-digest.js`
 - Apply prompts
-- `node scripts/print.js --file <digest>`
+- Output the rendered markdown to the session (no script needed)
 
 Ask: `看到第一份 digest 了。有什么想调整的？` — collect feedback, set `onboardingComplete: true`, atomic-write the config.
 
