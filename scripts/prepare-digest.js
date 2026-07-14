@@ -129,18 +129,22 @@ const enriched = f13Filtered.map((f) =>
 );
 
 // Render context: declare the render basis so the LLM does not have to rely
-// on scattered doc conventions. Only metadata (source + content hash) is
-// embedded — never prompt bodies or config state. See openspec/specs/digest-output.
+// on scattered doc conventions. The render prompts are resolved by the single
+// user > GitHub remote > repo clone priority rule and their full bodies are
+// embedded in `text`, so the LLM consumes them directly — no file reads or
+// hash checks at render time. See openspec/specs/digest-output.
 const userConfig = loadUserConfig();
-const resolvedPrompts = resolvePrompts({
+const resolvedPrompts = await resolvePrompts({
   names: PROMPT_NAMES,
   userDir: join(homedir(), '.follow-the-money', 'prompts'),
   repoDir: join(REPO, 'prompts'),
+  remoteBaseUrl: 'https://raw.githubusercontent.com/KadenLiu168/follow-the-money/main/prompts',
 });
-// Strip `text` so prompt bodies never enter the data contract.
+// Embed the resolved prompt bodies as-is; drop nothing. `source` is
+// informational only (which tier won the priority check), not a file path.
 const prompts = {};
-for (const [key, { source, hash }] of Object.entries(resolvedPrompts)) {
-  prompts[key] = { source, hash };
+for (const [key, { source, text }] of Object.entries(resolvedPrompts)) {
+  prompts[key] = { source, text };
 }
 
 const out = {

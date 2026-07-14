@@ -56,6 +56,19 @@ function writeDeterministicFeed(envDir) {
   );
 }
 
+// Recursively check that no object in the tree has a `hash` key (the prompt
+// contract change removed hash from the output entirely).
+function hasHashField(obj) {
+  if (Array.isArray(obj)) return obj.some(hasHashField);
+  if (obj && typeof obj === 'object') {
+    for (const [k, v] of Object.entries(obj)) {
+      if (k === 'hash') return true;
+      if (hasHashField(v)) return true;
+    }
+  }
+  return false;
+}
+
 describe('prepare-digest.js', () => {
   it('emits JSON with lookbackDays applied', () => {
     const cwd = join(__dirname, '..', '..');
@@ -533,7 +546,7 @@ describe('prepare-digest.js', () => {
     }
   });
 
-  it('renderContext.prompts reports user override when user copy exists', () => {
+  it('renderContext.prompts reports user override and embeds the user file text', () => {
     const envDir = mkdtempSync(join(tmpdir(), 'ftm-rc-user-'));
     const home = mkdtempSync(join(tmpdir(), 'ftm-rc-home3-'));
     try {
@@ -547,14 +560,14 @@ describe('prepare-digest.js', () => {
       });
       const j = JSON.parse(out);
       expect(j.renderContext.prompts.format_13f.source).toBe('user');
-      expect(j.renderContext.prompts.format_13f.hash).toMatch(/^[0-9a-f]{16}$/);
+      expect(j.renderContext.prompts.format_13f.text).toBe('# user override');
     } finally {
       rmSync(envDir, { recursive: true, force: true });
       rmSync(home, { recursive: true, force: true });
     }
   });
 
-  it('renderContext.prompts reports repo when no user override and never embeds text', () => {
+  it('renderContext.prompts embeds non-empty text and exposes no hash/config state', () => {
     const envDir = mkdtempSync(join(tmpdir(), 'ftm-rc-repo-'));
     const home = mkdtempSync(join(tmpdir(), 'ftm-rc-home4-'));
     try {
@@ -565,9 +578,15 @@ describe('prepare-digest.js', () => {
         encoding: 'utf8',
       });
       const j = JSON.parse(out);
-      expect(j.renderContext.prompts.format_13f.source).toBe('repo');
-      // Requirement: output SHALL NOT embed prompt text or config state.
-      expect(j.renderContext.prompts.format_13f).not.toHaveProperty('text');
+      // No user override here, so the tier is network-dependent (repo or
+      // remote). Both are valid; we only assert the embedded text is real.
+      const src = j.renderContext.prompts.format_13f.source;
+      expect(['repo', 'remote']).toContain(src);
+      const text = j.renderContext.prompts.format_13f.text;
+      expect(typeof text).toBe('string');
+      expect(text.length).toBeGreaterThan(0);
+      // Requirement: output SHALL NOT embed a prompt hash or config state.
+      expect(hasHashField(j)).toBe(false);
       expect(j.renderContext).toEqual({ language: 'en', prompts: j.renderContext.prompts });
       expect(j.renderContext).not.toHaveProperty('lastAlertTimestamp');
       expect(j.renderContext).not.toHaveProperty('frequency');
