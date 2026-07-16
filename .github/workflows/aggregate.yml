@@ -22,12 +22,6 @@ jobs:
           node-version-file: .nvmrc
           cache: 'npm'
       - run: npm ci
-      - name: Run tests (gate)
-        run: npm test
-      - name: Lint (gate)
-        run: npm run lint
-      - name: Format check (gate)
-        run: npm run format:check
       - name: Run aggregator
         env:
           SEC_EDGAR_USER_AGENT: ${{ secrets.SEC_EDGAR_USER_AGENT }}

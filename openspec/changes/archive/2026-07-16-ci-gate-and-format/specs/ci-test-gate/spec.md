@@ -1,9 +1,12 @@
 # ci-test-gate Specification
 
-## Purpose
-TBD - created by archiving change medium-followups. Update Purpose after archive.
+## REMOVED Requirements
 
-## Requirements
+### Requirement: aggregate workflow runs test gate before aggregation
+**Reason**: The format/lint/test gate lived inside `aggregate.yml` (the daily SEC-filing cron). Because it ran before `node scripts/aggregate.js` with no `continue-on-error`, any unformatted file made the job exit 1 and silently halted feed updates. The gate belongs at merge time (pre-commit to `main`), not inside the data-fetch cron — the cron is the worst place to discover a formatting slip because it also blocks the product's core pipeline.
+**Migration**: Code-quality gates (`npm test`, `npm run lint`, `npm run format:check`) move to a new dedicated workflow `.github/workflows/ci.yml` that runs on `push` to `main` and `pull_request` targeting `main`. `aggregate.yml` no longer runs these gates; it only fetches and commits feed data.
+
+## ADDED Requirements
 
 ### Requirement: dedicated CI workflow gates code quality on push and pull request
 The repository SHALL include a dedicated CI workflow `.github/workflows/ci.yml` that, on `push` to `main` and on `pull_request` targeting `main`, executes (in order) `npm ci`, `npm test` (i.e. `vitest run`), `npm run lint`, and `npm run format:check`. If any step exits non-zero, the workflow MUST fail so the change cannot be merged/kept green on `main`.
