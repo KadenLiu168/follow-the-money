@@ -110,4 +110,3 @@ This skill MUST work in any agent runtime. If a shell command is needed, use gen
 - `references/edgar-fetching.md` — API endpoints, rate limits
 - `references/alert-rules.md` — three-level alert policy rationale
 - `references/onboarding.md` — 8-step first-run flow
-- `references/prompt-customization.md` — how to override prompts
