@@ -48,10 +48,13 @@ describe('resolvePrompts', () => {
   it('falls back to remote copy when no user override and fetch returns 2xx', async () => {
     const userDir = tmp();
     const repoDir = tmp();
-    vi.stubGlobal('fetch', vi.fn(async (url) => {
-      expect(url).toBe(join(REMOTE_BASE, 'format-13f.md'));
-      return { ok: true, text: async () => 'REMOTE VERSION' };
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url) => {
+        expect(url).toBe(join(REMOTE_BASE, 'format-13f.md'));
+        return { ok: true, text: async () => 'REMOTE VERSION' };
+      }),
+    );
     const res = await resolvePrompts({
       names: ['format-13f.md'],
       userDir,
@@ -66,9 +69,12 @@ describe('resolvePrompts', () => {
     const userDir = tmp();
     const repoDir = tmp();
     writeFileSync(join(repoDir, 'format-13f.md'), 'REPO VERSION');
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      throw new Error('network down');
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('network down');
+      }),
+    );
     const res = await resolvePrompts({
       names: ['format-13f.md'],
       userDir,
@@ -83,7 +89,10 @@ describe('resolvePrompts', () => {
     const userDir = tmp();
     const repoDir = tmp();
     writeFileSync(join(repoDir, 'format-13f.md'), 'REPO VERSION');
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404, text: async () => '404' })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 404, text: async () => '404' })),
+    );
     const res = await resolvePrompts({
       names: ['format-13f.md'],
       userDir,
@@ -97,9 +106,12 @@ describe('resolvePrompts', () => {
   it('marks missing when user/repo empty and fetch fails', async () => {
     const userDir = tmp();
     const repoDir = tmp();
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      throw new Error('network down');
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('network down');
+      }),
+    );
     const res = await resolvePrompts({
       names: ['format-13f.md'],
       userDir,
@@ -134,7 +146,13 @@ describe('resolvePrompts', () => {
     writeFileSync(join(repoDir, 'format-alert.md'), 'd');
     writeFileSync(join(repoDir, 'translate.md'), 'e');
     const res = await resolvePrompts({
-      names: ['digest-intro.md', 'format-13f.md', 'format-13dg.md', 'format-alert.md', 'translate.md'],
+      names: [
+        'digest-intro.md',
+        'format-13f.md',
+        'format-13dg.md',
+        'format-alert.md',
+        'translate.md',
+      ],
       userDir,
       repoDir,
       remoteBaseUrl: REMOTE_BASE,
