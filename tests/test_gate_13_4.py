@@ -128,13 +128,13 @@ _GROUPS = [
 
 def _resolver_output(seed_fact_ids: list[str]) -> dict:
     return {
-        "component_alias": "c0",
         "proposals": [
             {
+                "component_alias": "c0",
                 "position_alias": "p00",
                 "event_type": "macro_release",
                 "evidence_ids": ["ev_1"],
-                "entity_ids": ["ent_fed"],
+                "entity_ids": [],
                 "event_defining_fact_ids": seed_fact_ids,
                 "supporting_fact_ids": [],
                 "story_family_label": "unknown",
@@ -299,6 +299,7 @@ def test_full_bundle_contains_all_members_and_replays(tmp_path):
         "input/feed.json",
         "config-effective.json",
         "pipeline/events.json",
+        "pipeline/unresolved.json",
         "pipeline/ledger.json",
         "pipeline/packets.json",
         "pipeline/analyses.json",
@@ -337,6 +338,36 @@ def test_replay_detects_output_drift(tmp_path):
     replay = replay_bundle(bundle, repo_root=REPO_ROOT)
     assert not replay.ok
     assert any("drift" in e for e in replay.errors)
+
+
+def test_replay_detects_unresolved_audit_drift(tmp_path):
+    bundle = _run_normal_brief(tmp_path)
+    assert replay_bundle(bundle, repo_root=REPO_ROOT).ok
+    unresolved = json.loads((bundle / "pipeline" / "unresolved.json").read_bytes())
+    unresolved.append(
+        {"component_id": "tampered", "seed_fact_ids": [], "evidence_ids": [], "reason": "ambiguous"}
+    )
+    (bundle / "pipeline" / "unresolved.json").write_bytes(
+        json.dumps(unresolved, ensure_ascii=False).encode("utf-8")
+    )
+    replay = replay_bundle(bundle, repo_root=REPO_ROOT)
+    assert not replay.ok
+    assert any("drift" in e for e in replay.errors)
+
+
+def test_replay_requires_unresolved_audit_member(tmp_path):
+    bundle = _run_normal_brief(tmp_path)
+    (bundle / "pipeline" / "unresolved.json").unlink()
+    replay = replay_bundle(bundle, repo_root=REPO_ROOT)
+    assert not replay.ok
+    assert any("unresolved" in e for e in replay.errors)
+
+
+def test_unindexed_unresolved_audit_member_is_rejected(tmp_path):
+    bundle = _run_normal_brief(tmp_path)
+    (bundle / "pipeline" / "unresolved-extra.json").write_bytes(b"[]")
+    with pytest.raises(BundleError, match="unlisted"):
+        verify_bundle_integrity(bundle)
 
 
 def test_replay_detects_rendered_drift(tmp_path):

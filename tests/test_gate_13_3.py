@@ -150,13 +150,13 @@ def _macro_item(published: datetime, title: str, url: str, eid: str = "ev_1") ->
 
 def _resolver_output(seed_fact_ids: list[str], event_type: str = "policy") -> dict:
     return {
-        "component_alias": "c0",
         "proposals": [
             {
+                "component_alias": "c0",
                 "position_alias": "p00",
                 "event_type": event_type,
                 "evidence_ids": ["ev_1"],
-                "entity_ids": ["ent_fed"],
+                "entity_ids": [],
                 "event_defining_fact_ids": seed_fact_ids,
                 "supporting_fact_ids": [],
                 "story_family_label": "unknown",

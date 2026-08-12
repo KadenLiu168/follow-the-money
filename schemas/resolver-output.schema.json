@@ -4,9 +4,8 @@
   "title": "Semantic resolver structured output (OpenAI Structured Outputs subset)",
   "type": "object",
   "additionalProperties": false,
-  "required": ["component_alias", "proposals", "unresolved_groups"],
+  "required": ["proposals", "unresolved_groups"],
   "properties": {
-    "component_alias": { "type": "string", "pattern": "^[a-z][a-z0-9]{0,7}$" },
     "proposals": {
       "type": "array",
       "maxItems": 24,
@@ -23,11 +22,12 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "position_alias", "event_type", "event_defining_fact_ids",
+        "component_alias", "position_alias", "event_type", "event_defining_fact_ids",
         "evidence_ids", "supporting_fact_ids", "entity_ids",
         "story_family_label", "coexistence_relations"
       ],
       "properties": {
+        "component_alias": { "type": "string", "pattern": "^[a-z][a-z0-9]{0,7}$" },
         "position_alias": { "type": "string", "pattern": "^p[0-9]{2}$" },
         "event_type": { "type": "string", "minLength": 1, "maxLength": 64 },
         "event_defining_fact_ids": {
@@ -72,8 +72,9 @@
     "unresolved_group": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["seed_fact_ids", "evidence_ids", "reason"],
+      "required": ["component_alias", "seed_fact_ids", "evidence_ids", "reason"],
       "properties": {
+        "component_alias": { "type": "string", "pattern": "^[a-z][a-z0-9]{0,7}$" },
         "seed_fact_ids": {
           "type": "array",
           "minItems": 1,

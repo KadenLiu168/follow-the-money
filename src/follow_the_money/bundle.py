@@ -386,6 +386,7 @@ def replay_bundle(
         saved_llm = json.loads((bundle / "pipeline" / "llm.json").read_bytes())
         saved = {
             "events": json.loads((bundle / "pipeline" / "events.json").read_bytes()),
+            "unresolved": json.loads((bundle / "pipeline" / "unresolved.json").read_bytes()),
             "ledger": json.loads((bundle / "pipeline" / "ledger.json").read_bytes()),
             "packets": json.loads((bundle / "pipeline" / "packets.json").read_bytes()),
             "analyses": json.loads((bundle / "pipeline" / "analyses.json").read_bytes()),
@@ -433,6 +434,7 @@ def replay_bundle(
 
     reconstructed = {
         "events": result.events,
+        "unresolved": result.unresolved_groups,
         "ledger": ledger_to_records(result.ledger),
         "packets": result.packets,
         "analyses": result.analyses,
@@ -457,6 +459,7 @@ def replay_bundle(
 
     for name in (
         "events",
+        "unresolved",
         "ledger",
         "packets",
         "analyses",

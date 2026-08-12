@@ -716,6 +716,7 @@ def _outputs(
                 )
         proposals.append(
             {
+                "component_alias": "c0",
                 "position_alias": resolver_aliases[event_id],
                 "event_type": "observed_source_event",
                 "event_defining_fact_ids": [f"fact_{event_id}"],
@@ -765,7 +766,6 @@ def _outputs(
         "event_evidence": evidence_by_event,
         "recorded_llm_outputs": {
             "resolver": {
-                "component_alias": "c00",
                 "proposals": proposals,
                 "unresolved_groups": [],
             },

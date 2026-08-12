@@ -89,11 +89,7 @@ def _adapter(client=None, model="gpt-test"):
 
 def test_success_passthrough():
     client = FakeClient(
-        FakeClientResponse(
-            output_text=json.dumps(
-                {"component_alias": "c0", "proposals": [], "unresolved_groups": []}
-            )
-        )
+        FakeClientResponse(output_text=json.dumps({"proposals": [], "unresolved_groups": []}))
     )
     outcome = invoke_pass(
         _adapter(client),
@@ -104,7 +100,7 @@ def test_success_passthrough():
         canonical_input={},
     )
     assert outcome.status == "success"
-    assert outcome.data["component_alias"] == "c0"
+    assert outcome.data["proposals"] == []
 
 
 def test_refusal_non_retryable():
@@ -132,11 +128,7 @@ def test_nonzero_reasoning_fails():
 def test_transient_5xx_retries_once():
 
     client = FakeClient(
-        FakeClientResponse(
-            output_text=json.dumps(
-                {"component_alias": "c0", "proposals": [], "unresolved_groups": []}
-            )
-        )
+        FakeClientResponse(output_text=json.dumps({"proposals": [], "unresolved_groups": []}))
     )
     client.fail_status = 500
     outcome = invoke_pass(

@@ -17,9 +17,9 @@ from follow_the_money.schema import SchemaError, validate_against
 
 def _resolver_output(**overrides) -> dict:
     out = {
-        "component_alias": "c0",
         "proposals": [
             {
+                "component_alias": "c0",
                 "position_alias": "p00",
                 "event_type": "policy",
                 "event_defining_fact_ids": ["fact_a"],
@@ -97,6 +97,7 @@ def test_resolver_24_proposals_ok_25_rejected():
     _resolver_output()
     props = [
         {
+            "component_alias": "c0",
             "position_alias": f"p{i:02d}",
             "event_type": "news",
             "event_defining_fact_ids": [f"fact_{i}"],
@@ -116,11 +117,23 @@ def test_resolver_24_proposals_ok_25_rejected():
 
 def test_resolver_24_unresolved_ok_25_rejected():
     groups = [
-        {"seed_fact_ids": [f"fact_{i}"], "evidence_ids": [f"ev_{i}"], "reason": "ambiguous"}
+        {
+            "component_alias": "c0",
+            "seed_fact_ids": [f"fact_{i}"],
+            "evidence_ids": [f"ev_{i}"],
+            "reason": "ambiguous",
+        }
         for i in range(24)
     ]
     validate_against("resolver-output.schema.json", _resolver_output(unresolved_groups=groups))
-    groups.append({"seed_fact_ids": ["fact_x"], "evidence_ids": ["ev_x"], "reason": "ambiguous"})
+    groups.append(
+        {
+            "component_alias": "c0",
+            "seed_fact_ids": ["fact_x"],
+            "evidence_ids": ["ev_x"],
+            "reason": "ambiguous",
+        }
+    )
     with pytest.raises(SchemaError):
         validate_against("resolver-output.schema.json", _resolver_output(unresolved_groups=groups))
 

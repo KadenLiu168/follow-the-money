@@ -42,9 +42,9 @@ from .engine.candidates import (
 )
 from .engine.entities import EntityResolver
 from .engine.resolution import (
+    ResolutionError,
     alias_component_ids,
-    resolve_component_events,
-    validate_seed_coverage,
+    resolve_block,
 )
 from .ledger import Ledger, LedgerEntry, build_ledger_entry
 from .llm import LlmOutcome, ResponsesAdapter, invoke_pass
@@ -72,6 +72,7 @@ class PipelineResult:
     analyses: list[dict[str, Any]]
     selected: list[SelectedEvent]
     llm_outcomes: list[LlmOutcome]
+    unresolved_groups: list[dict[str, Any]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     degraded_warnings: list[str] = field(default_factory=list)
     # Raw validated structured LLM outputs per pass, keyed by pass name:
@@ -305,6 +306,14 @@ def run_pipeline(
         if saved_llm is not None:
             saved = saved_llm[pass_name]
             data = saved[idx] if idx is not None else saved
+            from .schema import validate_against
+
+            try:
+                validate_against(f"{pass_name}-output.schema.json", data)
+            except Exception as exc:
+                raise PipelineError(
+                    f"saved {pass_name} output failed closed schema validation: {exc}"
+                ) from exc
             return dict(data)
         outcome = invoke_pass(
             adapter,  # type: ignore[arg-type]
@@ -342,6 +351,7 @@ def run_pipeline(
 
     # 3. Resolver pass -> Events
     events: list[dict[str, Any]] = []
+    unresolved_groups: list[dict[str, Any]] = []
     for block_index, block in enumerate(blocks[:max_blocks]):
         aliases = alias_component_ids(block.components)
         prompt = prompts["resolver"]
@@ -356,20 +366,19 @@ def run_pipeline(
             envelope={"pass": "resolver", "block_count": 1},
             projection=resolver_projection,
         )
-        # The response is for one component; validate seed coverage.
-        component = block.components[0]
-        validate_seed_coverage(
-            block=block,
-            proposals=output.get("proposals", []),
-            unresolved=output.get("unresolved_groups", []),
-        )
-        component_events = resolve_component_events(
-            component=component,
-            proposals=output.get("proposals", []),
-            ledger=ledger,
-            resolver=resolver,
-        )
-        events.extend(component_events)
+        try:
+            block_events, block_unresolved = resolve_block(
+                block=block,
+                output=output,
+                ledger=ledger,
+                resolver=resolver,
+            )
+        except ResolutionError as exc:
+            raise PipelineError(
+                f"resolver block {block.block_id} failed semantic validation: {exc}"
+            ) from exc
+        events.extend(block_events)
+        unresolved_groups.extend(block_unresolved)
 
     # 4. Verified packets
     packets: list[dict[str, Any]] = []
@@ -657,6 +666,7 @@ def run_pipeline(
         analyses=analyses,
         selected=result.selected,
         llm_outcomes=llm_outcomes,
+        unresolved_groups=unresolved_groups,
         warnings=warnings,
         llm_data=llm_data,
     )

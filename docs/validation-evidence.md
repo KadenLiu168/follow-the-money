@@ -69,3 +69,25 @@ review also noted the theoretical absence of an absolute return bound for a
 non-cooperative injected adapter, while the production `httpx.Client` remains
 timeout-bounded. Archive, commit, and push remain separate actions requiring
 explicit authorization.
+
+## 2026-08-12 Change validation addendum
+
+The following evidence was captured after implementing
+`fix-multi-component-resolver-blocks`, with no archive, commit, or push action:
+
+| Command | Exit | Fresh result |
+| --- | ---: | --- |
+| `.venv/bin/python -m pytest -q` | 0 | 565 tests collected and passed |
+| `.venv/bin/python scripts/quality_gate.py` | 0 | unit/integration/security, workflow, CLI, ruff, format, mypy, and offline wheel build passed; `quality gate passed` |
+| `.venv/bin/follow-the-money eval --mode offline --output /tmp/follow-the-money-offline-20260812.json` | 0 | 30 golden days; Recall@10 `31/31`, Top-3 Precision `30/30`, Duplicate Story Rate `0/31`, Unsupported Claim Rate `0/30`, Causal Overclaim Rate `0/0 not_applicable`; 0 provider calls, 0 LLM calls, 0 violations |
+| `openspec validate fix-multi-component-resolver-blocks --strict` | 0 | Change is valid |
+| `openspec validate --all --strict` | 0 | 4 passed, 0 failed |
+| `openspec doctor` | 0 | OpenSpec root ok; no references declared |
+
+Fresh requirement-to-code-to-test review confirmed: item-level aliases are
+required by the closed schema and saved-output path; `resolve_block()` validates
+all ownership and seed coverage before construction; Events are merged across
+all packed components in canonical component order; unresolved groups remain
+separate from analyst/selection/rendering and are persisted/replayed through
+`pipeline/unresolved.json`; and no `block.components[0]`, alias inference,
+partial merge, or unresolved audit omission remains in the pipeline path.

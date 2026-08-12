@@ -293,6 +293,9 @@ def _commit_and_deliver(
                 "pipeline/events.json": json.dumps(
                     pipeline.events, ensure_ascii=False, separators=(",", ":")
                 ).encode("utf-8"),
+                "pipeline/unresolved.json": json.dumps(
+                    pipeline.unresolved_groups, ensure_ascii=False, separators=(",", ":")
+                ).encode("utf-8"),
                 "pipeline/ledger.json": json.dumps(
                     ledger_to_records(pipeline.ledger), ensure_ascii=False, separators=(",", ":")
                 ).encode("utf-8"),
