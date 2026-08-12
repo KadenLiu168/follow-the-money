@@ -24,8 +24,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from .config.model import Scoring
-
-PENALTY = "15"
+from .market.formulas import normative_decimal_context
 
 
 def _ts_sort_key(value: str) -> datetime:
@@ -44,7 +43,7 @@ class SelectionInput:
     conflict_free: bool = True
     breaking_label: bool = False
     story_family_id: str | None = None
-    distinct_first_member: bool = False  # unordered pair with family first member
+    coexistence_pairs: frozenset[tuple[str, str]] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -113,6 +112,12 @@ def select_events(
             i.event_id,
         ),
     )
+    # Normalize the already validated incident-pair projections into one
+    # immutable set. Resolver semantic errors must fail upstream.
+    coexistence_pairs = frozenset(
+        tuple(sorted(pair)) for item in items for pair in item.coexistence_pairs
+    )
+
     # Story-family penalty within frozen order.
     first_member: dict[str, str] = {}
     penalized: set[str] = set()
@@ -122,13 +127,14 @@ def select_events(
             continue
         if family not in first_member:
             first_member[family] = item.event_id
-        elif not item.distinct_first_member:
+        elif tuple(sorted((first_member[family], item.event_id))) not in coexistence_pairs:
             penalized.add(item.event_id)
 
     final: list[SelectedEvent] = []
     for item in base_order:
-        penalty = Decimal(PENALTY) if item.event_id in penalized else Decimal(0)
-        final_priority = max(Decimal(0), item.base_priority - penalty)
+        penalty = Decimal(scoring.family_penalty) if item.event_id in penalized else Decimal(0)
+        with normative_decimal_context():
+            final_priority = max(Decimal(0), item.base_priority - penalty)
         full = _full_capable(item, scoring)
         compact = _compact_capable(item, scoring)
         if full and final_priority >= Decimal(scoring.full_priority_threshold):

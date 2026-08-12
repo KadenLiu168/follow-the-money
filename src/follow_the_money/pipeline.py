@@ -466,6 +466,9 @@ def run_pipeline(
         scored.append((packet, analysis, priority, coverage))
 
     # 7. Selection
+    coexistence_pairs = frozenset(
+        tuple(pair) for event in events for pair in event.get("coexistence_pair_ids", [])
+    )
     selection_inputs = [
         SelectionInput(
             event_id=packet["event_id"],
@@ -480,6 +483,7 @@ def run_pipeline(
                 (e.get("story_family_id") for e in events if e["event_id"] == packet["event_id"]),
                 None,
             ),
+            coexistence_pairs=coexistence_pairs,
         )
         for packet, analysis, priority, coverage in scored
     ]

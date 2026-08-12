@@ -14,7 +14,7 @@ from follow_the_money.engine.candidates import (
 from follow_the_money.engine.entities import EntityResolver
 from follow_the_money.engine.resolution import (
     ResolutionError,
-    resolve_component_events,
+    materialize_component_events,
     validate_seed_coverage,
 )
 from follow_the_money.ledger import Ledger, build_ledger_entry
@@ -333,20 +333,23 @@ def test_resolve_component_events():
         facts=tuple(ledger.entries()),
     )
     resolver = EntityResolver([])
-    events = resolve_component_events(
+    events = materialize_component_events(
         component=component,
         proposals=[
             {
+                "position_alias": "p00",
                 "event_type": "policy",
                 "event_defining_fact_ids": [entries[0].fact_id, entries[1].fact_id],
                 "evidence_ids": ["ev_1", "ev_2"],
                 "entity_ids": ["ent_fed"],
+                "story_family_label": "unknown",
+                "coexistence_relations": [],
             }
         ],
         ledger=ledger,
         resolver=resolver,
         subject_zh_by_entity={"ent_fed": "美联储"},
-    )
+    ).events
     assert len(events) == 1
     event = events[0]
     assert event["fully_known_at"] == _ts(T0 + timedelta(minutes=30))
@@ -378,13 +381,16 @@ def test_resolve_component_unknown_fact_rejected():
         facts=(e,),
     )
     with pytest.raises(ResolutionError, match="not in this component"):
-        resolve_component_events(
+        materialize_component_events(
             component=component,
             proposals=[
                 {
+                    "position_alias": "p00",
                     "event_type": "news",
                     "event_defining_fact_ids": ["ghost"],
                     "evidence_ids": ["ev_1"],
+                    "story_family_label": "unknown",
+                    "coexistence_relations": [],
                 }
             ],
             ledger=ledger,
@@ -415,13 +421,16 @@ def test_resolve_invented_fact_rejected():
         facts=(e,),
     )
     with pytest.raises(ResolutionError):
-        resolve_component_events(
+        materialize_component_events(
             component=component,
             proposals=[
                 {
+                    "position_alias": "p00",
                     "event_type": "news",
                     "event_defining_fact_ids": [e.fact_id, "invented"],
                     "evidence_ids": ["ev_1"],
+                    "story_family_label": "unknown",
+                    "coexistence_relations": [],
                 }
             ],
             ledger=ledger,

@@ -40,6 +40,7 @@ from .eval_metrics import (
     top3_precision,
     unsupported_claim_rate,
 )
+from .events import story_family_id
 from .feed.validate import assert_feed_identity, validate_feed
 from .schema import SchemaError, validate_against
 
@@ -86,9 +87,19 @@ class GoldenDay:
         for fam, members in self.story_family_members.items():
             if len(members) < 2:
                 raise GoldenDatasetError(f"{self.date}: family {fam} must have >=2 members")
+            if fam != story_family_id(members):
+                raise GoldenDatasetError(
+                    f"{self.date}: family {fam} is not canonical for its sorted members"
+                )
         for a, b in self.coexistence_pairs:
             if a == b:
                 raise GoldenDatasetError(f"{self.date}: self coexistence pair {a}")
+            if not any(
+                {a, b}.issubset(set(members)) for members in self.story_family_members.values()
+            ):
+                raise GoldenDatasetError(
+                    f"{self.date}: coexistence pair {(a, b)} crosses family boundaries"
+                )
 
 
 def _fixture_path(dataset_dir: Path, value: str, *, field: str, date: str) -> Path:
@@ -559,6 +570,73 @@ def _validate_recorded_outputs(
         if not proposal or set(proposal.get("evidence_ids", [])) != set(event_evidence[event_id]):
             raise GoldenDatasetError(f"{date}: resolver evidence does not match Event {event_id}")
 
+    event_by_position = {alias: event_id for event_id, alias in resolver_aliases.items()}
+    labels_by_position: dict[str, tuple[str, str]] = {}
+    for proposal in proposals:
+        if not isinstance(proposal, dict):
+            continue
+        position = proposal.get("position_alias")
+        component_alias = proposal.get("component_alias")
+        label = proposal.get("story_family_label")
+        if not (
+            isinstance(position, str)
+            and isinstance(component_alias, str)
+            and isinstance(label, str)
+        ):
+            continue
+        labels_by_position[position] = (component_alias, label)
+    family_members: dict[tuple[str, str], list[str]] = {}
+    for position, (component_alias, label) in labels_by_position.items():
+        if position not in event_by_position or label == "unknown":
+            continue
+        family_members.setdefault((component_alias, label), []).append(event_by_position[position])
+    recorded_families = {
+        story_family_id(sorted(members)): tuple(sorted(members))
+        for members in family_members.values()
+        if len(members) >= 2
+    }
+    expected_families = {
+        family: tuple(sorted(members)) for family, members in story_families.items()
+    }
+    if recorded_families != expected_families:
+        raise GoldenDatasetError(f"{date}: manifest story families do not match resolver semantics")
+
+    directed_pairs: set[tuple[str, str]] = set()
+    for proposal in proposals:
+        if not isinstance(proposal, dict):
+            continue
+        position = proposal.get("position_alias")
+        if not isinstance(position, str) or position not in labels_by_position:
+            raise GoldenDatasetError(f"{date}: resolver proposal alias is not replayable")
+        component_alias, label = labels_by_position[position]
+        members = family_members.get((component_alias, label), [])
+        for relation in proposal.get("coexistence_relations", []):
+            target = relation.get("other_proposal_alias")
+            if not isinstance(target, str) or target not in event_by_position:
+                raise GoldenDatasetError(f"{date}: resolver relation target is not replayable")
+            if (position, target) in directed_pairs:
+                raise GoldenDatasetError(f"{date}: resolver relation is duplicated")
+            if label == "unknown" or len(members) < 2:
+                raise GoldenDatasetError(f"{date}: resolver relation attaches to invalid family")
+            if target not in labels_by_position:
+                raise GoldenDatasetError(f"{date}: resolver relation target lacks family metadata")
+            target_component, target_label = labels_by_position[target]
+            if (component_alias, label) != (target_component, target_label):
+                raise GoldenDatasetError(f"{date}: resolver relation crosses family boundaries")
+            directed_pairs.add((position, target))
+    for position, target in directed_pairs:
+        if (target, position) not in directed_pairs:
+            raise GoldenDatasetError(f"{date}: resolver relation is asymmetric")
+    recorded_pairs = {
+        tuple(sorted((event_by_position[position], event_by_position[target])))
+        for position, target in directed_pairs
+    }
+    expected_pairs = {tuple(sorted(pair)) for pair in coexistence_pairs}
+    if recorded_pairs != expected_pairs:
+        raise GoldenDatasetError(
+            f"{date}: manifest coexistence pairs do not match resolver semantics"
+        )
+
     def _validate_analyst_refs(event_id: str, packet_alias: str) -> None:
         packet = next(
             (
@@ -657,8 +735,8 @@ def _validate_recorded_outputs(
             raise GoldenDatasetError(f"{date}: claim {claim_id} has invalid cross-references")
 
     selected_set = set(selected)
-    for family, members in story_families.items():
-        if not set(members).issubset(selected_set):
+    for family, family_member_ids in story_families.items():
+        if not set(family_member_ids).issubset(selected_set):
             raise GoldenDatasetError(
                 f"{date}: story family {family} references an unselected Event"
             )

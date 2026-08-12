@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -18,6 +20,7 @@ from follow_the_money.engine.candidates import (
 from follow_the_money.engine.entities import EntityResolver
 from follow_the_money.engine.resolution import ResolutionError
 from follow_the_money.ledger import Ledger, build_ledger_entry
+from follow_the_money.market.formulas import normative_decimal_context
 from follow_the_money.pipeline import feed_to_ledger, run_pipeline
 from follow_the_money.schema import SchemaError, validate_against
 
@@ -401,6 +404,299 @@ def test_family_labels_are_component_local_and_positions_are_global() -> None:
     assert events[0]["story_family_id"] != events[2]["story_family_id"]
 
 
+def test_equivalent_proposal_order_preserves_family_and_pair_semantics() -> None:
+    block, ledger, components = _block(2)
+    first, second = components[0].facts
+
+    def output(order: list[tuple[str, object]]) -> dict:
+        proposals = []
+        for position, fact in order:
+            proposals.append(
+                _proposal(
+                    position=position,
+                    component_alias="c0",
+                    fact_id=fact.fact_id,
+                    evidence_id=fact.evidence_id,
+                    entity_id=fact.subject,
+                    family="f0",
+                    relations=[
+                        {
+                            "other_proposal_alias": "p01" if position == "p00" else "p00",
+                            "relation": "distinct_material_development",
+                        }
+                    ],
+                )
+            )
+        return _resolver_output(proposals, [])
+
+    events_a, _ = _resolve_block(
+        block=block,
+        output=output([("p00", first), ("p01", second)]),
+        ledger=ledger,
+        resolver=EntityResolver([]),
+    )
+    events_b, _ = _resolve_block(
+        block=block,
+        output=output([("p00", second), ("p01", first)]),
+        ledger=ledger,
+        resolver=EntityResolver([]),
+    )
+
+    by_fact_a = {event["key_fact_ids"][0]: event for event in events_a}
+    by_fact_b = {event["key_fact_ids"][0]: event for event in events_b}
+    assert {
+        fact_id: (event["story_family_id"], event["coexistence_pair_ids"])
+        for fact_id, event in by_fact_a.items()
+    } == {
+        fact_id: (event["story_family_id"], event["coexistence_pair_ids"])
+        for fact_id, event in by_fact_b.items()
+    }
+
+
+def test_relation_on_unknown_family_is_rejected() -> None:
+    block, ledger, components = _block(2)
+    f0, f1 = components[0].facts
+    relations = [{"other_proposal_alias": "p01", "relation": "distinct_material_development"}]
+    reciprocal = [{"other_proposal_alias": "p00", "relation": "distinct_material_development"}]
+    with pytest.raises(ResolutionError):
+        _resolve_block(
+            block=block,
+            output=_resolver_output(
+                [
+                    _proposal(
+                        position="p00",
+                        component_alias="c0",
+                        fact_id=f0.fact_id,
+                        evidence_id=f0.evidence_id,
+                        entity_id=f0.subject,
+                        relations=relations,
+                    ),
+                    _proposal(
+                        position="p01",
+                        component_alias="c0",
+                        fact_id=f1.fact_id,
+                        evidence_id=f1.evidence_id,
+                        entity_id=f1.subject,
+                        relations=reciprocal,
+                    ),
+                ],
+                [],
+            ),
+            ledger=ledger,
+            resolver=EntityResolver([]),
+        )
+
+
+def test_relation_across_family_labels_is_rejected() -> None:
+    block, ledger, components = _block(2)
+    f0, f1 = components[0].facts
+    with pytest.raises(ResolutionError):
+        _resolve_block(
+            block=block,
+            output=_resolver_output(
+                [
+                    _proposal(
+                        position="p00",
+                        component_alias="c0",
+                        fact_id=f0.fact_id,
+                        evidence_id=f0.evidence_id,
+                        entity_id=f0.subject,
+                        family="f0",
+                        relations=[
+                            {
+                                "other_proposal_alias": "p01",
+                                "relation": "distinct_material_development",
+                            }
+                        ],
+                    ),
+                    _proposal(
+                        position="p01",
+                        component_alias="c0",
+                        fact_id=f1.fact_id,
+                        evidence_id=f1.evidence_id,
+                        entity_id=f1.subject,
+                        family="f1",
+                        relations=[
+                            {
+                                "other_proposal_alias": "p00",
+                                "relation": "distinct_material_development",
+                            }
+                        ],
+                    ),
+                ],
+                [],
+            ),
+            ledger=ledger,
+            resolver=EntityResolver([]),
+        )
+
+
+def test_relation_enum_is_semantically_validated() -> None:
+    block, ledger, components = _block(2)
+    f0, f1 = components[0].facts
+    invalid_relation = [{"other_proposal_alias": "p01", "relation": "other"}]
+    reciprocal = [{"other_proposal_alias": "p00", "relation": "other"}]
+    with pytest.raises(ResolutionError):
+        _resolve_block(
+            block=block,
+            output=_resolver_output(
+                [
+                    _proposal(
+                        position="p00",
+                        component_alias="c0",
+                        fact_id=f0.fact_id,
+                        evidence_id=f0.evidence_id,
+                        entity_id=f0.subject,
+                        family="f0",
+                        relations=invalid_relation,
+                    ),
+                    _proposal(
+                        position="p01",
+                        component_alias="c0",
+                        fact_id=f1.fact_id,
+                        evidence_id=f1.evidence_id,
+                        entity_id=f1.subject,
+                        family="f0",
+                        relations=reciprocal,
+                    ),
+                ],
+                [],
+            ),
+            ledger=ledger,
+            resolver=EntityResolver([]),
+        )
+
+
+@pytest.mark.parametrize(
+    "relations",
+    [
+        ([{"other_proposal_alias": "p01", "relation": "distinct_material_development"}], []),
+        ([{"other_proposal_alias": "p00", "relation": "distinct_material_development"}], []),
+        (
+            [
+                {"other_proposal_alias": "p01", "relation": "distinct_material_development"},
+                {"other_proposal_alias": "p01", "relation": "distinct_material_development"},
+            ],
+            [],
+        ),
+        ([{"other_proposal_alias": "p99", "relation": "distinct_material_development"}], []),
+    ],
+)
+def test_relation_graph_rejects_missing_reciprocal_self_duplicate_and_dangling(relations) -> None:
+    block, ledger, components = _block(2)
+    f0, f1 = components[0].facts
+    with pytest.raises(ResolutionError):
+        _resolve_block(
+            block=block,
+            output=_resolver_output(
+                [
+                    _proposal(
+                        position="p00",
+                        component_alias="c0",
+                        fact_id=f0.fact_id,
+                        evidence_id=f0.evidence_id,
+                        entity_id=f0.subject,
+                        family="f0",
+                        relations=relations[0],
+                    ),
+                    _proposal(
+                        position="p01",
+                        component_alias="c0",
+                        fact_id=f1.fact_id,
+                        evidence_id=f1.evidence_id,
+                        entity_id=f1.subject,
+                        family="f0",
+                        relations=relations[1],
+                    ),
+                ],
+                [],
+            ),
+            ledger=ledger,
+            resolver=EntityResolver([]),
+        )
+
+
+def test_position_aliases_are_exact_response_positions() -> None:
+    block, ledger, components = _block(1)
+    fact = components[0].facts[0]
+    with pytest.raises(ResolutionError):
+        _resolve_block(
+            block=block,
+            output=_resolver_output(
+                [
+                    _proposal(
+                        position="p01",
+                        component_alias="c0",
+                        fact_id=fact.fact_id,
+                        evidence_id=fact.evidence_id,
+                        entity_id=fact.subject,
+                    )
+                ],
+                [],
+            ),
+            ledger=ledger,
+            resolver=EntityResolver([]),
+        )
+
+
+def test_unknown_families_are_event_specific_and_nonunknown_singletons_are_not_shared() -> None:
+    block, ledger, components = _block(3)
+    component = components[0]
+    proposals = [
+        _proposal(
+            position=f"p{i:02d}",
+            component_alias="c0",
+            fact_id=fact.fact_id,
+            evidence_id=fact.evidence_id,
+            entity_id=fact.subject,
+            family=family,
+        )
+        for i, (fact, family) in enumerate(
+            zip(component.facts, ("unknown", "unknown", "f0"), strict=True)
+        )
+    ]
+    events, _ = _resolve_block(
+        block=block,
+        output=_resolver_output(proposals, []),
+        ledger=ledger,
+        resolver=EntityResolver([]),
+    )
+    assert len({event["story_family_id"] for event in events}) == 3
+    assert all(event["coexistence_pair_ids"] == [] for event in events)
+
+
+def test_more_than_eight_relations_are_rejected_atomically() -> None:
+    block, ledger, components = _block(10)
+    proposals = []
+    for index, fact in enumerate(components[0].facts):
+        position = f"p{index:02d}"
+        targets = [f"p{other:02d}" for other in range(10) if other != index]
+        proposals.append(
+            _proposal(
+                position=position,
+                component_alias="c0",
+                fact_id=fact.fact_id,
+                evidence_id=fact.evidence_id,
+                entity_id=fact.subject,
+                family="f0",
+                relations=[
+                    {
+                        "other_proposal_alias": target,
+                        "relation": "distinct_material_development",
+                    }
+                    for target in targets
+                ],
+            )
+        )
+    with pytest.raises(ResolutionError):
+        _resolve_block(
+            block=block,
+            output=_resolver_output(proposals, []),
+            ledger=ledger,
+            resolver=EntityResolver([]),
+        )
+
+
 def test_cross_component_coexistence_relation_is_rejected() -> None:
     block, ledger, components = _block(1, 1)
     f0, f1 = components[0].facts[0], components[1].facts[0]
@@ -547,3 +843,178 @@ def test_full_pipeline_retains_all_events_from_a_multi_item_feed() -> None:
 
     assert len(result.events) == 2
     assert result.unresolved_groups == []
+
+
+def test_run_pipeline_materializes_family_pair_and_selection_exemption(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from follow_the_money import editor as editor_module
+    from follow_the_money import pipeline as pipeline_module
+    from follow_the_money.config import load_config
+    from follow_the_money.llm import ResponsesAdapter
+    from follow_the_money.selection import select_events as real_select_events
+    from tests.test_gate_13_3 import (
+        FakeClient,
+        _analyst_output,
+        _news_item,
+        _valid_feed,
+    )
+
+    repo_root = Path(__file__).resolve().parents[1]
+    cfg = load_config(
+        repo_root / "config" / "config.yaml",
+        repo_root / "config" / "providers.yaml",
+        require_verified_enabled=True,
+    )
+    feed = _valid_feed()
+    feed["items"] = [
+        _news_item(T0 - timedelta(hours=2), "美联储 FOMC 政策决定", "https://example.com/fed"),
+        _news_item(
+            T0 - timedelta(hours=1),
+            "美联储 FOMC 政策决定更新",
+            "https://example.com/fed-update",
+            eid="ev_2",
+        ),
+        _news_item(
+            T0 - timedelta(minutes=30),
+            "美联储 FOMC 政策决定跟进",
+            "https://example.com/fed-followup",
+            eid="ev_3",
+        ),
+    ]
+    resolver = EntityResolver(cfg.entities)
+    ledger = feed_to_ledger(feed, cfg, resolver)
+    nodes = build_mention_nodes(ledger.entries())
+    components = connected_components(
+        nodes,
+        build_edges(nodes, {entry.fact_id: entry for entry in ledger.entries()}, resolver),
+        {entry.fact_id: entry for entry in ledger.entries()},
+    )
+    assert len(components) == 1
+    component = components[0]
+    fact_a, fact_b, fact_c = component.facts
+    fixture = json.loads(
+        (repo_root / "evals" / "dataset" / "story_family_replay.json").read_bytes()
+    )
+    resolver_output = fixture["resolver"]
+    assert [proposal["event_defining_fact_ids"] for proposal in resolver_output["proposals"]] == [
+        [fact_a.fact_id],
+        [fact_b.fact_id],
+        [fact_c.fact_id],
+    ]
+    analyst = _analyst_output()
+    outputs = {
+        "resolver": resolver_output,
+        "analyst": analyst,
+        "editor": {"filled_slots": []},
+        "audit": {"covered_claim_ids": [], "findings": []},
+    }
+    client = FakeClient(outputs)
+    adapter = ResponsesAdapter(
+        model="gpt-test", client=SimpleNamespace(responses=client, create=client.create)
+    )
+    captured: dict[str, object] = {}
+
+    real_allocate_slots = editor_module.allocate_slots
+
+    def allocate_slots(**kwargs):
+        slots = real_allocate_slots(**kwargs)
+        outputs["editor"]["filled_slots"] = [
+            {
+                "slot_alias": slot.alias,
+                "wording_fragment": slot.kind,
+                "reference_aliases": list(slot.exposed_aliases)
+                if slot.owner != "market_state"
+                else [],
+            }
+            for slot in slots
+            if slot.required
+        ]
+        return slots
+
+    real_audit_projection = pipeline_module._audit_projection
+
+    def audit_projection(brief):
+        projection = real_audit_projection(brief)
+        outputs["audit"]["covered_claim_ids"] = [claim["alias"] for claim in projection["claims"]]
+        return projection
+
+    monkeypatch.setattr(editor_module, "allocate_slots", allocate_slots)
+    monkeypatch.setattr(pipeline_module, "_audit_projection", audit_projection)
+
+    def capture_selection(items, scoring):
+        captured["items"] = list(items)
+        return real_select_events(items, scoring)
+
+    monkeypatch.setattr("follow_the_money.pipeline.select_events", capture_selection)
+
+    result = run_pipeline(
+        cfg=cfg,
+        feed=feed,
+        brief_generated_at=_ts(T0 + timedelta(minutes=10)),
+        adapter=adapter,
+        resolver=resolver,
+        prompts={
+            "resolver": "Resolve atomic financial events",
+            "analyst": "Analyze one verified",
+            "editor": "Render the Chinese Morning",
+            "audit": "Audit the Chinese Morning",
+        },
+    )
+
+    assert len(result.events) == 3
+    assert [event["event_id"] for event in result.events] == [
+        event["event_id"] for event in fixture["events"]
+    ]
+    assert len({event["story_family_id"] for event in result.events}) == 1
+    pair_ab = tuple(sorted((result.events[0]["event_id"], result.events[1]["event_id"])))
+    pair_bc = tuple(sorted((result.events[1]["event_id"], result.events[2]["event_id"])))
+    assert [event["coexistence_pair_ids"] for event in result.events] == [
+        [list(pair_ab)],
+        [list(pair_ab), list(pair_bc)],
+        [list(pair_bc)],
+    ]
+    assert [item.story_family_id for item in captured["items"]] == [
+        result.events[0]["story_family_id"],
+        result.events[1]["story_family_id"],
+        result.events[2]["story_family_id"],
+    ]
+    assert all(
+        item.coexistence_pairs == frozenset({pair_ab, pair_bc}) for item in captured["items"]
+    )
+    assert result.selected
+    ordered = sorted(
+        captured["items"],
+        key=lambda item: (
+            -item.base_priority,
+            -datetime.fromisoformat(item.fully_known_at).timestamp(),
+            item.event_id,
+        ),
+    )
+    frozen_first = ordered[0].event_id
+    selected_by_id = {selected.event_id: selected for selected in result.selected}
+    assert set(selected_by_id) == {item.event_id for item in captured["items"]}
+    for item in captured["items"]:
+        pair = tuple(sorted((frozen_first, item.event_id)))
+        expected = item.base_priority
+        if item.event_id != frozen_first and pair not in {pair_ab, pair_bc}:
+            with normative_decimal_context():
+                expected -= Decimal(cfg.scoring.family_penalty)
+        assert selected_by_id[item.event_id].final_priority == expected
+
+    replayed = run_pipeline(
+        cfg=cfg,
+        feed=feed,
+        brief_generated_at=_ts(T0 + timedelta(minutes=10)),
+        adapter=None,
+        resolver=resolver,
+        prompts={"resolver": "", "analyst": "", "editor": "", "audit": ""},
+        saved_llm={
+            "resolver": [resolver_output],
+            "analyst": [analyst, analyst, analyst],
+            "editor": outputs["editor"],
+            "language-audit": outputs["audit"],
+        },
+    )
+    assert replayed.events == result.events
+    assert replayed.selected == result.selected

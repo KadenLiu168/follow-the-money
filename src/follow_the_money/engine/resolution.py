@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from ..events import (
@@ -27,6 +28,14 @@ from .entities import EntityResolver
 
 class ResolutionError(ValueError):
     """Resolver output failed semantic validation."""
+
+
+@dataclass(frozen=True)
+class ComponentMaterialization:
+    """Canonical Events and pairs derived from one resolver component."""
+
+    events: tuple[dict[str, Any], ...]
+    coexistence_pairs: tuple[tuple[str, str], ...]
 
 
 def alias_component_ids(components: Sequence[Component]) -> dict[str, str]:
@@ -113,6 +122,8 @@ def resolve_block(
         if not isinstance(alias, str) or alias not in components_by_alias:
             raise ResolutionError(f"proposal references unknown component alias {alias!r}")
         component = components_by_alias[alias]
+        if index >= 24:
+            raise ResolutionError("resolver response contains more than 24 proposals")
         expected_position = f"p{index:02d}"
         position = proposal.get("position_alias")
         if not isinstance(position, str) or position != expected_position or position in positions:
@@ -157,6 +168,8 @@ def resolve_block(
         relations = proposal.get("coexistence_relations", [])
         if not isinstance(relations, Sequence) or isinstance(relations, (str, bytes)):
             raise ResolutionError("coexistence_relations must be an array")
+        if len(relations) > 8:
+            raise ResolutionError("coexistence_relations may contain at most 8 relations")
         relation_targets: set[str] = set()
         for relation in relations:
             if not isinstance(relation, Mapping):
@@ -164,6 +177,8 @@ def resolve_block(
             target = relation.get("other_proposal_alias")
             if not isinstance(target, str):
                 raise ResolutionError("coexistence relation target must be a proposal alias")
+            if relation.get("relation") != "distinct_material_development":
+                raise ResolutionError("unsupported coexistence relation")
             if target in relation_targets or target == position:
                 raise ResolutionError("coexistence relations must target distinct proposals once")
             relation_targets.add(target)
@@ -210,45 +225,22 @@ def resolve_block(
         if (target, position) not in relation_pairs:
             raise ResolutionError("coexistence relations must be symmetric")
 
-    # All semantic checks complete: only now construct canonical Events.
+    # All block-wide semantic checks complete: only now construct canonical Events.
     records: list[tuple[str, str, Mapping[str, Any], dict[str, Any]]] = []
     for alias, component in zip(aliases, block.components, strict=True):
-        for proposal in proposals_by_alias[alias]:
-            position = proposal["position_alias"]
-            event = _build_component_event(
-                component=component,
-                proposal=proposal,
-                ledger=ledger,
-                resolver=resolver,
-                subject_zh_by_entity=subject_zh_by_entity,
-            )
-            records.append((alias, position, proposal, event))
+        materialized = materialize_component_events(
+            component=component,
+            proposals=proposals_by_alias[alias],
+            ledger=ledger,
+            resolver=resolver,
+            subject_zh_by_entity=subject_zh_by_entity,
+        )
+        records.extend(
+            (alias, proposal["position_alias"], proposal, event)
+            for proposal, event in zip(proposals_by_alias[alias], materialized.events, strict=True)
+        )
 
-    family_members: dict[tuple[str, str], list[str]] = {}
-    for alias, position, proposal, event in records:
-        label = proposal["story_family_label"]
-        key = (alias, label) if label != "unknown" else (alias, position)
-        family_members.setdefault(key, []).append(event["event_id"])
-    event_by_position = {position: event for _, position, _, event in records}
-    pair_by_position: dict[str, set[tuple[str, str]]] = {
-        position: set() for _, position, _, _ in records
-    }
-    for _, position, proposal, _ in records:
-        for relation in proposal["coexistence_relations"]:
-            target_event = event_by_position[relation["other_proposal_alias"]]
-            pair = tuple(
-                sorted((event_by_position[position]["event_id"], target_event["event_id"]))
-            )
-            pair_by_position[position].add(pair)
-
-    events: list[dict[str, Any]] = []
-    for alias, position, proposal, source_event in records:
-        event = dict(source_event)
-        label = proposal["story_family_label"]
-        key = (alias, label) if label != "unknown" else (alias, position)
-        event["story_family_id"] = story_family_id(family_members[key])
-        event["coexistence_pair_ids"] = [list(pair) for pair in sorted(pair_by_position[position])]
-        events.append(event)
+    events = [event for _, _, _, event in records]
 
     normalized_unresolved: list[dict[str, Any]] = []
     for alias, component in zip(aliases, block.components, strict=True):
@@ -262,6 +254,126 @@ def resolve_block(
                 }
             )
     return events, normalized_unresolved
+
+
+def materialize_component_events(
+    *,
+    component: Component,
+    proposals: Sequence[Mapping[str, Any]],
+    ledger: Ledger,
+    resolver: EntityResolver,
+    subject_zh_by_entity: Mapping[str, str] | None = None,
+) -> ComponentMaterialization:
+    """Build all Events, then derive one component's family and pair semantics."""
+    if len(proposals) > 24:
+        raise ResolutionError("resolver response contains more than 24 proposals")
+
+    normalized: list[tuple[str, Mapping[str, Any], tuple[Mapping[str, Any], ...]]] = []
+    positions: set[str] = set()
+    for proposal in proposals:
+        if not isinstance(proposal, Mapping):
+            raise ResolutionError("proposal must be an object")
+        position = proposal.get("position_alias")
+        if (
+            not isinstance(position, str)
+            or len(position) != 3
+            or not position.startswith("p")
+            or not position[1:].isdigit()
+            or not 0 <= int(position[1:]) < 24
+            or position in positions
+        ):
+            raise ResolutionError("proposal position_alias must be a unique p00..p23 alias")
+        positions.add(position)
+        label = proposal.get("story_family_label")
+        if not isinstance(label, str) or not label:
+            raise ResolutionError("story_family_label must be a non-empty string")
+        relations = proposal.get("coexistence_relations", [])
+        if not isinstance(relations, Sequence) or isinstance(relations, (str, bytes)):
+            raise ResolutionError("coexistence_relations must be an array")
+        if len(relations) > 8:
+            raise ResolutionError("coexistence_relations may contain at most 8 relations")
+        relation_targets: set[str] = set()
+        for relation in relations:
+            if not isinstance(relation, Mapping):
+                raise ResolutionError("coexistence relation must be an object")
+            target = relation.get("other_proposal_alias")
+            if not isinstance(target, str):
+                raise ResolutionError("coexistence relation target must be a proposal alias")
+            if relation.get("relation") != "distinct_material_development":
+                raise ResolutionError("unsupported coexistence relation")
+            if target in relation_targets or target == position:
+                raise ResolutionError("coexistence relations must target distinct proposals once")
+            relation_targets.add(target)
+        normalized.append((position, proposal, tuple(relations)))
+
+    records: list[tuple[str, Mapping[str, Any], dict[str, Any]]] = []
+    for position, proposal, _ in normalized:
+        event = _build_component_event(
+            component=component,
+            proposal=proposal,
+            ledger=ledger,
+            resolver=resolver,
+            subject_zh_by_entity=subject_zh_by_entity,
+        )
+        records.append((position, proposal, event))
+
+    event_by_position = {position: event for position, _, event in records}
+    labels_by_position = {
+        position: proposal["story_family_label"] for position, proposal, _ in records
+    }
+    family_members: dict[str, list[str]] = {}
+    for position, label in labels_by_position.items():
+        if label != "unknown":
+            family_members.setdefault(label, []).append(event_by_position[position]["event_id"])
+
+    relation_pairs: set[tuple[str, str]] = set()
+    pair_by_position: dict[str, set[tuple[str, str]]] = {
+        position: set() for position in event_by_position
+    }
+    directed_relations: set[tuple[str, str]] = set()
+    for position, proposal, relations in normalized:
+        for relation in relations:
+            target = relation.get("other_proposal_alias")
+            if relation.get("relation") != "distinct_material_development":
+                raise ResolutionError("unsupported coexistence relation")
+            if target not in event_by_position:
+                raise ResolutionError(
+                    f"coexistence relation references unknown proposal {target!r}"
+                )
+            if target == position:
+                raise ResolutionError("coexistence relation cannot be self-referential")
+            if labels_by_position[position] == "unknown":
+                raise ResolutionError("coexistence relation cannot attach to unknown family")
+            if labels_by_position[position] != labels_by_position[target]:
+                raise ResolutionError("coexistence relation crosses family boundaries")
+            if len(family_members[labels_by_position[position]]) < 2:
+                raise ResolutionError("coexistence relation cannot attach to singleton family")
+            directed_relations.add((position, target))
+
+    for position, target in directed_relations:
+        if (target, position) not in directed_relations:
+            raise ResolutionError("coexistence relations must be symmetric")
+        pair = tuple(
+            sorted((event_by_position[position]["event_id"], event_by_position[target]["event_id"]))
+        )
+        relation_pairs.add(pair)
+        pair_by_position[position].add(pair)
+        pair_by_position[target].add(pair)
+
+    finalized: list[dict[str, Any]] = []
+    for position, proposal, source_event in records:
+        label = proposal["story_family_label"]
+        members = family_members.get(label, []) if label != "unknown" else []
+        family = story_family_id(members or [source_event["event_id"]])
+        event = dict(source_event)
+        event["story_family_id"] = family
+        event["coexistence_pair_ids"] = [list(pair) for pair in sorted(pair_by_position[position])]
+        finalized.append(event)
+
+    return ComponentMaterialization(
+        events=tuple(finalized),
+        coexistence_pairs=tuple(sorted(relation_pairs)),
+    )
 
 
 def _reference_list(value: Mapping[str, Any], field: str) -> list[str]:
@@ -307,33 +419,6 @@ def _build_component_event(
     )
 
 
-def resolve_component_events(
-    *,
-    component: Component,
-    proposals: Sequence[Mapping[str, Any]],
-    ledger: Ledger,
-    resolver: EntityResolver,
-    subject_zh_by_entity: Mapping[str, str] | None = None,
-) -> list[dict[str, Any]]:
-    """Construct canonical Events from one component's proposals.
-
-    Event IDs derive from the versioned canonical tuple of sorted evidence
-    IDs, event type, entity IDs, and the atomic discriminator of complete
-    canonical fact keys. Scripts own IDs/fully_known_at/labels.
-    """
-    events: list[dict[str, Any]] = []
-    for proposal in proposals:
-        event = _build_component_event(
-            component=component,
-            proposal=proposal,
-            ledger=ledger,
-            resolver=resolver,
-            subject_zh_by_entity=subject_zh_by_entity,
-        )
-        events.append(event)
-    return events
-
-
 def _subject_zh(entity_ids, resolver, override) -> str:
     if override and entity_ids:
         for eid in entity_ids:
@@ -344,34 +429,3 @@ def _subject_zh(entity_ids, resolver, override) -> str:
         if resolved.entity_id:
             return resolved.display_name
     return "相关主体"
-
-
-def finalize_story_families(events: Sequence[Mapping[str, Any]]) -> tuple[dict[str, Any], ...]:
-    """Derive canonical family IDs and coexistence pairs after Event IDs exist."""
-    member_events = [e["event_id"] for e in events]
-    story_family_id(member_events) if member_events else None
-    [e.get("coexistence_pair_ids", []) for e in events]
-    return tuple(dict(event) for event in events)
-
-
-def assign_family_ids(events: Sequence[Mapping[str, Any]]) -> tuple[dict[str, Any], ...]:
-    """Component-local family derivation from sorted member Event IDs.
-
-    Within one component, proposals sharing a non-unknown family label become
-    one canonical family whose ID derives from sorted member Event IDs.
-    """
-    label_groups: dict[str, list[str]] = {}
-    for e in events:
-        label = e.get("_family_label", "unknown")
-        if label != "unknown":
-            label_groups.setdefault(label, []).append(e["event_id"])
-
-    result: list[dict[str, Any]] = []
-    for source_event in events:
-        e = dict(source_event)
-        label = e.get("_family_label", "unknown")
-        members = label_groups.get(label, [e["event_id"]])
-        e["story_family_id"] = story_family_id(members)
-        e.pop("_family_label", None)
-        result.append(e)
-    return tuple(result)

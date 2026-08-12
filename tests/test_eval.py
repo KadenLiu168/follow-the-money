@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from follow_the_money.config import load_config
 from follow_the_money.eval_live import (
     BudgetState,
     LiveEvalError,
@@ -32,6 +33,9 @@ from follow_the_money.eval_offline import (
     load_golden_dataset,
     run_offline_evaluation,
 )
+from follow_the_money.events import story_family_id
+from follow_the_money.schema import validate_against
+from follow_the_money.selection import SelectionInput, select_events
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATASET = REPO_ROOT / "evals" / "dataset"
@@ -199,6 +203,136 @@ def test_dataset_unique_dates():
     days = load_golden_dataset(DATASET)
     dates = [d.date for d in days]
     assert len(dates) == len(set(dates))
+
+
+def test_recorded_story_family_uses_canonical_pairs_and_selection_trace():
+    manifest = json.loads((DATASET / "manifest.json").read_bytes())
+    entry = next(day for day in manifest["days"] if day["date"] == "2024-03-20")
+    outputs = json.loads((DATASET / entry["outputs"]).read_bytes())
+    members = next(iter(entry["story_families"].values()))
+    family = next(iter(entry["story_families"]))
+    assert family == story_family_id(members)
+
+    resolver = outputs["recorded_llm_outputs"]["resolver"]
+    proposals = {proposal["position_alias"]: proposal for proposal in resolver["proposals"]}
+    assert {proposal["story_family_label"] for proposal in proposals.values()} == {"f00"}
+    assert proposals["p00"]["coexistence_relations"] == [
+        {"other_proposal_alias": "p01", "relation": "distinct_material_development"}
+    ]
+    assert proposals["p01"]["coexistence_relations"] == [
+        {"other_proposal_alias": "p00", "relation": "distinct_material_development"}
+    ]
+    pair = tuple(entry["coexistence_pairs"][0])
+    assert pair == tuple(sorted(pair))
+
+    scoring = load_config(
+        REPO_ROOT / "config" / "config.yaml",
+        REPO_ROOT / "config" / "providers.yaml",
+        require_verified_enabled=False,
+    ).scoring
+    recorded = select_events(
+        [
+            SelectionInput(
+                event_id=members[0],
+                fully_known_at="2024-03-20T00:00:00Z",
+                base_priority=Decimal(80),
+                confidence="high",
+                component_coverage=Decimal(1),
+                story_family_id=family,
+                coexistence_pairs=frozenset({pair}),
+            ),
+            SelectionInput(
+                event_id=members[1],
+                fully_known_at="2024-03-20T00:00:00Z",
+                base_priority=Decimal(75),
+                confidence="high",
+                component_coverage=Decimal(1),
+                story_family_id=family,
+                coexistence_pairs=frozenset({pair}),
+            ),
+        ],
+        scoring,
+    )
+    assert [selected.event_id for selected in recorded.selected] == list(members)
+    assert [selected.final_priority for selected in recorded.selected] == [
+        Decimal(80),
+        Decimal(75),
+    ]
+
+    routine_family = story_family_id(["routine_first", "routine_later"])
+    penalized = select_events(
+        [
+            SelectionInput(
+                event_id="routine_first",
+                fully_known_at="2024-03-20T00:00:00Z",
+                base_priority=Decimal(80),
+                confidence="high",
+                component_coverage=Decimal(1),
+                story_family_id=routine_family,
+            ),
+            SelectionInput(
+                event_id="routine_later",
+                fully_known_at="2024-03-20T00:00:00Z",
+                base_priority=Decimal(54),
+                confidence="high",
+                component_coverage=Decimal(1),
+                story_family_id=routine_family,
+            ),
+        ],
+        scoring,
+    )
+    assert [selected.event_id for selected in penalized.selected] == ["routine_first"]
+    assert penalized.ineligible_reasons == {}
+
+
+def test_recorded_three_member_story_family_replay_exercises_non_transitive_pairs():
+    fixture = json.loads((DATASET / "story_family_replay.json").read_bytes())
+    validate_against("resolver-output.schema.json", fixture["resolver"])
+    events = fixture["events"]
+    family = fixture["story_family_id"]
+    pairs = {tuple(pair) for pair in fixture["coexistence_pairs"]}
+    assert family == story_family_id([event["event_id"] for event in events])
+
+    proposals = fixture["resolver"]["proposals"]
+    assert [proposal["position_alias"] for proposal in proposals] == ["p00", "p01", "p02"]
+    assert {proposal["story_family_label"] for proposal in proposals} == {"f0"}
+    declared_pairs = {
+        tuple(sorted((proposal["position_alias"], relation["other_proposal_alias"])))
+        for proposal in proposals
+        for relation in proposal["coexistence_relations"]
+    }
+    assert declared_pairs == {("p00", "p01"), ("p01", "p02")}
+
+    scoring = load_config(
+        REPO_ROOT / "config" / "config.yaml",
+        REPO_ROOT / "config" / "providers.yaml",
+        require_verified_enabled=False,
+    ).scoring
+    result = select_events(
+        [
+            SelectionInput(
+                event_id=event["event_id"],
+                fully_known_at=event["fully_known_at"],
+                base_priority=Decimal(event["base_priority"]),
+                confidence="high",
+                component_coverage=Decimal(1),
+                story_family_id=family,
+                coexistence_pairs=frozenset(pairs),
+            )
+            for event in events
+        ],
+        scoring,
+    )
+    by_id = {selected.event_id: selected for selected in result.selected}
+    assert {selected.event_id for selected in result.selected} == set(
+        fixture["expected"]["selected_event_ids"]
+    )
+    assert {event_id: str(selected.final_priority) for event_id, selected in by_id.items()} == {
+        event_id: priority
+        for event_id, priority in fixture["expected"]["final_priorities"].items()
+        if event_id in by_id
+    }
+    assert events[2]["event_id"] not in by_id
 
 
 def test_dataset_invalid_fixture_rejected(tmp_path):

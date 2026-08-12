@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 
 import pytest
@@ -214,7 +215,7 @@ def _item(
     confidence: str = "high",
     coverage: str = "1.0",
     family: str | None = None,
-    distinct_first: bool = False,
+    coexistence_pairs: frozenset[tuple[str, str]] = frozenset(),
     analysis: bool = True,
     packet: bool = True,
     conflict_free: bool = True,
@@ -232,7 +233,7 @@ def _item(
         conflict_free=conflict_free,
         breaking_label=breaking,
         story_family_id=family,
-        distinct_first_member=distinct_first,
+        coexistence_pairs=coexistence_pairs,
     )
 
 
@@ -345,11 +346,21 @@ def test_story_family_penalty():
     assert by_id["e2"].format == "full"
 
 
+def test_story_family_penalty_uses_configured_value():
+    scoring = replace(_scoring(), family_penalty="20")
+    result = select_events(
+        [_item("e1", "80", family="fam_x"), _item("e2", "75", family="fam_x")],
+        scoring,
+    )
+    by_id = {s.event_id: s for s in result.selected}
+    assert by_id["e2"].final_priority == Decimal(55)
+
+
 def test_distinct_first_member_exempt():
     scoring = _scoring()
     items = [
         _item("e1", "80", family="fam_x"),
-        _item("e2", "75", family="fam_x", distinct_first=True),  # exempt
+        _item("e2", "75", family="fam_x", coexistence_pairs=frozenset({("e1", "e2")})),
     ]
     result = select_events(items, scoring)
     by_id = {s.event_id: s for s in result.selected}
@@ -362,13 +373,38 @@ def test_penalty_not_transitive():
     # first member A absent).
     items = [
         _item("A", "80", family="fam_z"),
-        _item("B", "75", family="fam_z", distinct_first=True),
-        _item("C", "70", family="fam_z"),  # no pair with A => penalized
+        _item("B", "75", family="fam_z", coexistence_pairs=frozenset({("A", "B"), ("B", "C")})),
+        _item("C", "70", family="fam_z", coexistence_pairs=frozenset({("A", "B"), ("B", "C")})),
     ]
     result = select_events(items, scoring)
     by_id = {s.event_id: s for s in result.selected}
     assert by_id["B"].final_priority == Decimal(75)
     assert by_id["C"].final_priority == Decimal(55)
+
+
+def test_later_to_later_pair_does_not_exempt_against_frozen_first():
+    scoring = _scoring()
+    pairs = frozenset({("B", "C")})
+    result = select_events(
+        [
+            _item("A", "80", family="fam_z", coexistence_pairs=pairs),
+            _item("B", "75", family="fam_z", coexistence_pairs=pairs),
+            _item("C", "70", family="fam_z", coexistence_pairs=pairs),
+        ],
+        scoring,
+    )
+    by_id = {s.event_id: s for s in result.selected}
+    assert by_id["B"].final_priority == Decimal(60)
+    assert by_id["C"].final_priority == Decimal(55)
+
+
+def test_family_penalty_can_cross_compact_threshold():
+    scoring = _scoring()
+    result = select_events(
+        [_item("A", "80", family="fam_z"), _item("B", "54", family="fam_z")],
+        scoring,
+    )
+    assert [s.event_id for s in result.selected] == ["A"]
 
 
 def test_priority_floor_zero():
