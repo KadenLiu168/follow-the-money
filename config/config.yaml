@@ -1,0 +1,277 @@
+# Follow the Money — shipped v1 default configuration (closed and versioned).
+#
+# Every value here is a normative v1 default. The loader rejects unknown
+# keys, missing required keys, lone surrogates, and closed-enum violations
+# rather than inventing hidden defaults.
+#
+# schema_version: 1 — consumers fail closed on any other major.
+
+schema_version: 1
+name: follow-the-money
+
+timezone: Asia/Shanghai
+output_root: feeds
+runs_root: runs
+freshness_limit_minutes: 30
+normal_lag_hours: 2
+
+# ---------------------------------------------------------------------------
+# Feed runtime limits (design section: provider runtime)
+# ---------------------------------------------------------------------------
+feed:
+  bootstrap_lookback_hours: 72
+  gap_threshold_hours: 72
+  calendar_horizon_hours: 26
+  pre_commit_deadline_seconds: 300
+  commit_reserve_seconds: 15
+  global_concurrency: 8
+  per_host_concurrency: 2
+  http_attempt_timeout_seconds: 20
+  max_attempts: 3
+  max_decompressed_response_bytes: 10485760   # 10 MiB
+  max_items_per_provider: 2000
+  max_title_code_points: 300
+  max_snippet_code_points: 1000
+  max_url_characters: 2048
+  max_observations_per_instrument: 260
+  max_serialized_feed_bytes: 52428800         # 50 MiB
+
+# ---------------------------------------------------------------------------
+# Single-model LLM runtime (design section 9)
+# ---------------------------------------------------------------------------
+llm:
+  model: ""               # deployment configuration; startup rejects empty
+  organization: null
+  project: null
+  max_attempts_per_invocation: 2
+  static_request_cap_bytes: 16384             # 16 KiB prompt+schema+envelope
+  max_resolver_blocks: 40
+  max_analyst_packets: 20
+  brief_pre_commit_deadline_seconds: 300
+  brief_commit_reserve_seconds: 15
+  resolver:
+    attempt_timeout_seconds: 30
+    max_output_tokens: 72000
+    dynamic_cap_bytes: 32768                  # 32 KiB per resolver block
+    concurrency: 4
+    max_attempts: 2
+  analyst:
+    attempt_timeout_seconds: 45
+    max_output_tokens: 72000
+    dynamic_cap_bytes: 49152                  # 48 KiB per analyst packet
+    concurrency: 4
+    max_attempts: 2
+  editor:
+    attempt_timeout_seconds: 45
+    max_output_tokens: 72000
+    dynamic_cap_bytes: 73728                  # 72 KiB editor projection
+    concurrency: 1
+    max_attempts: 2
+  audit:
+    attempt_timeout_seconds: 30
+    max_output_tokens: 56000
+    dynamic_cap_bytes: 73728                  # 72 KiB audit projection
+    concurrency: 1
+    max_attempts: 2
+
+# ---------------------------------------------------------------------------
+# Scoring (design sections 11-13). Weights are normative v1 values.
+# ---------------------------------------------------------------------------
+scoring:
+  significance_weights: [30, 20, 20, 20, 10]
+  freshness_bins: [[6, 100], [12, 75], [24, 50], [48, 25]]
+  freshness_older_score: 0
+  morning_weights: [40, 25, 20, 15]
+  base_priority_weights: ["0.70", "0.30"]
+  min_component_coverage: "60"
+  full_priority_threshold: "60"
+  compact_priority_threshold: "40"
+  family_penalty: "15"
+  target_count: 10
+  hard_max_count: 12
+  max_full_events: 3
+  anomaly_z_threshold: "2.0"
+  scope_map:
+    single_entity: 25
+    sector: 50
+    single_market: 75
+    cross_market: 100
+    unknown: 0
+  fundamental_depth_map:
+    headline: 25
+    operating_or_policy: 50
+    balance_sheet_or_liquidity: 75
+    systemic: 100
+    unknown: 0
+  reversibility_map:
+    high: 25
+    medium: 50
+    low: 75
+    effectively_irreversible: 100
+    unknown: 0
+  structural_horizon_map:
+    intraday: 0
+    days: 25
+    weeks: 50
+    months: 75
+    years_plus: 100
+    unknown: 0
+  surprise_bins:
+    - [0.5, "<", 0]
+    - [1, "<", 25]
+    - [2, "<", 50]
+    - [3, "<", 75]
+    - [3, ">=", 100]
+  exposure_map:
+    direct: 100
+    indirect: 50
+    none: 0
+    unknown: 0
+  catalyst_map:
+    present: 100
+    absent: 0
+  asset_groups:
+    - { group: cn_hk_equities, name_zh: "中国香港股票", proxies: [csi300, hsi] }
+    - { group: us_equities, name_zh: "美国股票", proxies: [sp500] }
+    - { group: us_rates, name_zh: "美国利率", proxies: [us2y, us10y] }
+    - { group: china_rates, name_zh: "中国利率", proxies: [cn10y] }
+    - { group: usd_fx, name_zh: "美元汇率", proxies: [dxy, usdcnh] }
+    - { group: industrial_commodities, name_zh: "工业金属", proxies: [copper] }
+    - { group: energy, name_zh: "能源", proxies: [wti] }
+    - { group: precious_metals, name_zh: "贵金属", proxies: [gold] }
+    - { group: crypto, name_zh: "加密货币", proxies: [btc] }
+  surprise_scales:
+    - { series_id: us_cpi_all_items_sa_mom, scale: "0.1", note: "percentage points" }
+    - { series_id: us_core_pce_mom, scale: "0.1", note: "percentage points" }
+    - { series_id: us_ppi_final_demand_sa_mom, scale: "0.1", note: "percentage points" }
+
+# ---------------------------------------------------------------------------
+# Market State Vector rules (design section 14)
+# ---------------------------------------------------------------------------
+market_state:
+  z_supportive: "0.5"
+  breadth_supportive: "0.20"
+  regime_sum_threshold: "2"
+  risk_appetite_min_votes: 2
+  rates_min_votes: 1
+  liquidity_min_votes: 1
+  growth_min_votes: 1
+  inflation_min_votes: 1
+  required_known_dimensions: 4
+  rules_order: [risk_off, risk_on, neutral]
+
+# ---------------------------------------------------------------------------
+# Watchlist calendar policy (design section 16)
+# ---------------------------------------------------------------------------
+calendar:
+  allowed_priorities: [critical, high]
+  max_items: 6
+  stale_after_minutes: 30
+  hard_lag_hours: 2
+
+# ---------------------------------------------------------------------------
+# Audit severity mapping (design section 17)
+# ---------------------------------------------------------------------------
+audit_severity:
+  critical:
+    - causal_overclaim
+    - inference_as_fact
+    - unsupported_conclusion
+    - fact_modification
+    - trading_instruction
+    - wrong_language
+  warning:
+    - excessive_certainty
+    - missing_uncertainty
+
+# ---------------------------------------------------------------------------
+# Safety lexicon (design section 16). Descriptive false positives are
+# protected by explicit exceptions and fixtures.
+# ---------------------------------------------------------------------------
+safety_lexicon:
+  zh_terms: ["买入", "卖出", "加仓", "减仓", "建仓", "清仓", "入场", "离场", "止损", "止盈", "目标价"]
+  en_terms:
+    - buy
+    - sell
+    - add
+    - reduce
+    - position size
+    - entry
+    - exit
+    - stop-loss
+    - target price
+  descriptive_exceptions:
+    - "该政策旨在抑制过热"
+    - "基金净买入额"
+    - "净卖出规模"
+    - historical
+    - descriptive
+
+# ---------------------------------------------------------------------------
+# Rate registry contract
+# ---------------------------------------------------------------------------
+rate_registry:
+  version: "1"
+  crash_cooldown_hours: 24
+  schema_file: rate-registry.json
+
+# ---------------------------------------------------------------------------
+# The 13 v1 dashboard roles (canonical order, design section 14).
+# ---------------------------------------------------------------------------
+roles:
+  - { id: sp500,  name: "S&P 500",          name_zh: "标普500",       instrument: "^GSPC",     unit: "index",  session_class: exchange_traded, kind: index }
+  - { id: csi300, name: "CSI 300",          name_zh: "沪深300",       instrument: "000300.SS",  unit: "index",  session_class: exchange_traded, kind: index }
+  - { id: hsi,    name: "Hang Seng",        name_zh: "恒生指数",      instrument: "^HSI",      unit: "index",  session_class: exchange_traded, kind: index }
+  - { id: vix,    name: "VIX",              name_zh: "VIX波动率",     instrument: "^VIX",      unit: "index",  session_class: exchange_traded, kind: index }
+  - { id: us2y,   name: "US 2-Year Yield",  name_zh: "美债2年期",     instrument: "^IRX",      unit: "percent", session_class: exchange_traded, kind: yield }
+  - { id: us10y,  name: "US 10-Year Yield", name_zh: "美债10年期",    instrument: "^TNX",      unit: "percent", session_class: exchange_traded, kind: yield }
+  - { id: cn10y,  name: "China 10-Year Yield", name_zh: "中债10年期", instrument: "CN10Y",     unit: "percent", session_class: exchange_traded, kind: yield }
+  - { id: dxy,    name: "DXY",              name_zh: "美元指数",      instrument: "DX-Y.NYB",   unit: "index",  session_class: exchange_traded, kind: fx }
+  - { id: usdcnh, name: "USD/CNH",          name_zh: "美元/离岸人民币", instrument: "CNH=X",   unit: "fx",     session_class: exchange_traded, kind: fx }
+  - { id: copper, name: "Copper",           name_zh: "铜",            instrument: "HG=F",      unit: "price",  session_class: exchange_traded, kind: commodity }
+  - { id: wti,    name: "WTI Crude",        name_zh: "WTI原油",       instrument: "CL=F",      unit: "price",  session_class: exchange_traded, kind: commodity }
+  - { id: gold,   name: "Gold",             name_zh: "黄金",          instrument: "GC=F",      unit: "price",  session_class: exchange_traded, kind: commodity }
+  - { id: btc,    name: "Bitcoin",          name_zh: "比特币",        instrument: "BTC-USD",   unit: "price",  session_class: continuous_247, kind: crypto }
+
+# ---------------------------------------------------------------------------
+# Sessions
+# ---------------------------------------------------------------------------
+sessions:
+  - { id: us_equities,  calendar: XNYS, session_class: exchange_traded, timezone: America/New_York, annualization_factor: "252" }
+  - { id: cn_equities,  calendar: XSHG, session_class: exchange_traded, timezone: Asia/Shanghai,     annualization_factor: "252" }
+  - { id: hk_equities,  calendar: XHKG, session_class: exchange_traded, timezone: Asia/Hong_Kong,     annualization_factor: "252" }
+  - { id: crypto_247,   calendar: XETR, session_class: continuous_247,  timezone: UTC,               annualization_factor: "365" }
+  - { id: commodity_245, calendar: XNYM, session_class: continuous_245, timezone: America/New_York,  annualization_factor: "252" }
+
+# ---------------------------------------------------------------------------
+# Source families (corroboration counting) and entities (resolution registry).
+# ---------------------------------------------------------------------------
+source_families:
+  - { id: federal_reserve, name: "Federal Reserve", tier: "Tier 1" }
+  - { id: bls,             name: "U.S. Bureau of Labor Statistics", tier: "Tier 1" }
+  - { id: sec,             name: "SEC EDGAR", tier: "Tier 1" }
+  - { id: cftc,            name: "CFTC", tier: "Tier 1" }
+  - { id: pboc,            name: "中国人民银行", tier: "Tier 1" }
+  - { id: nbs,             name: "国家统计局", tier: "Tier 1" }
+  - { id: sse,             name: "上海证券交易所", tier: "Tier 1" }
+  - { id: szse,            name: "深圳证券交易所", tier: "Tier 1" }
+  - { id: yahoo,           name: "Yahoo Finance", tier: "Tier 2" }
+
+entities:
+  - { id: ent_fed,        name: "Federal Reserve",   name_zh: "美联储",     aliases: ["Fed", "FOMC", "Federal Reserve System"], kind: institution }
+  - { id: ent_ecb,        name: "European Central Bank", name_zh: "欧洲央行", aliases: ["ECB"], kind: institution }
+  - { id: ent_pboc,       name: "中国人民银行",       name_zh: "中国人民银行", aliases: ["PBOC", "央行"], kind: institution }
+  - { id: ent_treasury,   name: "U.S. Treasury",     name_zh: "美国财政部", aliases: ["UST", "Treasury"], kind: institution }
+
+# ---------------------------------------------------------------------------
+# Watched companies for SEC EDGAR filing filtering.
+# ---------------------------------------------------------------------------
+watched_companies:
+  - { cik: "0001067983", name: "Berkshire Hathaway", tickers: [BRK.A, BRK.B] }
+  - { cik: "0001336528", name: "Pershing Square Capital", tickers: [] }
+  - { cik: "0001539579", name: "Scion Asset Management", tickers: [] }
+  - { cik: "0001535213", name: "Baupost Group", tickers: [] }
+  - { cik: "0000926522", name: "Oaktree Capital Management", tickers: [] }
+  - { cik: "0001499575", name: "ARK Investment Management", tickers: [] }
+  - { cik: "0001160822", name: "Tiger Global Management", tickers: [] }
+  - { cik: "0001098249", name: "Coatue Management", tickers: [] }

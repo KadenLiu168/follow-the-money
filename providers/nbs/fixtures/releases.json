@@ -1,0 +1,19 @@
+{
+  "releases": [
+    {
+      "title": "2026年7月份规模以上工业增加值增长5.4%",
+      "url": "https://www.stats.gov.cn/sj/zxfb/202608/t20260811_1890123.html",
+      "released_at": "2026-08-11T00:12:00Z",
+      "series_id": "cn_industrial_production_yoy",
+      "observation_period": "2026-07",
+      "actual": "5.4",
+      "previous": "5.3",
+      "unit": "percent"
+    },
+    {
+      "title": "国家统计局关于2026年7月国民经济运行情况的发布",
+      "url": "https://www.stats.gov.cn/sj/zxfb/202608/t20260811_1890120.html",
+      "released_at": "2026-08-11T00:10:00Z"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "body_charset": "utf-8",
+  "body_file": "2024-07-22__evt_pboc_20240722.body",
+  "body_sha256": "58eb36197cfa1aa45b71e0f436f97cd9be5e57aff0e94afb787de2ecf11d6e13",
+  "body_size": 14457,
+  "content_type": "text/html; charset=utf-8",
+  "date": "2024-07-22",
+  "event_id": "evt_pboc_20240722",
+  "fetch_url": "https://www.xinhuanet.com/20240722/86cf19b6416341ae8f2c4d8bc5bec219/c.html",
+  "final_url": "https://www.xinhuanet.com/20240722/86cf19b6416341ae8f2c4d8bc5bec219/c.html",
+  "http_status": 200,
+  "provider_id": "pboc",
+  "retrieved_at": "2026-08-11T00:00:00Z",
+  "schema_version": 1,
+  "source_url": "https://www.xinhuanet.com/20240722/86cf19b6416341ae8f2c4d8bc5bec219/c.html",
+  "title": "下降10个基点！1年期LPR降为3.35%"
+}

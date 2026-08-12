@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+<title>Federal Reserve Press Releases</title>
+<item>
+<title>Federal Reserve issues FOMC statement</title>
+<link>https://www.federalreserve.gov/newsevents/pressreleases/monetary20260811a.htm</link>
+<guid isPermaLink="false">monetary20260811a</guid>
+<pubDate>Tue, 11 Aug 2026 00:10:00 +0000</pubDate>
+</item>
+<item>
+<title>Federal Reserve announces the establishment of a temporary FIMA repo facility</title>
+<link>https://www.federalreserve.gov/newsevents/pressreleases/monetary20260811b.htm</link>
+<guid isPermaLink="false">monetary20260811b</guid>
+<pubDate>Tue, 11 Aug 2026 00:05:00 +0000</pubDate>
+</item>
+</channel>
+</rss>

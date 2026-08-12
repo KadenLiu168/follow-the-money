@@ -1,0 +1,17 @@
+{
+  "body_charset": "utf-8",
+  "body_file": "2024-04-12__evt_pboc_20240412.body",
+  "body_sha256": "7cfa376a861aa2a262899077793068dbf8cb7350fe143d4acd12d0fa6e12c4e0",
+  "body_size": 282247,
+  "content_type": "text/html;charset=utf-8",
+  "date": "2024-04-12",
+  "event_id": "evt_pboc_20240412",
+  "fetch_url": "https://wzdt.pbc.gov.cn/huilv/flex-xml/flex_xml_9.xml",
+  "final_url": "https://wzdt.pbc.gov.cn/huilv/flex-xml/flex_xml_9.xml",
+  "http_status": 200,
+  "provider_id": "pboc",
+  "retrieved_at": "2026-08-11T00:00:00Z",
+  "schema_version": 1,
+  "source_url": "https://wzdt.pbc.gov.cn/huilv/flex-xml/flex_xml_9.xml",
+  "title": "PBOC exchange-rate XML typeid=9"
+}

@@ -1,0 +1,70 @@
+# Federal Reserve — provider contract manifest
+# Contract status: verified on 2026-08-11 against the public RSS contract and
+# the checked-in fixture. The adapter remains evidence-only and bounded.
+
+contract_version: 1
+provider_id: federal_reserve
+name: Federal Reserve
+verification:
+  verified: true
+  verification_date: "2026-08-11"
+  contract_url: "https://www.federalreserve.gov/feeds/press_all.xml"
+  usage_note: >
+    Official policy statements, press releases, FOMC calendar. Public data,
+    no authentication; RSS response and source-link rules are verified.
+
+authentication: none
+user_agent: "follow-the-money/0.1 (+https://github.com/KadenLiu168/follow-the-money)"
+
+charset:
+  allowed: [utf-8]
+  bom_allowed: false
+  content_type_header: null
+
+fetch_hosts:
+  - { host: federalreserve.gov }
+  - { host: www.federalreserve.gov }
+redirect_hosts:
+  - { host: federalreserve.gov }
+
+source_link_hosts:
+  - host: federalreserve.gov
+    allow_subdomains: true
+    allowed_ports: [443]
+    allowed_query_params: []
+    drop_query_params: []
+  - host: www.federalreserve.gov
+    allow_subdomains: false
+    allowed_ports: [443]
+    allowed_query_params: []
+    drop_query_params: []
+
+rate_policy:
+  scope_id: us_gov
+  capacity: 20
+  refill_period_seconds: 60
+  minimum_interval_seconds: 1
+
+time:
+  knowledge_time: published_at
+  payload_types: [policy, calendar, macro_release]
+  calendar_capability: future_release_calendar
+
+identity:
+  stable_record_id: release_id_or_slug
+
+units:
+  policy_rate: percent
+  index: index
+
+freshness:
+  policy: source_published_within_window
+
+empty_valid_for_window: true
+pagination: none
+default_enabled: true
+
+fixture_provenance:
+  source: "Recorded from live responses on 2026-08-11; fixture-backed adapter contract."
+  files:
+    - fixtures/press_all.xml

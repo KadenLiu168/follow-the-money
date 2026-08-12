@@ -1,0 +1,17 @@
+{
+  "body_charset": "utf-8",
+  "body_file": "2024-05-17__evt_pboc_20240517.body",
+  "body_sha256": "51f918bca06addd7f955119eac68f327405c1c9eac99f95d7936c17bab566f8f",
+  "body_size": 55986,
+  "content_type": "text/html",
+  "date": "2024-05-17",
+  "event_id": "evt_pboc_20240517",
+  "fetch_url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2025092212554091417/index.html",
+  "final_url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2025092212554091417/index.html",
+  "http_status": 200,
+  "provider_id": "pboc",
+  "retrieved_at": "2026-08-11T00:00:00Z",
+  "schema_version": 1,
+  "source_url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2025092212554091417/index.html",
+  "title": "国新办举行国务院政策例行吹风会 介绍切实做好保交房工作配套政策有关情况"
+}

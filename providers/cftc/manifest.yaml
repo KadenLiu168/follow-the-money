@@ -1,0 +1,68 @@
+# CFTC COT — provider contract manifest
+# Contract status: verified on 2026-08-11 against the official COT PRE API.
+# Optional coverage: positioning output is conditional and cannot satisfy a
+# mandatory matrix row alone.
+
+contract_version: 1
+provider_id: cftc
+name: CFTC COT
+verification:
+  verified: true
+  verification_date: "2026-08-11"
+  contract_url: "https://publicreporting.cftc.gov/Commitments-of-Traders/Legacy-Futures-Only/6dca-aqww"
+  usage_note: >
+    Commitments of Traders reports and release calendar. Public data, no
+    authentication. Optional verified-only coverage; default disabled because
+    positioning is conditional in the v1 coverage matrix.
+
+authentication: none
+user_agent: "follow-the-money/0.1 (+https://github.com/KadenLiu168/follow-the-money)"
+
+charset:
+  allowed: [utf-8]
+  bom_allowed: false
+  content_type_header: null
+
+fetch_hosts:
+  - { host: cftc.gov }
+  - { host: www.cftc.gov }
+  - { host: publicreporting.cftc.gov }
+redirect_hosts:
+  - { host: cftc.gov }
+  - { host: publicreporting.cftc.gov }
+
+source_link_hosts:
+  - host: cftc.gov
+    allow_subdomains: true
+    allowed_ports: [443]
+    allowed_query_params: []
+    drop_query_params: []
+
+rate_policy:
+  scope_id: us_gov
+  capacity: 20
+  refill_period_seconds: 60
+  minimum_interval_seconds: 1
+
+time:
+  knowledge_time: report_publication_instant
+  payload_types: [positioning]
+
+identity:
+  stable_record_id: report_date_plus_instrument
+
+units:
+  percent: percent
+  contracts: contracts
+
+freshness:
+  policy: report_publication_within_window
+
+empty_valid_for_window: true
+pagination: none
+default_enabled: false
+
+fixture_provenance:
+  source: "Official CFTC Public Reporting Environment Legacy Futures-Only API, verified 2026-08-11."
+  files:
+    - fixtures/cot.json

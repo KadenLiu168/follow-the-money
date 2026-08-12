@@ -1,0 +1,17 @@
+{
+  "body_charset": "utf-8",
+  "body_file": "2024-09-13__evt_tariff_20240913.body",
+  "body_sha256": "41b83a9b0c13853738f6637cd003f138aef0cf36821554b66a68f4b936acaf44",
+  "body_size": 1576,
+  "content_type": "application/json;charset=utf-8",
+  "date": "2024-09-13",
+  "event_id": "evt_tariff_20240913",
+  "fetch_url": "https://finance.yahoo.com/quote/%5EGSPC/history",
+  "final_url": "https://finance.yahoo.com/quote/%5EGSPC/history",
+  "http_status": 200,
+  "provider_id": "yahoo_market",
+  "retrieved_at": "2026-08-11T00:00:00Z",
+  "schema_version": 1,
+  "source_url": "https://finance.yahoo.com/quote/%5EGSPC/history",
+  "title": "Yahoo Finance historical chart for ^GSPC"
+}

@@ -1,0 +1,11 @@
+[
+  {
+    "id": "cot-legacy-gold-2026-08-04",
+    "market_and_exchange_names": "GOLD - COMMODITY EXCHANGE, INC.",
+    "report_date_as_yyyy_mm_dd": "2026-08-04T00:00:00.000",
+    "contract_market_name": "GOLD",
+    "open_interest_all": "455123",
+    "noncomm_positions_long_all": "245678",
+    "noncomm_positions_short_all": "198765"
+  }
+]

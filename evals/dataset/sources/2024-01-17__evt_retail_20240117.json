@@ -1,0 +1,17 @@
+{
+  "body_charset": "utf-8",
+  "body_file": "2024-01-17__evt_retail_20240117.body",
+  "body_sha256": "e994a0b581e24ef297f70b8fcc6cf3e7fd59b6b27f311a297ba89783cff73b03",
+  "body_size": 112456,
+  "content_type": "text/html",
+  "date": "2024-01-17",
+  "event_id": "evt_retail_20240117",
+  "fetch_url": "https://www.stats.gov.cn/xxgk/jd/sjjd2020/202401/t20240117_1946672.html",
+  "final_url": "https://www.stats.gov.cn/xxgk/jd/sjjd2020/202401/t20240117_1946672.html",
+  "http_status": 200,
+  "provider_id": "nbs",
+  "retrieved_at": "2026-08-11T00:00:00Z",
+  "schema_version": 1,
+  "source_url": "https://www.stats.gov.cn/xxgk/jd/sjjd2020/202401/t20240117_1946672.html",
+  "title": "国家统计局信息公开"
+}

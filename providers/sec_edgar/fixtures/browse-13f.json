@@ -1,0 +1,13 @@
+{
+  "filings": {
+    "recent": {
+      "form": ["13F-HR", "13F-HR", "13F-HR"],
+      "filingDate": ["2026-08-08", "2026-08-05", "2026-08-01"],
+      "accessionNumber": ["0001067983-26-000014", "0001067983-26-000012", "0001067983-26-000009"],
+      "primaryDocument": ["brka-20260630.xml", "brka-20260531.xml", "brka-20260515.xml"],
+      "primaryDocDescription": ["13F-HR", "13F-HR", "13F-HR"],
+      "cik": ["0001067983", "0001067983", "0001067983"],
+      "companyName": ["Berkshire Hathaway Inc", "Berkshire Hathaway Inc", "Berkshire Hathaway Inc"]
+    }
+  }
+}

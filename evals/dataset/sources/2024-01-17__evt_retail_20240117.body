@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>国家统计局信息公开</title>
+    <link rel="stylesheet" href="../../../images/style_new_99999.css">
+    <!--<link rel="stylesheet" href="../../../images/style_new.css">-->
+    <link rel="stylesheet" href="../../../images/bottom_new.css">
+    <!--<link rel="stylesheet" href="../../../images/MEPC_xxgk_mCSB_v2019.css">-->
+    <link rel="stylesheet" href="../../../images/MEPC_xxgk_mCSB_v2019_00000.css">
+    <style>
+        .mCSB_dragger_bar{display:inline-block;width:0;}
+        .mCSB_dragger_bar{display:none;_display:none;visibility:hidden;}
+        .mCSB_draggerContainer{display:none;_display:none;visibility:hidden;}
+        .xxgkNbXq2 {
+            font-size: 16px;
+            padding-top: 20px;
+            padding-bottom: 36px;
+            padding-left: 0px;
+            border-bottom: 2px solid #cccccc;
+        }
+        .xxgkNbXq2 .title {
+            color: #4d4d4d;
+            margin-right: 10px;
+        }
+        .time {
+            color: #999;
+        }
+.xxgkNbXqCenter p {margin-bottom:0px;}
+.headInfo {
+    width: 913px;
+    margin: 10px 0px 10px;
+    padding: 8px 2px;
+    text-align: center;
+    font-size: 12px;
+    color: #686868;
+    font-size: 12px;
+    border: 1px solid gray;
+    background-color: white;
+    filter: progid:DXImageTransform.Microsoft.dropshadow(OffX=4, OffY=4, Color='gray', Positive=true);
+}
+
+.content_top {background: url(c_bg.png); padding:30px 30px 15px 30px;
+	-webkit-box-shadow: 0 0 10px #E8E8E8;
+	-moz-box-shadow: 0 0 10px #E8E8E8;
+	box-shadow: 0 0 10px #E8E8E8;
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1), z-index 0s 0.12s;
+}
+.content_top_box {
+	border: 1px #F2F2F2 solid;
+	background: #fff;
+	padding: 10px 18px;
+	-webkit-box-shadow: 0 0 10px #E8E8E8;
+	-moz-box-shadow: 0 0 10px #E8E8E8;
+	box-shadow: 0 0 10px #E8E8E8;
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1), z-index 0s 0.12s;
+}
+.content_top_box ul li {overflow: hidden; border-bottom: 1px #F0F0F0 solid; /*height: 46px;*/ line-height: 46px; font-size: 16px; clear: both;}
+.content_top_box ul li.last{border-bottom: 0;}
+.content_top_box ul li.first div{width:100%;}
+.content_top_box span {color: #0B7BCD; padding-right: 15px; border-right: 2px #E6E6E6 solid; margin-right: 12px;text-align:justify;text-align-last:justify; width: 66px; display: block; float: left;height: 26px;line-height: 26px;margin-top: 12px;}
+.content_top_box div {width: 50%; float: left;}
+
+.content_box {background: url(c_bg.png); padding: 0px 30px 33px 30px;}
+.content_box_xg {background: url(c_bg.png); padding: 0px 30px 33px 30px;}
+.content_body {
+	border: 1px #E8E8E8 solid;
+	background: #fff;
+	padding: 30px 40px;
+	overflow: hidden;
+	-webkit-box-shadow: 0 0 10px #E8E8E8;
+	-moz-box-shadow: 0 0 10px #E8E8E8;
+	box-shadow: 0 0 10px #E8E8E8;
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1), z-index 0s 0.12s;
+}
+.content_body h1 {font-size: 24px; line-height: 40px; color: #C60002; text-align: center;padding: 0px 8%;}
+.content_body .h_line {border-top: 2px #C60002 solid; height: 2px; overflow: hidden; margin: 20px 0 40px;}
+.content_body_box {line-height: 30px;}
+.content_body_box table{margin:0 auto !important;text-align: center !important;}
+.content_body_box a:link {color:blue;}
+.content_body_box a:visited {color:#551A8B}
+.content_body_box a:hover {color:#c40001}
+.content_body .content_down {border-top: 1px #989898 dashed; padding-top: 10px; margin-top: 30px;}
+.content_body_box p {font-size: 16px; line-height: 30px;}
+.content_body_box div {font-size: 16px; line-height: 30px;}
+.Accessibility {
+               float: right;
+               position: relative;
+               right: 86px;
+               padding: 16px;
+               font-size: 14px;
+               margin-top: -16px;
+}
+
+    </style>
+</head>
+<body>
+    <div class="box">
+        <div class="wrap">
+            <div class="header">
+                <div class="header-top">
+                           <div class="Accessibility">
+                           <a id="toolbarSwitch" style="color:#fff;" src="javascript:void(0)" href=" ">无障碍浏览</ a>
+                           </div>
+                    <a href="http://www.stats.gov.cn" target="_blank" title="返回首页"><img src="../../../images/logo_tj.png" alt="" /></a>
+                    <img src="../../../images/text_tj.png" alt="" style="width: 200px;" />
+                </div>
+                <div class="header-bottom">
+                    <a href="http://www.stats.gov.cn/xxgk/list2.html" target="_blank"><img src="../../../images/title.png" alt="" /></a>
+                </div>
+            </div>
+
+            <div class="main">
+
+                <div class="content-wrap">
+<!--
+                    <div class="p_search_2019 radius6">
+
+
+                        <div class="xxgk_SInputBox">
+                            <form action="" method="get" onsubmit="return checkForm1();">
+                                <input class="inp_srh_2019" id="keyword" name="keyword" placeholder="请输入您要搜索的内容" autocomplete="off" />
+                                <span class="btn_srh_2019" id="quickSearch"></span>
+                            </form>
+                        </div>
+
+                    </div>
+-->
+                    <div class="content">
+
+
+
+           <div class="content_top_box">
+                <ul>
+   
+                    <li>
+                        <div><span>索 引 号</span>410A04-0502-202401-0003</div>
+                        <div><span>信息类别</span>数据解读</div>
+                    </li>
+                    <li>
+                        <div><span>发布机构</span>国家统计局</div>
+                        <div><span>成文日期</span>2024年01月17日</div>
+                    </li>
+                    <li>
+                        <div><span>文&emsp;&emsp;号</span></div>
+                        <div><span>有 效 性</span>有效</div>
+                    </li>
+                </ul>
+          </div>
+
+
+
+								<div class="xxgkNbXq2">
+                                    <h2 class="xxgkNbXqTitle">国家统计局局长就2023年全年国民经济运行情况答记者问</h2>
+                                </div>
+
+
+                                <div class="xxgkNbXqCenter p_right_Zn">
+                                    
+                                   <div class=TRS_Editor><p align="center" class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: center; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">（2024年1月17日）</span><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></p>
+<p align="center" class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: center; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">&nbsp;</span></p>
+<p align="center" class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: center; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体"><img style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; border-top-width: 0px" alt="" src="./W020240117608950977176.jpg" oldsrc="W020240117608950977176.jpg" /></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">1月17日，国务院新闻办公室举行新闻发布会，国家统计局局长康义、国家统计局新闻发言人王冠华就2023年全年国民经济运行情况作了介绍，并回答记者提问。发布会文字实录如下：</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 楷体">　　</span></b><b><span style="font-size: 12pt; font-family: 楷体">国务院新闻办新闻局副局长、新闻发言人 寿小丽</span></b><b><span style="font-size: 12pt; font-family: 楷体">：</span></b><b><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">　　</span><span style="font-size: 12pt; font-family: 楷体">女士们、先生们，大家上午好！欢迎出席国务院新闻办新闻发布会。今天我们进行经济数据例行发布，我们邀请到国家统计局局长康义先生、国家统计局新闻发言人王冠华女士，请他们向大家介绍2023年国民经济运行情况，并回答大家关心的问题。</span><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">　　</span><span style="font-size: 12pt; font-family: 楷体">下面，我们首先请康义先生作介绍。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 宋体">　　</span></b><b><span style="font-size: 12pt; font-family: 宋体">国家统计局局长 康义</span></b><b><span style="font-size: 12pt; font-family: 宋体">：</span></b><b><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">谢谢主持人。各位媒体朋友，大家上午好。首先，我给大家介绍一下2023年国民经济运行情况。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">2023年国民经济回升向好，高质量发展扎实推进。2023年，面对复杂严峻的国际环境和艰巨繁重的国内改革发展稳定任务，在以习近平同志为核心的党中央坚强领导下，各地区各部门认真贯彻落实党中央、国务院决策部署，坚持稳中求进工作总基调，完整、准确、全面贯彻新发展理念，加快构建新发展格局，全面深化改革开放，加大宏观调控力度，着力扩大内需、优化结构、提振信心、防范化解风险，我国经济回升向好，供给需求稳步改善，转型升级积极推进，就业物价总体稳定，民生保障有力有效，高质量发展扎实推进，主要预期目标圆满实现。（2023年国民经济运行情况具体内容略，详见链接https</span><span style="font-size: 12pt; font-family: 宋体">:</span><span style="font-size: 12pt; font-family: 宋体">//www.stats.gov.cn/sj/zxfb/202401/t20240117_1946624.html）</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">接下来，我把完善城镇分年龄组调查失业率的情况给大家作一个通报。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">国家统计局高度重视劳动力调查制度完善工作，结合社会提出的建议意见，组织相关部门和专家深入探讨，研究国际标准和各国经验做法，并开展实地调研，认真梳理研究失业率的统计方法和统计口径。为更加准确完整反映青年就业失业状况，从充分考虑国情的角度出发，对分年龄组失业率统计做了两方面的调整，一是发布不包括在校学生的16—24岁劳动力失业率；二是增加发布不包括在校学生的25—29岁劳动力失业率。主要有以下两个方面的考虑：</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">一方面是为了更精准监测青年就业失业情况。2023年各月平均，我国16—24岁城镇人口中，在校学生占比6成多，近6200万人；非在校学生占比3成多，约3400万人。从我国国情看，在校学生的主要任务是学习，而不是兼职工作，如果把在校学生包含在分年龄组内，会把在校寻找兼职和毕业后寻找工作的青年混在一起，不能准确反映进入社会真正需要工作的青年人的就业失业情况。测算不包含在校学生的分年龄组失业率，有利于更准确反映进入社会的青年的就业失业情况，给予他们更加精准的就业服务，制定更加有效、有针对性的就业政策。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">另一方面是为了更完整反映青年从学校毕业到稳定工作过程中的就业失业全貌。我国青年受教育年限不断提高，目前，我国高等教育毛入学率近6成，多数青年24岁时刚毕业不久，尚处于择业期，一些人未就业或就业不稳定，至29岁时绝大多数已度过择业期，就业情况趋向稳定。社会各界非常关心青年刚走出校门时的就业情况，也非常关心他们毕业后一段时间内的就业情况。因此我局增加测算发布25—29岁劳动力失业率。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">关于发布方式，今后我局将按月在国家统计局数据发布库中发布不包含在校学生的16—24岁、25—29岁、30—59岁劳动力失业率，大家可以在数据发布库中查询数据。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">我就先介绍到这里，下面回答大家的提问。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 楷体">　　</span></b><b><span style="font-size: 12pt; font-family: 楷体">北京青年报记者</span></b><b><span style="font-size: 12pt; font-family: 楷体">：</span></b><b><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">　　</span><span style="font-size: 12pt; font-family: 楷体">想问一下总体的情况。2023年，面对世界经济复苏乏力、国内自然灾害频发、改革发展稳定任务艰巨等多重挑战，中国经济运行的总体表现情况如何？从去年来看，全年我们主要的目标任务是否得到了比较好的实现？谢谢。</span><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p align="center" class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: center; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体"><img style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; border-top-width: 0px" alt="" src="./W020240117608951136390.jpg" oldsrc="W020240117608951136390.jpg" /></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 宋体">　　</span></b><b><span style="font-size: 12pt; font-family: 宋体">康义</span></b><b><span style="font-size: 12pt; font-family: 宋体">：</span></b><b><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">谢谢您的提问。前面介绍的时候，对整个中国经济全年的表现做了比较详尽的介绍。总的来看，我们的主要预期目标圆满实现。可以说是交出了一份成色好、分量足的成绩单。对于过去一年的经济表现，可以概括为回升向好、成色十足、表现亮丽、殊为不易。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第一，回升向好。从经济增长看，2023年我国GDP超过126万亿元，增速比2022年加快2.2个百分点。分季度看呈现前低、中高、后稳的态势，向好趋势进一步巩固。按照可比价计算，2023年经济增量超过6万亿元，相当于一个中等国家一年的经济总量。人均国内生产总值稳步提高，2023年达到89358元，比上年增长5.4%。从就业看，就业形势总体改善，全年城镇调查失业率平均值比上年下降0.4个百分点，特别是农民工就业形势改善比较明显。从物价看，物价总体保持温和上涨，全年CPI上涨0.2%，核心CPI上涨0.7%。从国际收支看，全年货物出口增长0.6%，年末外汇储备超过3.2万亿美元。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第二，成色十足。去年一年统筹质的有效提升和量的合理增长，全国上下紧紧围绕高质量发展这个首要任务，推动经济在结构调整和转型升级中不断赢得优势，高质量发展成色更足。创新驱动发展战略深入实施，创新投入稳步增加。初步测算，2023年全社会研究与试验发展经费投入达到33278.2亿元，R&amp;D经费投入强度达到2.64%，比上年提高0.08个百分点。在这一年里，一些重大科技创新捷报频传，特别是制造业高端化、智能化、绿色化发展扎实推进。经济结构优化升级，服务业和消费的经济增长主引擎作用更加凸显。2023年服务业增加值占GDP比重达到54.6%，比上年提高1.2个百分点；最终消费支出对经济增长的贡献率达到82.5%，比上年提高43.1个百分点。安全发展基础进一步巩固夯实，全年粮食产量比上年增长1.3%；规模以上工业原煤产量增长2.9%，原油产量增长2%，天然气产量增长5.8%。守住了不发生系统性风险的底线，确保了经济金融安全，民生保障更加有效，全国居民人均可支配收入比上年实际增长6.1%。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第三，表现亮丽。观察中国经济的表现，不仅要跟自己纵向比，也要跟其他国家横向比。2023年我国5.2%的经济增速不仅高于全球3%左右的预计增速，在世界主要经济体中也名列前茅。我国经济2023年对世界经济增长的贡献率有望超过30%，是世界经济增长的最大引擎。同时，在预计全球贸易下降的情况下，我国出口还实现了小幅增长，占全球市场的份额保持稳定。另外还有一点就是物价涨势总体温和，跟全球通胀居高难下、一些国家在抗通胀和稳增长之间艰难平衡形成了鲜明对比。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第四，殊为不易。事非经过不知难。2023年世界经济低迷，国际格局复杂演变，地缘政治冲突频发，外部环境复杂性、严峻性、不确定性上升。国内周期性、结构性矛盾比较多，自然灾害频发。在这种复杂情况下，取得这样的发展成绩更显得难能可贵。这些成绩的取得，是以习近平同志为核心的党中央坚强领导的结果，是习近平新时代中国特色社会主义思想科学指引的结果，是全国人民踔厉奋发、砥砺前行的结果，成绩值得充分肯定，需要倍加珍惜。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">展望2024年，我们也要看到，当前外部环境依然复杂严峻，国内有效需求不足、部分行业产能过剩、社会预期偏弱、风险隐患依然较多，推动我国经济进一步回升向好，还要克服一些困难和挑战。我们要按照中央经济工作会议决策部署，有效应对这些困难、解决这些问题，不断推动中国经济行稳致远。谢谢。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 楷体">　　</span></b><b><span style="font-size: 12pt; font-family: 楷体">环球时报记者</span></b><b><span style="font-size: 12pt; font-family: 楷体">：</span></b><b><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">　　</span><span style="font-size: 12pt; font-family: 楷体">想请发布人介绍一下2023年四季度以及全年三大需求对经济增长的贡献率和拉动点各是多少？有没有一些新变化？另外还想了解一下，过去一年国内国际双循环的格局发展态势怎么样？谢谢。</span><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p align="center" class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: center; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体"><img style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; border-top-width: 0px" alt="" src="./W020240117608951285400.jpg" oldsrc="W020240117608951285400.jpg" /></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 宋体">　　</span></b><b><span style="font-size: 12pt; font-family: 宋体">康义</span></b><b><span style="font-size: 12pt; font-family: 宋体">：</span></b><b><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">谢谢您的提问。您关心的是两个方面的问题，一个是三大需求情况，另外一个是双循环情况。首先回答你第一个问题，三大需求的贡献和拉动。2023年，最终消费支出、资本形成总额、货物和服务净出口分别拉动经济增长4.3、1.5、-0.6个百分点，对经济增长的贡献率分别是82.5%、28.9%、-11.4%。四季度，最终消费支出、资本形成总额、货物和服务净出口分别拉动经济增长4.2、1.2、-0.2个百分点，对经济增长的贡献率分别是80%、23.1%、-3.1%。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第二个问题是国内国际双循环进展情况。应该说，2023年构建新发展格局取得了新进展，有三个方面的特征：</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第一，国内大循环的主体作用在增强。立足扩大内需这个战略基点，释放强大内需市场潜力，国内循环对经济发展的带动作用在明显增强。2023年，我国社会消费品零售总额达到了47.1万亿元，固定资产投资规模50.3万亿元，内需对经济增长的贡献率达到了111.4%，比上年提高25.3个百分点。我们在着力建设全国统一大市场，打通国内大循环的堵点卡点，畅通生产分配流通消费各个环节，要素流动趋于活跃，产销衔接状况也在逐步好转。四季度规上工业产能利用率为75.9%，同比提高0.2个百分点；规模以上工业企业的产品销售率稳定保持在97%以上的水平。全年营业性货运量同比增长8.2%，营业性客运量增长66.5%。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第二，国际循环的质量和水平进一步提升。面对外需收缩等不利影响，我国加力推动外贸稳规模、优结构，出口实现了正增长。横向比，要好于主要外向型经济体，国际市场的份额保持总体稳定。2023年，货物出口额比上年增长0.6%，一般贸易、民营企业进出口占比都有所提高。同时，我国也在积极拓展国际经贸合作，高质量共建“一带一路”，已经成为140多个国家和地区的主要贸易伙伴，国际循环的范围更广、层次更深。2023年，我国对共建“一带一路”国家进出口总额比上年增长2.8%。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第三，国内国际循环相互促进。我们超大规模市场的优势显现，内需扩大拉动了进口。2023年，农产品进口额比上年增长了5%，消费品增长了1.2%，能源产品进口增长了27.2%。产业体系健全，生产能力稳定的优势也得到了发挥，出口促稳提质带来了国内相关产业的发展，为经济整体好转提供了助力。2023年，我国货物出口额再创历史新高。其中，机电产品出口比上年增长2.9%。电动载人汽车、太阳能电池、锂离子蓄电池为代表的“新三样”产品出口额也首次突破万亿元大关，增长达到29.9%。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">我们在看到国内国际双循环取得积极进展的同时，也要看到国内大循环还存在一些堵点，世界经济持续低迷，全球产业链供应链深刻调整，国际循环也面临一些困难和挑战。下一步，要统筹扩大内需和深化供给侧结构性改革，统筹高质量发展和高水平安全，统筹推进深层次改革和高水平开放，打通制约经济循环的关键堵点，推动国内国际双循环相互促进。谢谢。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 楷体">　　</span></b><b><span style="font-size: 12pt; font-family: 楷体">美国国际市场新闻社记者</span></b><b><span style="font-size: 12pt; font-family: 楷体">：</span></b><b><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">　　</span><span style="font-size: 12pt; font-family: 楷体">近期数据显示，中国12月CPI连续第三个月出现负增长，CPI前景如何？政府是否会采取措施应对物价低迷？</span><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></b></p>
+<p align="center" class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: center; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 宋体"><img style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; border-top-width: 0px" alt="" src="./W020240117608951446718.jpg" oldsrc="W020240117608951446718.jpg" /></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 宋体">　　</span></b><b><span style="font-size: 12pt; font-family: 宋体">康义</span></b><b><span style="font-size: 12pt; font-family: 宋体">：</span></b><b><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">谢谢您的提问，物价的问题社会各方面高度关注。从2023年总体情况看，我国价格总体保持温和上涨态势，全年CPI上涨0.2%。这位记者提到CPI连续三个月同比负增长，对此我们既要看总体数据，更要看里面的结构性数据，这几个月CPI同比下降主要是结构性的和阶段性的。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第一，CPI下降是结构性的。最近价格下降，主要因素是食品和能源价格回落。若扣除食品和能源价格影响，核心CPI保持稳定，这表明价格的下降并不是普遍的、全面性的，而是局部的、结构性的。食品和能源价格的下降，也不完全是一个市场供求关系的变化，从2022年、2023年这两年来看，主要是受到了一些非经济、非常规性因素的影响。从能源价格看，现在燃油的价格在我们国家CPI的篮子当中权重较大，2023年12月份能源价格同比下降0.5%，而上年同期上涨5.2%。大家都知道，能源价格主要是受到俄乌战争影响，2022年能源价格大幅上涨，2023年有所回落，一正一反，同比向下拉动比较大。从食品价格看，2023年12月份同比下降3.7%，在上年同期，也就是2022年12月份上涨4.8%。2022年12月份主要受疫情影响，物流不畅，各种食品价格都在上涨，恢复常态化运行以后，供给充足，食品价格在上年高基数的基础上自然回落。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第二，CPI下降是阶段性的。特别是我国经济回升向好，居民收入平稳增长，国内总需求有望扩大，商品和服务价格回升有基础、有条件。近期春节假期临近，食品消费需求也在增加，大家外出就餐、走亲访友、旅游出行等服务消费更加活跃，这些都会助推CPI季节性回升。从环比情况看，2023年12月份CPI环比上涨0.1%；2024年1月上旬，从监测情况看，部分食品价格保持稳中略涨势头。另外，除了供求之外，价格还受预期的影响。从近期情况看，不论是企业还是居民的预期信心都有边际恢复。12月份，制造业生产经营活动预期指数达到55.9%，非制造业业务活动预期指数达到60.3%，都处在一个较高的景气区间。四季度，规模以上企业景气指数是109点，比上季度提高0.4个点。12月份消费者信心指数比上月回升0.6点。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第三，价格低位运行，也在一定程度上反映了有效需求不足等问题。有效需求不足是我们国家经历了三年疫情冲击以后，经济逐步走向正常状态中的阶段性现象，短期内需求不足会导致价格下行。中央对于需求不足的问题高度重视，中央经济工作会议在谋划2024年经济工作时明确强调，要着力扩大国内需求，推动消费从疫后恢复转向持续扩大，并且明确指出一系列具体的工作方向。随着中央经济工作会议这些政策的出台和落实，有效需求不足的问题会得到逐步缓解，居民消费价格有望随之企稳回升。我们预计，2024年价格会温和上涨。谢谢。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 楷体">　　</span></b><b><span style="font-size: 12pt; font-family: 楷体">中央广播电视总台央视记者</span></b><b><span style="font-size: 12pt; font-family: 楷体">：</span></b><b><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">　　</span><span style="font-size: 12pt; font-family: 楷体">高质量发展是全面建设社会主义现代化国家的首要任务，请问目前我国在经济高质量发展方面进展如何？未来在持续推进经济高质量发展方面还将采取哪些措施？谢谢。</span><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p align="center" class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: center; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体"><img style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; border-top-width: 0px" alt="" src="./W020240117608951759951.jpg" oldsrc="W020240117608951759951.jpg" /></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 宋体">　　</span></b><b><span style="font-size: 12pt; font-family: 宋体">康义</span></b><b><span style="font-size: 12pt; font-family: 宋体">：</span></b><b><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">谢谢您的提问。高质量发展是新时代的硬道理，是全面建设社会主义现代化国家的首要任务。2023年，各地区各部门在稳定经济运行上下了大力气，在推动高质量发展上更是没有松劲，我国经济较好实现了质的有效提升和量的合理增长，高质量发展之路走得更加坚定、更加有力。总结起来，可以用五个“进一步”来概括。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第一，现代化产业体系建设取得重要进展，发展动能转换进一步加快。现代化产业体系是高质量发展的重要基础，各地区各部门坚持科技创新引领现代化产业体系建设，扎实推进制造业高端化、智能化、绿色化转型，我国经济发展的新动能新优势不断壮大，现代化产业体系建设取得新进展。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第二，改革开放纵深推进，发展活力进一步释放。2023年，我国全力推动全国统一大市场建设，优化民营经济发展环境，继续打造市场化、法治化、国际化的一流营商环境，有效提升了经济发展的动力活力。截止到2023年9月底，全国登记在册的经营主体达到1.81亿户，其中个体工商户达到1.22亿户。加快推进高水平对外开放，积极开展国际经贸交流合作，高质量共建“一带一路”，成功举办了进博会、服贸会、广交会，我国对共建“一带一路”国家进出口额增长2.8%。进博会按年计意向成交金额比上届增长6.7%。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第三，绿色低碳转型持续深入，发展方式进一步转变。我国坚持在绿色低碳转型中推动经济发展，绿色生产方式和生活方式加快形成。积极构建清洁、低碳、安全、高效的能源体系，能源消费结构持续优化。初步核算，2023年非化石能源消费占能源消费总量的比重，比上年提高0.2个百分点。到2023年底，我国可再生能源发电装机容量占比超过总装机的一半，历史性地超过了火电。绿色低碳产品产量也在快速增长。2023年，新能源汽车比上年增长30.3%，产销量都是世界第一；电动载人汽车出口量增长67.1%。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第四，民生保障有力有效，人民生活进一步改善。增进民生福祉是发展的根本目的。2023年，城乡居民收入稳定增长，公共服务和社会保障水平不断提升，民生短板领域也在逐步加强，进一步擦亮了高质量发展的民生底色。居民人均可支配收入增长6.1%，其中，来自政府的社会救济和补助、政策性生活补贴、现金政策性惠农补贴等转移性收入增长10.3%。民生投入力度不断加大，电力、热力、燃气及水的生产和供应业投资增长23%，农业投资增长9.3%，都明显快于全部投资。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第五，粮食能源安全保障能力提升，安全发展基础进一步夯实。2023年，我国在发展中较好保障了安全，在安全的基础上实现了向好发展。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">当然，我们同时也要看到，我国仍处在转变发展方式、优化经济结构、转变增长动力的攻关期，进一步推动高质量发展还需要克服不少困难和挑战。要深入贯彻落实中央经济工作会议精神，把坚持高质量发展作为新时代的硬道理，统筹高质量发展和高水平安全，不断实现经济质的有效提升和量的合理增长，把中国式现代化的宏伟蓝图一步一步变成美好的现实。谢谢。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 楷体">　　</span></b><b><span style="font-size: 12pt; font-family: 楷体">路透社记者</span></b><b><span style="font-size: 12pt; font-family: 楷体">：</span></b><b><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">　　</span><span style="font-size: 12pt; font-family: 楷体">我也比较关心结构问题，我想问一下，怎么样才能实现中国经济发展中新旧动能的转换？在报告里也看到新能源汽车、太阳能电池都是快速增长，但是在大力发展先进制造业的过程中，怎么样才能防范可能出现的产能过剩问题？另外，在内需相对不足的情况下，这些产业的快速扩张会不会带来价格下行的压力和可能产生国际贸易摩擦？谢谢。</span><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p align="center" class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: center; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体"><img style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; border-top-width: 0px" alt="" src="./W020240117608951912549.jpg" oldsrc="W020240117608951912549.jpg" /></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 宋体">　　</span></b><b><span style="font-size: 12pt; font-family: 宋体">王冠华</span></b><b><span style="font-size: 12pt; font-family: 宋体">：</span></b><b><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">谢谢您的提问。对于您提到的问题，我想主要从两个方面来回答：</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">首先第一点，关于新旧动能转换。高质量发展是贯彻新发展理念的发展，在五大发展理念当中“创新”位于第一位。坚持创新驱动、推动发展动能转换一直是高质量发展的重要任务。刚才，康义局长对去年我国高质量发展特别是创新驱动发展取得的成绩作了详细介绍，这里我再补充几个数据。2023年，我国规模以上装备制造业增加值比上年增长6.8%，对推动工业稳定回升发挥了关键作用；2023年，世界知识产权组织发布的报告显示，我国在全球创新指数中的排名升至第12位，拥有的全球百强科技创新集群数量首次跃居世界第一。可以说，新动能已经成为引领高质量发展的重要引擎。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第二个方面，去年我国经济回升向好，特别是市场需求、国内需求恢复态势较好，这一点大家应该都有切身感受，特别是随着需求带动作用增强，我国供需衔接、经济循环状况也在不断改善。给大家提供几个数据作为参考。四季度，我国规模以上工业企业产品销售率持续保持在97%以上，其中12月份升至98.4%；从反映产能利用状况的产能利用率看，2023年的四个季度，工业产能利用率分别为74.3%、74.5%、75.6%和75.9%，呈现逐季回升态势。这反映随着市场需求改善，我国产能利用状况在逐步恢复。今年开年我们也注意到，冰雪旅游、冰雪运动等可以说“火出了圈”，这既顺应了居民消费结构升级的大趋势，也展现了我国内需的潜力，我们对今年消费市场的恢复充满期待和信心。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">总体上看，我国还处在经济恢复和转型升级的关键期。下一步，要按照中央经济工作会议决策部署，坚持稳中求进、以进促稳、先立后破，持续巩固和增强经济回升向好态势，推动经济实现质的有效提升和量的合理增长。谢谢。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 楷体">　　</span></b><b><span style="font-size: 12pt; font-family: 楷体">新加坡海峡时报记者</span></b><b><span style="font-size: 12pt; font-family: 楷体">：</span></b><b><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">　　</span><span style="font-size: 12pt; font-family: 楷体">我想提问的是，去年我们看到了房地产对整个宏观经济的影响，今年是否能保持平稳呢？谢谢。</span><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p align="center" class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: center; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体"><img style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; border-top-width: 0px" alt="" src="./W020240117608952060301.jpg" oldsrc="W020240117608952060301.jpg" /></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 宋体">　　</span></b><b><span style="font-size: 12pt; font-family: 宋体">康义</span></b><b><span style="font-size: 12pt; font-family: 宋体">：</span></b><b><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">谢谢您的提问。房地产一直备受关注，我去年在发布会上，也有记者提到这个问题，走势怎么样，下一步是什么情况，大家都很关心。根据我们监测的情况，房地产经过20多年的发展，房地产市场正处在调整转型的过程中。在这样一个大的背景下，各地区各部门都在适应房地产市场供求关系发生重大变化的新形势，适时调整优化房地产政策。从目前的情况看，房地产市场出现了一些积极变化，主要是两个方面：</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">一是房地产投资、销售等指标降幅收窄。2023年，房地产开发投资比上年下降9.6%，降幅比上年收窄0.4个百分点。房地产开发企业到位资金下降13.6%，降幅比上年收窄12.3个百分点。商品房销售降幅明显收窄，2023年全国商品房销售面积比上年下降8.5%，销售额下降6.5%，都在下降，但是降幅分别比上年大幅收窄15.8和20.2个百分点。8月份以来，新建商品住宅网签备案量整体回升，12月份比8月份回升20.2个百分点。从70个大中城市监测情况看，新房和二手房的成交量都在温和上升。二是房地产竣工面积增加较快。“保交楼”工作在稳步推进，效果持续显现。2023年，房地产开发企业竣工房屋面积比上年增长17%。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">怎么看房地产市场今后的趋势？我们国家房地产市场长期健康发展有比较好的基础，有这么几个原因：</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">一是城镇化数量和质量提升还有很大的空间，刚才通报了2023年城镇化率是66.16%，和发达经济体80%以上的水平相比，还有提升空间，中国的城镇化仍然处在持续发展过程中。近五年城镇化率年均提高0.93个百分点，每年都会有超过1000万的农村居民进入城镇，新市民的规模比较大，也会带来大量新增住房的需求。存量上尽管我们国家人均住房面积已经不小，但是有很多房子功能和结构都不尽合理，不少人民群众改善性住房需求比较迫切，这也会形成房地产市场的重要推动力，包括现在监测的70个大中城市，改善性住房需求非常明显，表现在70个大中城市二手房的成交量已经超过新房成交量。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">二是构建房地产发展新模式潜力巨大。房地产发展的新模式正在积极构建当中，这是破解房地产发展难题、促进房地产健康发展的治本之策。其中，正在推进的保障性住房建设、“平急两用”公共基础设施建设，以及城中村改造这些工程都在快速推进。随着这些工程有力有序推进，将有利于解决人民群众在住房、居住这些方面急难愁盼的问题，同时也会带动房地产相关投资消费，推动房地产市场健康发展。谢谢。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 楷体">　　</span></b><b><span style="font-size: 12pt; font-family: 楷体">中国日报记者</span></b><b><span style="font-size: 12pt; font-family: 楷体">：</span></b><b><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">　　</span><span style="font-size: 12pt; font-family: 楷体">近期，多个国际机构和商业机构都调高了中国经济增长的预期，认为中国仍然是全球经济增长的最大引擎，请问对此怎么看？2024年的中国经济走势如何？谢谢。</span><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p align="center" class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: center; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体"><img style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; border-top-width: 0px" alt="" src="./W020240117608952221184.jpg" oldsrc="W020240117608952221184.jpg" /></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 宋体">　　</span></b><b><span style="font-size: 12pt; font-family: 宋体">康义</span></b><b><span style="font-size: 12pt; font-family: 宋体">：</span></b><b><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">谢谢您的提问。怎么看2024年的中国经济走势，也是大家非常关心的问题。2024年是中华人民共和国成立75周年，是我们实施“十四五”规划的关键一年，对这一年经济走势的预判，我们首先是要看到会面临一些挑战和困难，但是更多的是有利条件、是优势。综合起来看，我们面临的机遇要大于挑战，有利条件强于不利因素，中国经济长期向好的基本趋势没有改变，支撑中国经济高质量发展的要素条件在不断积累增多。所以我们预判，2024年的中国经济将持续回升向好。具体来看有五个方面的有利条件。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第一，经济增长“势头好”。2023年四个季度，国内生产总值同比、环比都是正增长的，经济规模也在逐季扩大，这种回升向好的势头也是比较好。在做经济总量的统计核算之外，国家统计局还做了一项工作，就是对一些实物量指标的监测和比较。从实物量指标来看，发用电量、主要工业产品的产量、投资、进出口等大多数实物量指标的绝对量都大大超过2019年的水平。有些实物量指标低于2019年疫情前水平的，主要还是和刚才记者提到的问题，是与房地产相关的产品产量指标。这也反映出我们经济运行是在整体好转。国际组织上调了对我国经济增长的预测，国际货币基金组织上调了0.4个百分点，经合组织上调了0.1个百分点，这表明国际社会看好中国2024年经济发展前景。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第二，经济发展“韧性强”。我们国家产业基础雄厚，是唯一拥有联合国产业分类中全部工业门类的国家，产业的配套能力和集成优势突出，我们的制造业增加值占全世界的比重近1/3，我们的货物出口占全世界的比重达1/7。同时，我国交通、通信等基础设施网络日益完善，教育、医疗等短板领域在不断补强，人才、资金等要素供给质量在显著提升。粮食能源安全、产业链供应链等关键领域的保障能力建设也都取得了实效，这些都增强了我们国家经济发展的韧性和回旋余地，也是经济能够行稳致远的底气。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第三，高质量发展“活力足”。新产业快速增长，新业态持续向好，新的模式在加快培育，经济结构在不断优化，动能转换提档升级，经济发展的潜能有望进一步激发。2023年服务业增加值占到国内生产总值的比重为54.6%，对经济增长的贡献率超过60%，制造业技改投资增长3.8%，高技术产业投资增长10.3%，快于全部固定资产投资的增速。更为重要的是，我国持续推动形成创新驱动发展的新局面，中国经济在加快培育新质生产力中在不断发展壮大。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第四，改革开放“红利多”。我国坚持和完善社会主义基本经济制度，坚持“两个毫不动摇”，加快建设全国统一大市场，推动建设高标准市场体系，优化营商环境，为各类企业创造了更加公平的竞争环境，这些都将不断激发经营主体的积极性、创造性。包括外商投资企业也是继续看好中国。2023年1—11月份，新设的外资企业数量同比增长36.2%，我国开放红利持续释放。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第五，宏观政策“空间广”。2023年出台的增发国债、减税降费、降准降息等政策效应将在今年持续释放。今年还将储备优化一些新的措施，这些新的增量措施和存量政策还会叠加发力，都为经济稳定运行保驾护航。当前，我国政府债务水平和通胀率都较低，政策工具箱也在不断充实，财政、货币以及其他政策都有比较大的回旋余地，加力实施宏观政策有条件、有空间。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">尽管推动2024年经济持续回升向好还会遇到一些前进中的困难挑战，对于困难和挑战，前一段时间召开的中央经济工作会议进行了认真分析，提出了具体的应对措施。要全面贯彻落实好中央经济工作会议部署，不断把发展优势转换为发展势能，今年中国经济一定能够迎难而上、砥砺前行，实现质的有效提升和量的合理增长。谢谢。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 楷体">　　</span></b><b><span style="font-size: 12pt; font-family: 楷体">澎湃新闻记者</span></b><b><span style="font-size: 12pt; font-family: 楷体">：</span></b><b><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">　　</span><span style="font-size: 12pt; font-family: 楷体">2023年，社会消费品零售总额呈现了逐步回升的态势，然而当前我国仍然面临需求不足的困扰。请问，如何看待2023年消费市场的表现？对2024年有何预判？消费恢复的态势是否能够延续呢？谢谢。</span><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p align="center" class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: center; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体"><img style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; border-top-width: 0px" alt="" src="./W020240117608952383463.jpg" oldsrc="W020240117608952383463.jpg" /></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 宋体">　　</span></b><b><span style="font-size: 12pt; font-family: 宋体">康义</span></b><b><span style="font-size: 12pt; font-family: 宋体">：</span></b><b><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">谢谢您的提问。第一个问题是对2023年消费市场的表现，第二个问题是对2024年消费市场的预判。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">先介绍一下2023年消费市场的表现。总的来说，2023年消费市场恢复向好。疫情三年消费市场受到冲击比较大，不少接触型、聚集型的消费都受到抑制，随着疫情防控平稳转段，经济社会全面恢复常态化运行，消费呈现出好的恢复态势，热点亮点频多，消费成为2023年带动经济恢复的重要力量。有这么几个特征：一是消费规模再创新高。2023年社会消费品零售总额超过47万亿元，总量创历史新高。二是消费重新成为经济增长的主动力。2023年，最终消费支出拉动经济增长4.3个百分点，比上年提高3.1个百分点；对经济增长的贡献率是82.5%，提高了43.1个百分点，消费的基础性作用更加显著。三是服务消费较快恢复。服务消费较快回暖，也是2023年消费恢复的一大亮点，服务零售额比上年增长了20%，快于商品零售额14.2个百分点；居民人均服务性消费支出增长14.4%，占居民人均消费支出的比重达到45.2%，比上年提升2个百分点。四是居民消费的结构升级态势持续。特别是人民生活水平的提升，收入的稳定增长，目前我们国家正处在居民消费结构快速升级的时期。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">我们判断，下阶段支撑消费持续回升的有利条件比较多，消费仍然会保持较好的增长。支撑因素：一是消费潜力仍然巨大。14亿多的人口，超大规模市场的优势依然明显，加之城乡融合发展、城镇化进程推进、消费结构持续升级，这些都为消费增长提供了广阔空间。特别是医疗、健康等消费潜力有望进一步释放。二是消费基础不断巩固。收入是消费的前提和基础，随着经济持续恢复，就业形势总体改善，居民收入有望保持稳定增长，将有力支撑居民消费能力的提升。三是消费亮点不断涌现。数字消费、绿色消费、健康消费、文旅消费等都快速发展，智能家居、文娱旅游、体育赛事、国货潮品等这样一些消费热点也在不断升温，不断为消费市场提质扩容增添动力。四是促消费政策持续发力。各地区各部门坚持把恢复扩大消费摆在优先位置，相继出台一系列促消费政策，着力稳定和扩大传统消费、培育壮大新型消费、持续优化消费环境，将继续对稳定消费市场、促进消费恢复起到积极的作用。所以，我们对2024年消费走势保持乐观。谢谢。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 楷体">　　</span></b><b><span style="font-size: 12pt; font-family: 楷体">21世纪经济报道记者</span></b><b><span style="font-size: 12pt; font-family: 楷体">：</span></b><b><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">　　</span><span style="font-size: 12pt; font-family: 楷体">想关注一下第五次全国经济普查的情况。第五次全国经济普查在今年1月1号正式启动，请问当前进展如何？这次普查相较前四次有哪些创新点？如何确保普查数据质量？谢谢。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p align="center" class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: center; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体"><img style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; border-top-width: 0px" alt="" src="./W020240117608952533151.jpg" oldsrc="W020240117608952533151.jpg" /></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 宋体">　　</span></b><b><span style="font-size: 12pt; font-family: 宋体">康义</span></b><b><span style="font-size: 12pt; font-family: 宋体">：</span></b><b><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">谢谢您的提问。第五次全国经济普查是新时代新征程上一次重大的国情国力调查，承载着摸清我国经济家底、反映高质量发展进展的重要任务。当前的进展，单位清查工作已经圆满完成，从2024年1月1号起进入普查登记阶段，现在普查登记工作正在有序开展。特别是今年进入新的一年以来，1月3号丁薛祥副总理在北京调研指导普查现场登记，看望慰问基层普查员和工作人员，对做好普查登记工作提出了明确要求。当前，普查工作正在有序推进。今年1月-4月是普查的正式登记阶段，也是普查工作最为重要的阶段，对获取高质量普查数据是最重要的阶段。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">关于今年第五次全国经济普查的创新点，主要是紧密围绕服务高质量发展，丰富调查内容，创新调查方式。第五次全国经济普查将全面调查我国第二、第三产业的发展规模、布局和效益。在这个基础上，我们要拓展统计调查领域、丰富统计调查内容、完善统计调查制度，推动构建高质量发展的统计监测体系。创新点主要有三个方面：</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">一是首次统筹开展投入产出调查。原来投入产出调查和经济普查是分开进行的，第五次全国经济普查把这两个分开开展的调查整合到一起，有助于促进经济总量数据和结构数据更好衔接。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">二是进一步完善“三新”经济统计。新增数字经济调查内容，更好反映我国经济发展数字化进程，系统推进平台经济调查，为查清统全新产业、新业态、新发展模式的发展情况奠定基础。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">三是在调查的手段方式上有创新。持续深化对部门行政记录资料的应用，新增自主填报方式采集普查数据，首次开发移动端小程序采集数据，还首次建立了投入产出统计电子台账，提高普查工作的效率。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">普查数据质量是衡量普查成败最根本的标准，在普查工作当中，我们高度重视普查数据质量，采取了一系列措施确保普查数据质量。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">一是规范数据采集。这次经济普查采用普查员入户采集、普查对象自主填报、部门报送数据相结合的方式来获取普查对象的数据，从严控制数据采集环节人为的干扰，确保普查源头数据质量。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">二是多种方式开展数据审核检查。我们开展普查数据随报随审，综合运用大数据手段和多种分析方法开展了审核验证，及时组织实地核查检查。在普查登记结束后，经普办也将统一组织事后质量抽查，全面检验普查登记数据质量。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">三是坚决从严查处普查造假。依法普查，坚决抵制各种干预普查数据的行为，加强统计执法检查，将第五次全国经济普查工作纳入统计督察，对普查中的违法违纪行为“露头就打”，依法依规严肃进行追责问责。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">当前，全国大概有210多万普查“两员”（普查调查员、普查辅导员）正在走访大街小巷，深入企业、商户开展数据采集，普查的数据也正在有序上报。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">在此，我也要感谢所有普查对象的支持和普查工作者的辛苦付出，也希望广大媒体朋友继续支持普查、宣传普查、监督普查，让我们共同努力，为高质量开展好第五次全国经济普查工作交出一份满意答卷。谢谢。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 楷体">　　</span></b><b><span style="font-size: 12pt; font-family: 楷体">封面新闻记者</span></b><b><span style="font-size: 12pt; font-family: 楷体">：</span></b><b><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">　　</span><span style="font-size: 12pt; font-family: 楷体">最近有媒体报道，2023年前11月全社会用电量和发电量相差了2946亿千瓦时，请问为什么会存在这样的数据差异？谢谢。</span><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p align="center" class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: center; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体"><img style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; border-top-width: 0px" alt="" src="./W020240117608952857773.jpg" oldsrc="W020240117608952857773.jpg" /></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 宋体">　　</span></b><b><span style="font-size: 12pt; font-family: 宋体">康义</span></b><b><span style="font-size: 12pt; font-family: 宋体">：</span></b><b><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">谢谢您的提问。我们关注到，有些媒体讨论用电量和发电量的差异，发电量和用电量是反映电力运行的两个重要指标。刚才这位记者朋友提到这两个统计指标1—11月份数据的差异，主要是因为两个指标的口径不同。这两个指标一个是全社会用电量，一个是规模以上工业企业发电量。除了规模以上工业企业，随着太阳能发电、风力发电快速发展，部分规模以下工业企业、各类民居、商户也发电，但是这部分发电量不在1—11月份规模以上工业发电量之内。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">为了让大家更好理解，我对这两个指标作一点解释。它们的调查对象、统计口径、覆盖范围都不同。一是统计口径不同。全社会用电量是从电力的使用方进行统计，规模以上工业发电量是从供给方进行统计。这两个统计的范围不同，具体来讲全社会用电量统计的是全口径用电量，即全部用电量，既有企业的用电量，也有居民的用电量，还包括电厂的自产自用电、线损等；规模以上工业发电量统计口径是规模以上工业企业的发电量，规模以上工业企业现在的标准是年主营业务收入2000万元及以上的工业企业，所以它不包括规模以下小工业发电企业的发电，不是全口径的发电量。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">二是受部分分布式发电的影响。近年来广泛分散、体量较小的分布式太阳能和风力发电迅猛发展，而且较多分布在各类民居、商户和部分规模以下工业企业中，这部分发电量因为发电企业规模较小，没有达到规模以上的工业统计标准，有些还是商户和民居，因此没有在月度规模以上工业发电量中统计，但会统计在全社会发电量中。大家都知道，我们的数据一般都在次月中旬发布，那么多分散在各地的体量小的发电量，我们会进行年度统计，而且也在每年年度统计公报中发布全社会发电量。一般来讲，规模以上工业发电量约占全社会发电量的95%左右，最近有点波动，规模以下的在提高，规模以上的发电量在减少，但是减少不大，大概就是这个比例。大家看</span><span style="font-family: 宋体; font-size: 12pt;">月度</span><span style="font-family: 宋体; font-size: 12pt; text-indent: 0pt;">发电量，不能忽略“规模以上工业”这个表述。统计指标是比较严谨的，大家在使用的时候也要注意统计指标的含义、范围，便于更加准确地使用数据。谢谢。</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 楷体">　　</span></b><b><span style="font-size: 12pt; font-family: 楷体">南方都市报记者</span></b><b><span style="font-size: 12pt; font-family: 楷体">：</span></b><b><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 楷体">　　</span><span style="font-size: 12pt; font-family: 楷体">想问一下2023年就业形势如何？是否完成了目标任务？2024届高校毕业生人数预计再创新高，就业走势会怎样？谢谢。</span><span style="font-size: 12pt; font-family: 楷体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p align="center" class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: center; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体"><img style="border-left-width: 0px; border-right-width: 0px; border-bottom-width: 0px; border-top-width: 0px" alt="" src="./W020240117608953008526.jpg" oldsrc="W020240117608953008526.jpg" /></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><b><span style="font-size: 12pt; font-family: 宋体">　　</span></b><b><span style="font-size: 12pt; font-family: 宋体">康义</span></b><b><span style="font-size: 12pt; font-family: 宋体">：</span></b><b><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></b></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">谢谢您的提问。就业也是大家非常关注的问题，因为它是最大的民生。党中央、国务院始终高度重视就业问题，强调把稳就业提高到战略高度通盘考虑，各地区各部门坚持就业优先，优化调整稳就业政策措施。过去的一年，我们全力稳住了就业大局，就业形势总体改善。有这么几个特点。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第一，调查失业率下降，新增就业继续增加。分季度来看，全国城镇调查失业率各季度平均值分别是5.4%、5.2%、5.2%、5.0%，就业逐步改善的态势比较明显。1—11月份城镇新增就业人数是1180万人，同比多增35万人。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第二，重点群体和困难群体就业保障有力。一系列稳岗支持和扩岗激励措施落地生效，就业困难群体分类帮扶成效凸显，农民工、青年人、就业困难人员等群体的就业得到有效保障。2023年，农民工总量达到29753万人，比上年增加191万人，外来农业户籍人口城镇调查失业率均值是4.9%，比上年下降0.7个百分点。1—11月份城镇失业人员再就业人数475万人，就业困难人员就业人数156万人。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">第三，脱贫人员就业规模稳中有增。各地区各部门充分发挥东西部劳务协作、对口支援、定点帮扶等机制的作用，深入开展重点帮扶县和易地扶贫搬迁专项帮扶，脱贫人口就业稳定增长，到2023年11月末，脱贫人口务工规模是3294万人，超过3000万的目标任务。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">今年的就业形势，总的判断是压力依然存在，部分群体、部分行业就业的结构性矛盾问题仍会比较突出。但是，随着经济回升向好，产业转型升级加快，稳就业的积极因素也在不断积累，我国就业形势有望保持稳定。有这么几个原因：</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">　　</span><span style="font-size: 12pt; font-family: 宋体">一是经济规模扩大带来就业增加。经济增长是稳定和扩大就业的基础。近年来，我国经济增量不断扩大是拉动就业增长的关键所在，2024年我国经济创造的增量有望大于去年，这将为扩大就业提供有力支撑。二是2024年退出劳动力市场的人口规模将大于新进入劳动力市场的人口规模，这也为寻找工作的人们提供了更多就业空间。三是产业结构升级扩充就业容量。相比于其他产业，劳动密集度较高的服务业在吸纳就业方面优势明显。去年以来服务业恢复势头较好，在GDP中的占比也在提高，服务业占GDP的比重已经超过疫情前的水平，餐饮、交通、批发零售等行业的就业带动作用比较明显。展望今年，服务消费较为活跃，服务业增长将继续成为带动吸纳就业的主要力量之一。与此同时，新产业、新业态、新商业模式蓬勃发展，产生许多全新的岗位需求，也有利于扩大就业空间，提升就业质量。四是稳就业政策效应持续发力显效。中央经济工作会议对此也作了部署，特别指出要多出有利于稳预期、稳增长、稳就业的政策。各地区各部门将更加突出就业优先导向，加大重点群体就业帮扶力度，政策红利释放也有望继续为就业稳定提供有力保障。谢谢。</span><span style="font-size: 12pt; font-family: 宋体"><o:p></o:p></span></p>
+<p class="MsoNormal" style="font-size: 10.5pt; font-family: Calibri; text-align: justify; margin: 0pt; text-indent: 0pt"><span style="font-size: 12pt; font-family: 宋体">&nbsp;</span></p></div></br>
+                                   
+
+                                </div>
+
+
+                        
+                    </div>
+                </div>
+             </div>
+
+            
+
+        </div>
+         <div class="footer" sytle="width:100%; margin:0px auto;">
+                 <iframe frameborder="0" marginheight="0" marginwidth="0" name="top" src="http://www.stats.gov.cn/xxgk/bottom_new.html" scrolling="no" style="width:100%; height: 180px;"></iframe>
+      </div>
+            </div> 
+    </div>
+
+    <script src="../../../images/jquery-1.12.4.min.js"></script>
+    <script src="../../../images/jquery.mCustomScrollbar.concat.min.js"></script>
+    <script src="../../../images/index.js"></script>
+    <script src="../../../images/esdToolsInit.js" type="text/javascript"></script>
+</body>
+</html>

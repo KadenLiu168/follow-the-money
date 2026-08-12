@@ -1,0 +1,31 @@
+# Local run bundles (audit evidence, never committed)
+runs/
+
+# Generated Feed artifacts (published by workflows, not committed)
+feeds/daily/
+feeds/latest.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+.env
+
+# Local configuration with secrets
+config/local.yaml
+.env.local
+
+# OS
+.DS_Store

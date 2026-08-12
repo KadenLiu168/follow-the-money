@@ -1,0 +1,17 @@
+{
+  "body_charset": "utf-8",
+  "body_file": "2024-02-13__evt_cpi_20240213.body",
+  "body_sha256": "342dd114af6554bfb38e09a6e88327d48949e57abaed4179fb82ffc34edb9f9b",
+  "body_size": 1363494,
+  "content_type": "text/html",
+  "date": "2024-02-13",
+  "event_id": "evt_cpi_20240213",
+  "fetch_url": "https://www.bls.gov/news.release/archives/cpi_02132024.htm",
+  "final_url": "https://www.bls.gov/news.release/archives/cpi_02132024.htm",
+  "http_status": 200,
+  "provider_id": "bls",
+  "retrieved_at": "2026-08-11T00:00:00Z",
+  "schema_version": 1,
+  "source_url": "https://www.bls.gov/news.release/archives/cpi_02132024.htm",
+  "title": "Consumer Price Index News Release"
+}

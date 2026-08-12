@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://follow-the-money/schemas/brief.schema.json",
+  "title": "Authoritative Morning Money Brief",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "brief_id", "brief_generated_at", "brief_completed_at",
+    "evidence_cutoff_at", "feed_run_id", "mode", "headings", "dashboard",
+    "market_state", "full_events", "compact_events", "money_flow_section",
+    "watchlist", "bottom_line", "claim_inventory", "warnings", "audit_status",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "brief_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "brief_generated_at": { "type": "string", "format": "date-time" },
+    "brief_completed_at": { "type": "string", "format": "date-time" },
+    "evidence_cutoff_at": { "type": "string", "format": "date-time" },
+    "feed_run_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "mode": { "const": "normal" },
+    "headings": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 7,
+      "items": { "type": "string" }
+    },
+    "dashboard": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dashboard_role" }
+    },
+    "market_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["regime", "vector", "missing_roles", "explanation"],
+      "properties": {
+        "regime": { "enum": ["risk_on", "neutral", "risk_off", "unknown"] },
+        "vector": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["risk_appetite", "rates", "liquidity", "growth", "inflation"],
+          "properties": {
+            "risk_appetite": { "enum": ["supportive", "neutral", "adverse", "unknown"] },
+            "rates": { "enum": ["supportive", "neutral", "adverse", "unknown"] },
+            "liquidity": { "enum": ["supportive", "neutral", "adverse", "unknown"] },
+            "growth": { "enum": ["supportive", "neutral", "adverse", "unknown"] },
+            "inflation": { "enum": ["supportive", "neutral", "adverse", "unknown"] }
+          }
+        },
+        "missing_roles": { "type": "array", "items": { "type": "string" } },
+        "explanation": { "type": "string", "maxLength": 768 }
+      }
+    },
+    "full_events": {
+      "type": "array",
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/full_event" }
+    },
+    "compact_events": {
+      "type": "array",
+      "maxItems": 12,
+      "items": { "$ref": "#/$defs/compact_event" }
+    },
+    "money_flow_section": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/money_flow_entry" }
+    },
+    "watchlist": {
+      "type": "array",
+      "maxItems": 6,
+      "items": { "$ref": "#/$defs/watchlist_entry" }
+    },
+    "bottom_line": {
+      "type": "array",
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/bottom_line_point" }
+    },
+    "claim_inventory": {
+      "type": "array",
+      "maxItems": 74,
+      "items": { "$ref": "#/$defs/claim" }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "audit_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["script_audit", "language_audit", "findings"],
+      "properties": {
+        "script_audit": { "const": "passed" },
+        "language_audit": { "enum": ["passed", "warnings"] },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/audit_finding" } }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feed_digest", "config_hash", "prompt_fingerprints"],
+      "properties": {
+        "feed_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "config_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "prompt_fingerprints": { "type": "object" }
+      }
+    }
+  },
+  "$defs": {
+    "dashboard_role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role_id", "available", "display"],
+      "properties": {
+        "role_id": { "type": "string" },
+        "available": { "type": "boolean" },
+        "display": { "type": "string" },
+        "return_pct": { "type": ["string", "null"], "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$" },
+        "anomalous": { "type": ["boolean", "null"] },
+        "representative_link": { "type": ["string", "null"], "format": "uri" }
+      }
+    },
+    "full_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_id", "display_label", "confidence", "fact_summary",
+        "why_it_matters", "reaction_attribution", "price_in", "money_flow",
+        "asset_mappings", "alternative", "uncertainty", "source_links"
+      ],
+      "properties": {
+        "event_id": { "type": "string" },
+        "display_label": { "type": "string", "maxLength": 300 },
+        "confidence": { "enum": ["high", "medium", "low", "unresolved"] },
+        "fact_summary": { "type": "string", "maxLength": 768 },
+        "why_it_matters": { "type": "string", "maxLength": 768 },
+        "reaction_attribution": { "type": "string", "maxLength": 768 },
+        "price_in": { "type": "string", "maxLength": 768 },
+        "money_flow": { "type": "string", "maxLength": 768 },
+        "asset_mappings": { "type": "string", "maxLength": 768 },
+        "alternative": { "type": "string", "maxLength": 768 },
+        "uncertainty": { "type": "string", "maxLength": 768 },
+        "source_links": { "type": "array", "items": { "type": "string", "format": "uri" } }
+      }
+    },
+    "compact_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "display_label", "confidence", "fact_summary", "why_it_matters", "uncertainty", "source_links"],
+      "properties": {
+        "event_id": { "type": "string" },
+        "display_label": { "type": "string", "maxLength": 300 },
+        "confidence": { "enum": ["high", "medium", "low", "unresolved"] },
+        "fact_summary": { "type": "string", "maxLength": 768 },
+        "why_it_matters": { "type": "string", "maxLength": 768 },
+        "uncertainty": { "type": "string", "maxLength": 768 },
+        "source_links": { "type": "array", "items": { "type": "string", "format": "uri" } }
+      }
+    },
+    "money_flow_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "status", "text"],
+      "properties": {
+        "event_id": { "type": "string" },
+        "status": { "enum": ["confirmed", "indicated"] },
+        "text": { "type": "string", "maxLength": 768 }
+      }
+    },
+    "watchlist_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["calendar_id", "priority", "scheduled_at", "label", "explanation"],
+      "properties": {
+        "calendar_id": { "type": "string" },
+        "priority": { "enum": ["critical", "high"] },
+        "scheduled_at": { "type": "string", "format": "date-time" },
+        "label": { "type": "string", "maxLength": 300 },
+        "explanation": { "type": "string", "maxLength": 768 }
+      }
+    },
+    "bottom_line_point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "text"],
+      "properties": {
+        "event_id": { "type": "string" },
+        "text": { "type": "string", "maxLength": 768 }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_id", "class", "slot_kind", "is_factual", "is_causal", "text", "reference_evidence_ids"],
+      "properties": {
+        "claim_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "class": { "type": "string", "maxLength": 64 },
+        "slot_kind": { "type": "string", "maxLength": 64 },
+        "is_factual": { "type": "boolean" },
+        "is_causal": { "type": "boolean" },
+        "text": { "type": "string", "maxLength": 768 },
+        "reference_evidence_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "audit_finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_id", "category", "severity", "rationale"],
+      "properties": {
+        "claim_id": { "type": "string" },
+        "category": { "type": "string" },
+        "severity": { "enum": ["critical", "warning"] },
+        "rationale": { "type": "string", "maxLength": 192 }
+      }
+    }
+  }
+}

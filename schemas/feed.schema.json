@@ -1,0 +1,332 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://follow-the-money/schemas/feed.schema.json",
+  "title": "Follow the Money Feed envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "window",
+    "collection_started_at",
+    "evidence_cutoff_at",
+    "collection_completed_at",
+    "generated_at",
+    "provider_outcomes",
+    "producer",
+    "feed_config",
+    "feed_schema",
+    "provider_contracts",
+    "content_digest",
+    "items",
+    "pipeline"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "run_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "string", "format": "date-time" },
+        "end": { "type": "string", "format": "date-time" }
+      }
+    },
+    "collection_started_at": { "type": "string", "format": "date-time" },
+    "evidence_cutoff_at": { "type": "string", "format": "date-time" },
+    "collection_completed_at": { "type": "string", "format": "date-time" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "provider_outcomes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/provider_outcome" }
+    },
+    "producer": { "$ref": "#/$defs/application_build" },
+    "feed_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshot", "hash"],
+      "properties": {
+        "snapshot": { "type": "object" },
+        "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "feed_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "provider_contracts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["provider_id", "snapshot", "hash"],
+        "properties": {
+          "provider_id": { "type": "string" },
+          "snapshot": { "type": "object" },
+          "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    },
+    "git": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["sha", "dirty"],
+      "properties": {
+        "sha": { "type": "string" },
+        "dirty": { "type": "boolean" }
+      }
+    },
+    "content_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "calendar_horizon_end": { "type": ["string", "null"], "format": "date-time" },
+    "items": { "type": "array", "items": { "$ref": "#/$defs/feed_item" } },
+    "pipeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "warnings"],
+      "properties": {
+        "status": { "enum": ["healthy", "degraded", "failure"] },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "coverage_gap": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["uncovered_start", "uncovered_end"],
+          "properties": {
+            "uncovered_start": { "type": "string", "format": "date-time" },
+            "uncovered_end": { "type": "string", "format": "date-time" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "provider_outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider_id", "state", "attempted", "fetched", "succeeded",
+        "empty", "partial", "failed", "skipped", "accepted", "rejected"
+      ],
+      "properties": {
+        "provider_id": { "type": "string" },
+        "state": { "enum": ["healthy", "empty", "partial", "failed", "skipped"] },
+        "attempted": { "type": "integer", "minimum": 0 },
+        "fetched": { "type": "integer", "minimum": 0 },
+        "succeeded": { "type": "boolean" },
+        "empty": { "type": "boolean" },
+        "partial": { "type": "boolean" },
+        "failed": { "type": "boolean" },
+        "skipped": { "type": "boolean" },
+        "accepted": { "type": "integer", "minimum": 0 },
+        "rejected": { "type": "integer", "minimum": 0 },
+        "error": { "type": ["string", "null"] },
+        "retrieved_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "application_build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package_version", "files", "fingerprint"],
+      "properties": {
+        "package_version": { "type": "string" },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "size", "sha256"],
+            "properties": {
+              "path": { "type": "string" },
+              "size": { "type": "integer", "minimum": 0 },
+              "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+            }
+          }
+        },
+        "fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "git": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["sha", "dirty"],
+          "properties": {
+            "sha": { "type": "string" },
+            "dirty": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "feed_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "provider_id", "source", "payload"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "provider_id": { "type": "string" },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "name", "tier", "kind", "url", "published_at", "knowledge_available_at"],
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "tier": { "enum": ["Tier 1", "Tier 2", "Tier 3"] },
+            "kind": { "type": "string" },
+            "url": { "type": "string", "format": "uri" },
+            "published_at": { "type": ["string", "null"], "format": "date-time" },
+            "updated_at": { "type": ["string", "null"], "format": "date-time" },
+            "knowledge_available_at": { "type": "string", "format": "date-time" },
+            "original_publisher": { "type": ["string", "null"] },
+            "syndication_origin": { "type": ["string", "null"] }
+          }
+        },
+        "payload": { "$ref": "#/$defs/payloads" }
+      }
+    },
+    "payloads": {
+      "oneOf": [
+        { "$ref": "#/$defs/news" },
+        { "$ref": "#/$defs/macro_release" },
+        { "$ref": "#/$defs/policy" },
+        { "$ref": "#/$defs/market_data" },
+        { "$ref": "#/$defs/flow" },
+        { "$ref": "#/$defs/positioning" },
+        { "$ref": "#/$defs/filing" },
+        { "$ref": "#/$defs/calendar" }
+      ]
+    },
+    "news": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "title", "snippet", "occurred_at", "raw_metadata"],
+      "properties": {
+        "type": { "const": "news" },
+        "title": { "type": "string", "maxLength": 300 },
+        "snippet": { "type": "string", "maxLength": 1000 },
+        "occurred_at": { "type": ["string", "null"], "format": "date-time" },
+        "raw_metadata": { "type": "object" }
+      }
+    },
+    "macro_release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "series_id", "released_at", "observation_period", "raw_metadata"],
+      "properties": {
+        "type": { "const": "macro_release" },
+        "series_id": { "type": "string" },
+        "released_at": { "type": "string", "format": "date-time" },
+        "observation_period": { "type": ["object", "null"] },
+        "actual": { "$ref": "#/$defs/numeric_value" },
+        "consensus": { "$ref": "#/$defs/numeric_value" },
+        "previous": { "$ref": "#/$defs/numeric_value" },
+        "raw_metadata": { "type": "object" }
+      }
+    },
+    "numeric_value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "unit"],
+      "properties": {
+        "value": { "type": ["string", "null"], "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$" },
+        "unit": { "type": "string" },
+        "unknown_reason": {
+          "type": ["string", "null"],
+          "enum": ["missing", "unsupported", "incompatible_unit", "non_numeric", null]
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "title", "announced_at", "raw_metadata"],
+      "properties": {
+        "type": { "const": "policy" },
+        "title": { "type": "string", "maxLength": 300 },
+        "announced_at": { "type": "string", "format": "date-time" },
+        "effective_at": { "type": ["string", "null"], "format": "date-time" },
+        "raw_metadata": { "type": "object" }
+      }
+    },
+    "market_data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "instrument_id", "observations", "raw_metadata"],
+      "properties": {
+        "type": { "const": "market_data" },
+        "instrument_id": { "type": "string" },
+        "unit": { "type": "string" },
+        "observations": {
+          "type": "array",
+          "maxItems": 260,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["as_of", "value", "unit"],
+            "properties": {
+              "as_of": { "type": "string", "format": "date-time" },
+              "value": { "type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$" },
+              "unit": { "type": "string" },
+              "available_at": { "type": ["string", "null"], "format": "date-time" },
+              "volume": { "type": ["string", "null"], "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$" }
+            }
+          }
+        },
+        "raw_metadata": { "type": "object" }
+      }
+    },
+    "flow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "instrument_id", "as_of", "net_flow", "raw_metadata"],
+      "properties": {
+        "type": { "const": "flow" },
+        "instrument_id": { "type": "string" },
+        "as_of": { "type": "string", "format": "date-time" },
+        "net_flow": { "$ref": "#/$defs/numeric_value" },
+        "raw_metadata": { "type": "object" }
+      }
+    },
+    "positioning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "instrument_id", "as_of", "position", "raw_metadata"],
+      "properties": {
+        "type": { "const": "positioning" },
+        "instrument_id": { "type": "string" },
+        "as_of": { "type": "string", "format": "date-time" },
+        "position": { "$ref": "#/$defs/numeric_value" },
+        "raw_metadata": { "type": "object" }
+      }
+    },
+    "filing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "form", "company", "accession_number", "filed_at", "raw_metadata"],
+      "properties": {
+        "type": { "const": "filing" },
+        "form": { "type": "string" },
+        "company": { "type": "string" },
+        "accession_number": { "type": "string" },
+        "filed_at": { "type": "string", "format": "date-time" },
+        "raw_metadata": { "type": "object" }
+      }
+    },
+    "calendar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "calendar_id", "scheduled_at", "priority", "raw_metadata"],
+      "properties": {
+        "type": { "const": "calendar" },
+        "calendar_id": { "type": "string" },
+        "scheduled_at": { "type": "string", "format": "date-time" },
+        "priority": { "enum": ["critical", "high", "medium", "low"] },
+        "title": { "type": "string", "maxLength": 300 },
+        "announced_at": { "type": ["string", "null"], "format": "date-time" },
+        "raw_metadata": { "type": "object" }
+      }
+    }
+  }
+}

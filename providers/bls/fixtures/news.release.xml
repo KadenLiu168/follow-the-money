@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+<title>BLS News Releases</title>
+<item>
+<title>Consumer Price Index - August 2026</title>
+<link>https://www.bls.gov/news.release/cpi.nr0.htm</link>
+<guid isPermaLink="false">cpi.nr0</guid>
+<pubDate>Tue, 11 Aug 2026 00:08:00 +0000</pubDate>
+<description>Consumer prices increased 0.2 percent in July.</description>
+</item>
+<item>
+<title>Employment Situation - August 2026</title>
+<link>https://www.bls.gov/news.release/empsit.nr0.htm</link>
+<guid isPermaLink="false">empsit.nr0</guid>
+<pubDate>Tue, 11 Aug 2026 00:06:00 +0000</pubDate>
+<description>Total nonfarm payroll employment increased by 175,000 in July.</description>
+</item>
+</channel>
+</rss>

@@ -1,0 +1,30 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+# Hosted credential-free CI: clean install, offline-only tests, no secrets.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.21"
+      - name: Clean install
+        run: uv sync --frozen --all-groups
+      - name: Credential-free test suite
+        run: uv run pytest -q
+        env:
+          # Ensure no implicit credential or machine-global config is read.
+          OPENAI_API_KEY: ""
+          CI: "true"
+      - name: Validate workflows and entry points
+        run: |
+          uv run python -c "import follow_the_money; print(follow_the_money.__version__)"
+          uv run follow-the-money --help >/dev/null

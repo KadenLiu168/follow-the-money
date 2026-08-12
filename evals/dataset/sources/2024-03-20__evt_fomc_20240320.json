@@ -1,0 +1,17 @@
+{
+  "body_charset": "utf-8",
+  "body_file": "2024-03-20__evt_fomc_20240320.body",
+  "body_sha256": "3b5685cbe90bab470b682e4d49f6fffc6385e140fe0e4d3ec5ef7a7c97983c8b",
+  "body_size": 82347,
+  "content_type": "text/html",
+  "date": "2024-03-20",
+  "event_id": "evt_fomc_20240320",
+  "fetch_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20240320a.htm",
+  "final_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20240320a.htm",
+  "http_status": 200,
+  "provider_id": "federal_reserve",
+  "retrieved_at": "2026-08-11T00:00:00Z",
+  "schema_version": 1,
+  "source_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20240320a.htm",
+  "title": "Federal Reserve issues FOMC statement"
+}

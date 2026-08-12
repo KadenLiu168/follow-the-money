@@ -1,0 +1,51 @@
+# AKShare (optional) — provider contract manifest
+# Contract status: UNVERIFIED. Disabled-by-default optional extra; cannot
+# satisfy any mandatory matrix row.
+
+contract_version: 1
+provider_id: akshare
+name: AKShare (optional)
+verification:
+  verified: false
+  verification_date: null
+  contract_url: null
+  usage_note: >
+    Optional Python extra (akshare). Disabled by default; requires explicit
+    enablement and isolated failure handling. Not a verified contract, so it
+    cannot count as coverage.
+
+authentication: none
+user_agent: "follow-the-money/0.1 (+https://github.com/KadenLiu168/follow-the-money)"
+
+charset:
+  allowed: [utf-8]
+  bom_allowed: false
+  content_type_header: null
+
+fetch_hosts: []
+redirect_hosts: []
+source_link_hosts: []
+
+rate_policy: null
+
+time:
+  knowledge_time: as_of
+  payload_types: [market_data]
+
+identity:
+  stable_record_id: instrument_plus_timestamp
+
+units:
+  index: index
+  percent: percent
+
+freshness:
+  policy: observation_available_before_cutoff
+
+empty_valid_for_window: false
+pagination: none
+default_enabled: false
+
+fixture_provenance:
+  source: "Not verified; no fixtures."
+  files: []

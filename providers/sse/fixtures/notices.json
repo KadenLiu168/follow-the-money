@@ -1,0 +1,16 @@
+{
+  "notices": [
+    {
+      "title": "关于科创50指数成份股调整的公告",
+      "url": "https://www.sse.com.cn/disclosure/announcement/general/c/c_20260811_5789123.shtml",
+      "published_at": "2026-08-11T00:09:00Z",
+      "snippet": "根据指数规则，上海证券交易所决定调整科创50指数样本。"
+    },
+    {
+      "title": "关于ETF期权合约调整的公告",
+      "url": "https://www.sse.com.cn/disclosure/announcement/general/c/c_20260811_5789100.shtml",
+      "published_at": "2026-08-11T00:03:00Z",
+      "snippet": "因标的证券除权除息，交易所对相关期权合约进行调整。"
+    }
+  ]
+}

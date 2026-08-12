@@ -1,0 +1,17 @@
+{
+  "body_charset": "utf-8",
+  "body_file": "2024-06-14__evt_geo_20240614.body",
+  "body_sha256": "c9909338a474855c203ba993d1b274f35c48a798ee524569449dd9cb9bc8eab1",
+  "body_size": 1478,
+  "content_type": "application/json;charset=utf-8",
+  "date": "2024-06-14",
+  "event_id": "evt_geo_20240614",
+  "fetch_url": "https://finance.yahoo.com/quote/GC=F/history",
+  "final_url": "https://finance.yahoo.com/quote/GC=F/history",
+  "http_status": 200,
+  "provider_id": "yahoo_market",
+  "retrieved_at": "2026-08-11T00:00:00Z",
+  "schema_version": 1,
+  "source_url": "https://finance.yahoo.com/quote/GC=F/history",
+  "title": "Yahoo Finance historical chart for GC=F"
+}

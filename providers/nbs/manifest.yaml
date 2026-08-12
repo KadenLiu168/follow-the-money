@@ -1,0 +1,66 @@
+# NBS (国家统计局) — provider contract manifest
+# Contract status: verified on 2026-08-11 against the public HTML index
+# contract and the checked-in fixture. Mandatory macro and calendar coverage.
+
+contract_version: 1
+provider_id: nbs
+name: 国家统计局
+verification:
+  verified: true
+  verification_date: "2026-08-11"
+  contract_url: "https://www.stats.gov.cn/sj/zxfb/"
+  usage_note: >
+    Official macroeconomic statistics and release calendar from stats.gov.cn.
+    Public data, no authentication; HTML index and future-release calendar
+    capability are verified for the mandatory future_calendar row.
+
+authentication: none
+user_agent: "follow-the-money/0.1 (+https://github.com/KadenLiu168/follow-the-money)"
+
+charset:
+  allowed: [utf-8]
+  bom_allowed: false
+  content_type_header: null
+
+fetch_hosts:
+  - { host: stats.gov.cn }
+  - { host: www.stats.gov.cn }
+redirect_hosts:
+  - { host: stats.gov.cn }
+
+source_link_hosts:
+  - host: stats.gov.cn
+    allow_subdomains: true
+    allowed_ports: [443]
+    allowed_query_params: []
+    drop_query_params: []
+
+rate_policy:
+  scope_id: china_gov
+  capacity: 20
+  refill_period_seconds: 60
+  minimum_interval_seconds: 1
+
+time:
+  knowledge_time: released_at
+  payload_types: [macro_release, calendar]
+  calendar_capability: future_release_calendar
+
+identity:
+  stable_record_id: series_plus_release_date
+
+units:
+  percent: percent
+  index: index
+
+freshness:
+  policy: source_released_within_window
+
+empty_valid_for_window: true
+pagination: none
+default_enabled: true
+
+fixture_provenance:
+  source: "Recorded from live responses on 2026-08-11; fixture-backed adapter contract."
+  files:
+    - fixtures/releases.json

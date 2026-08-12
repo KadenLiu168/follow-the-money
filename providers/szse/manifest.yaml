@@ -1,0 +1,64 @@
+# SZSE (深圳证券交易所) — provider contract manifest
+# Contract status: verified on 2026-08-11 against the public HTML index
+# contract and the checked-in fixture. Mandatory china_exchange_evidence row.
+
+contract_version: 1
+provider_id: szse
+name: 深圳证券交易所
+verification:
+  verified: true
+  verification_date: "2026-08-11"
+  contract_url: "https://www.szse.cn/disclosure/notice/general/"
+  usage_note: >
+    Official notices and market/ETF facts from szse.cn. Public data, no
+    authentication; HTML index and source-link rules are verified.
+
+authentication: none
+user_agent: "follow-the-money/0.1 (+https://github.com/KadenLiu168/follow-the-money)"
+
+charset:
+  allowed: [utf-8]
+  bom_allowed: false
+  content_type_header: null
+
+fetch_hosts:
+  - { host: szse.cn }
+  - { host: www.szse.cn }
+redirect_hosts:
+  - { host: szse.cn }
+
+source_link_hosts:
+  - host: szse.cn
+    allow_subdomains: true
+    allowed_ports: [443]
+    allowed_query_params: []
+    drop_query_params: []
+
+rate_policy:
+  scope_id: china_gov
+  capacity: 20
+  refill_period_seconds: 60
+  minimum_interval_seconds: 1
+
+time:
+  knowledge_time: published_at
+  payload_types: [news, market_data]
+
+identity:
+  stable_record_id: notice_id_or_url
+
+units:
+  index: index
+  percent: percent
+
+freshness:
+  policy: source_published_within_window
+
+empty_valid_for_window: true
+pagination: page_number
+default_enabled: true
+
+fixture_provenance:
+  source: "Recorded from live responses on 2026-08-11; fixture-backed adapter contract."
+  files:
+    - fixtures/notices.json

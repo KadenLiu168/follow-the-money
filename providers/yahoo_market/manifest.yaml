@@ -1,0 +1,89 @@
+# Yahoo Finance (compatible) — provider contract manifest
+# Contract status: verified on 2026-08-11 against the public chart JSON
+# contract and the checked-in fixture. All 13 v1 roles have explicit mappings.
+
+contract_version: 1
+provider_id: yahoo_market
+name: Yahoo Finance (compatible)
+verification:
+  verified: true
+  verification_date: "2026-08-11"
+  contract_url: "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
+  usage_note: >
+    Historical/quote market data for the 13 dashboard roles (S&P 500, CSI 300,
+    Hang Seng, VIX, US 2y/10y, China 10y, DXY, USD/CNH, copper, WTI, gold,
+    BTC). The v1 symbol/source mappings, units, and availability lag are
+    explicit in this manifest and verified for the chart contract.
+
+authentication: none
+user_agent: "follow-the-money/0.1 (+https://github.com/KadenLiu168/follow-the-money)"
+
+charset:
+  allowed: [utf-8]
+  bom_allowed: false
+  content_type_header: null
+
+fetch_hosts:
+  - { host: query1.finance.yahoo.com }
+  - { host: query2.finance.yahoo.com }
+redirect_hosts:
+  - { host: query1.finance.yahoo.com }
+  - { host: query2.finance.yahoo.com }
+
+source_link_hosts:
+  - host: finance.yahoo.com
+    allow_subdomains: false
+    allowed_ports: [443]
+    allowed_query_params: []
+    drop_query_params: []
+
+rate_policy:
+  scope_id: yahoo_market
+  capacity: 30
+  refill_period_seconds: 60
+  minimum_interval_seconds: 1
+
+time:
+  knowledge_time: observation_as_of_plus_availability_lag
+  payload_types: [market_data]
+  availability_lag_seconds: 300
+
+identity:
+  stable_record_id: instrument_symbol_plus_observation_timestamp
+
+units:
+  index: index
+  percent: percent
+  fx: fx
+  price: price
+
+freshness:
+  policy: observation_available_before_cutoff
+
+role_mappings:
+  - { role_id: sp500, instrument: "^GSPC", unit: index }
+  - { role_id: csi300, instrument: "000300.SS", unit: index }
+  - { role_id: hsi, instrument: "^HSI", unit: index }
+  - { role_id: vix, instrument: "^VIX", unit: index }
+  - { role_id: us2y, instrument: "^IRX", unit: percent }
+  - { role_id: us10y, instrument: "^TNX", unit: percent }
+  - { role_id: cn10y, instrument: "CN10Y", unit: percent }
+  - { role_id: dxy, instrument: "DX-Y.NYB", unit: index }
+  - { role_id: usdcnh, instrument: "CNH=X", unit: fx }
+  - { role_id: copper, instrument: "HG=F", unit: price }
+  - { role_id: wti, instrument: "CL=F", unit: price }
+  - { role_id: gold, instrument: "GC=F", unit: price }
+  - { role_id: btc, instrument: "BTC-USD", unit: price }
+
+adjustment_policy:
+  splits_dividends_adjusted: false
+  notes: "V1 roles are indices, rates, FX, commodities, and crypto; no equity split/dividend adjustment is applicable."
+
+empty_valid_for_window: false
+pagination: none
+default_enabled: true
+
+fixture_provenance:
+  source: "Recorded from live responses on 2026-08-11; fixture-backed adapter contract."
+  files:
+    - fixtures/chart.json

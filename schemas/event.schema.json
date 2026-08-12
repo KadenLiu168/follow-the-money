@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://follow-the-money/schemas/event.schema.json",
+  "title": "Canonical atomic event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "event_id", "event_type", "evidence_ids",
+    "key_fact_ids", "fully_known_at", "story_family_id",
+    "coexistence_pair_ids", "display_label", "economic_effective_time"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "event_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "event_type": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "evidence_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "key_fact_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "fully_known_at": { "type": "string", "format": "date-time" },
+    "story_family_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "coexistence_pair_ids": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": { "type": "string" },
+        "minItems": 2,
+        "maxItems": 2
+      },
+      "uniqueItems": true
+    },
+    "display_label": { "type": "string", "minLength": 1, "maxLength": 300 },
+    "economic_effective_time": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["value", "precision"],
+      "properties": {
+        "value": { "type": ["string", "null"], "format": "date-time" },
+        "precision": { "enum": ["instant", "date", "month", "year"] }
+      }
+    },
+    "common_effective_time": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["value", "precision"],
+      "properties": {
+        "value": { "type": ["string", "null"], "format": "date-time" },
+        "precision": { "enum": ["instant", "date", "month", "year"] }
+      }
+    },
+    "multiple_effective_times": { "type": ["boolean", "null"] },
+    "key_fact_effective_times": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fact_id", "value", "precision"],
+        "properties": {
+          "fact_id": { "type": "string" },
+          "value": { "type": ["string", "null"], "format": "date-time" },
+          "precision": { "enum": ["instant", "date", "month", "year"] }
+        }
+      }
+    }
+  }
+}

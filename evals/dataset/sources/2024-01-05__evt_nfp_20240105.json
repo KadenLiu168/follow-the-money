@@ -1,0 +1,17 @@
+{
+  "body_charset": "windows-1252",
+  "body_file": "2024-01-05__evt_nfp_20240105.body",
+  "body_sha256": "faba00ecc133d6fdad2b848600359c8360322b406fe1b45680c3e67fa289cdd8",
+  "body_size": 1137148,
+  "content_type": "text/html",
+  "date": "2024-01-05",
+  "event_id": "evt_nfp_20240105",
+  "fetch_url": "https://www.bls.gov/news.release/archives/empsit_01052024.htm",
+  "final_url": "https://www.bls.gov/news.release/archives/empsit_01052024.htm",
+  "http_status": 200,
+  "provider_id": "bls",
+  "retrieved_at": "2026-08-11T00:00:00Z",
+  "schema_version": 1,
+  "source_url": "https://www.bls.gov/news.release/archives/empsit_01052024.htm",
+  "title": "Employment Situation News Release"
+}

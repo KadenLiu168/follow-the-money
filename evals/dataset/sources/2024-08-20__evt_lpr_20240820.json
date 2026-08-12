@@ -1,0 +1,17 @@
+{
+  "body_charset": "utf-8",
+  "body_file": "2024-08-20__evt_lpr_20240820.body",
+  "body_sha256": "9b15e9ca901b2f9146ad7a11d5ddae59dd93a9cd8045c8d376f33a4301f95ceb",
+  "body_size": 9882,
+  "content_type": "text/html",
+  "date": "2024-08-20",
+  "event_id": "evt_lpr_20240820",
+  "fetch_url": "https://www.chinamoney.org.cn/chinese/rdgz/20240820/2941241.html",
+  "final_url": "https://www.chinamoney.org.cn/chinese/rdgz/20240820/2941241.html",
+  "http_status": 200,
+  "provider_id": "pboc",
+  "retrieved_at": "2026-08-11T00:00:00Z",
+  "schema_version": 1,
+  "source_url": "https://www.chinamoney.org.cn/chinese/rdgz/20240820/2941241.html",
+  "title": "2024年8月20日全国银行间同业拆借中心受权公布贷款市场报价利率（LPR）公告_中国货币网"
+}
