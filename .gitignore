@@ -27,5 +27,8 @@ venv/
 config/local.yaml
 .env.local
 
+# WorkBuddy local project data (not a temporary cache, but never committed)
+.workbuddy/
+
 # OS
 .DS_Store
