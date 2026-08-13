@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# Thin wrapper around `follow-the-money brief|eval|replay`. Keeps the CLI the
-# single implementation; this wrapper only forwards arguments and exit codes.
-set -euo pipefail
-exec follow-the-money "$@"

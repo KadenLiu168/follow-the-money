@@ -186,36 +186,6 @@ class FeedLimits:
 
 
 @dataclass(frozen=True)
-class PassConfig:
-    attempt_timeout_seconds: int
-    max_output_tokens: int
-    dynamic_cap_bytes: int
-    concurrency: int
-    max_attempts: int = 2
-
-
-@dataclass(frozen=True)
-class LlmRuntime:
-    """Single-model OpenAI Responses API runtime limits."""
-
-    model: str
-    organization: str | None = None
-    project: str | None = None
-    max_attempts_per_invocation: int = 2
-    static_request_cap_bytes: int = 16 * 1024
-    resolver: PassConfig = PassConfig(30, 72000, 32 * 1024, 4)
-    analyst: PassConfig = PassConfig(45, 72000, 48 * 1024, 4)
-    editor: PassConfig = PassConfig(45, 72000, 72 * 1024, 1)
-    audit: PassConfig = PassConfig(30, 56000, 72 * 1024, 1)
-    max_resolver_blocks: int = 40
-    max_analyst_packets: int = 20
-    max_output_response_bytes: tuple[int, int, int, int] = (64, 64, 64, 48)
-    brief_pre_commit_deadline_seconds: int = 300
-    brief_commit_reserve_seconds: int = 15
-    reasoning_mode: str = "none"
-
-
-@dataclass(frozen=True)
 class SurpriseScale:
     """Versioned per-series normalized-surprise scale (percentage points)."""
 
@@ -345,21 +315,6 @@ class CalendarPolicy:
 
 
 @dataclass(frozen=True)
-class AuditSeverity:
-    """Language-audit finding severity mapping."""
-
-    critical: tuple[str, ...] = (
-        "causal_overclaim",
-        "inference_as_fact",
-        "unsupported_conclusion",
-        "fact_modification",
-        "trading_instruction",
-        "wrong_language",
-    )
-    warning: tuple[str, ...] = ("excessive_certainty", "missing_uncertainty")
-
-
-@dataclass(frozen=True)
 class SafetyLexicon:
     """Prohibited trading-instruction patterns (Chinese and English)."""
 
@@ -419,11 +374,9 @@ class AppConfig:
     sessions: tuple[Session, ...]
     watched_companies: tuple[WatchCompany, ...]
     feed: FeedLimits
-    llm: LlmRuntime
     scoring: Scoring
     market_state: MarketState
     calendar: CalendarPolicy
-    audit_severity: AuditSeverity
     safety_lexicon: SafetyLexicon
     rate_registry: RateRegistry
     output_root: str = "feeds"

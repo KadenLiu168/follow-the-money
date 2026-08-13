@@ -85,7 +85,7 @@ def test_dry_run_publishes_nothing(tmp_path):
 
 def test_cli_usage_error_exit_2():
     proc = subprocess.run(
-        [sys.executable, "-m", "follow_the_money", "feed", "--bogus-flag"],
+        [sys.executable, "-m", "follow_the_money.feed.cli", "--bogus-flag"],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
@@ -96,18 +96,19 @@ def test_cli_usage_error_exit_2():
 
 def test_cli_help_exit_0():
     proc = subprocess.run(
-        [sys.executable, "-m", "follow_the_money", "--help"],
+        [sys.executable, "-m", "follow_the_money.feed.cli", "--help"],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
         check=False,
     )
     assert proc.returncode == 0
-    assert "feed" in proc.stdout
+    assert "--output-root" in proc.stdout
+    assert "--dry-run" in proc.stdout
 
 
-def test_cli_missing_module_runs():
-    # The package must be importable and expose the console entry point.
+def test_package_importable_credential_free():
+    # The package must import with no credential and no console entry point.
     proc = subprocess.run(
         [sys.executable, "-c", "import follow_the_money; print(follow_the_money.__version__)"],
         capture_output=True,
@@ -117,3 +118,6 @@ def test_cli_missing_module_runs():
     )
     assert proc.returncode == 0
     assert proc.stdout.strip() == "0.1.0"
+    # No public console script remains; the old entry is absent.
+    assert not (REPO_ROOT / "src" / "follow_the_money" / "__main__.py").exists()
+    assert not (REPO_ROOT / "src" / "follow_the_money" / "cli.py").exists()

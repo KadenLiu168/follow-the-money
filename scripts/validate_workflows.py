@@ -119,7 +119,7 @@ def validate_repository_workflows(
     _test_data, test_text = _load(test_path)
     feed_data, feed_text = _load(feed_path)
 
-    if 'OPENAI_API_KEY: ""' not in test_text or "pytest" not in test_text:
+    if "OPENAI_API_KEY" in test_text or "pytest" not in test_text:
         raise ValueError("hosted test workflow must remain credential-free and run pytest")
     job = feed_data.get("jobs", {}).get("generate")
     if not isinstance(job, dict):

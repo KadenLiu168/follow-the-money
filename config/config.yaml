@@ -37,44 +37,6 @@ feed:
   max_serialized_feed_bytes: 52428800         # 50 MiB
 
 # ---------------------------------------------------------------------------
-# Single-model LLM runtime (design section 9)
-# ---------------------------------------------------------------------------
-llm:
-  model: ""               # deployment configuration; startup rejects empty
-  organization: null
-  project: null
-  max_attempts_per_invocation: 2
-  static_request_cap_bytes: 16384             # 16 KiB prompt+schema+envelope
-  max_resolver_blocks: 40
-  max_analyst_packets: 20
-  brief_pre_commit_deadline_seconds: 300
-  brief_commit_reserve_seconds: 15
-  resolver:
-    attempt_timeout_seconds: 30
-    max_output_tokens: 72000
-    dynamic_cap_bytes: 32768                  # 32 KiB per resolver block
-    concurrency: 4
-    max_attempts: 2
-  analyst:
-    attempt_timeout_seconds: 45
-    max_output_tokens: 72000
-    dynamic_cap_bytes: 49152                  # 48 KiB per analyst packet
-    concurrency: 4
-    max_attempts: 2
-  editor:
-    attempt_timeout_seconds: 45
-    max_output_tokens: 72000
-    dynamic_cap_bytes: 73728                  # 72 KiB editor projection
-    concurrency: 1
-    max_attempts: 2
-  audit:
-    attempt_timeout_seconds: 30
-    max_output_tokens: 56000
-    dynamic_cap_bytes: 73728                  # 72 KiB audit projection
-    concurrency: 1
-    max_attempts: 2
-
-# ---------------------------------------------------------------------------
 # Scoring (design sections 11-13). Weights are normative v1 values.
 # ---------------------------------------------------------------------------
 scoring:
@@ -168,21 +130,6 @@ calendar:
   max_items: 6
   stale_after_minutes: 30
   hard_lag_hours: 2
-
-# ---------------------------------------------------------------------------
-# Audit severity mapping (design section 17)
-# ---------------------------------------------------------------------------
-audit_severity:
-  critical:
-    - causal_overclaim
-    - inference_as_fact
-    - unsupported_conclusion
-    - fact_modification
-    - trading_instruction
-    - wrong_language
-  warning:
-    - excessive_certainty
-    - missing_uncertainty
 
 # ---------------------------------------------------------------------------
 # Safety lexicon (design section 16). Descriptive false positives are

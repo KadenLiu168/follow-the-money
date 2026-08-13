@@ -22,7 +22,7 @@ def main() -> int:
     if not os.environ.get("FOLLOW_THE_MONEY_QUALITY_TEST"):
         _run("unit/integration/regression/security", [python, "-m", "pytest", "-q"])
     _run("workflow", [python, "scripts/validate_workflows.py"])
-    _run("cli", [python, "-m", "follow_the_money", "--help"])
+    _run("cli", [python, "-m", "follow_the_money.feed.cli", "--help"])
     _run("lint", [python, "-m", "ruff", "check", "src", "tests", "scripts"])
     _run("format", [python, "-m", "ruff", "format", "--check", "src", "tests", "scripts"])
     _run("type-check", [python, "-m", "mypy", "src", "scripts"])

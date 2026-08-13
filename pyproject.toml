@@ -1,7 +1,7 @@
 [project]
 name = "follow-the-money"
 version = "0.1.0"
-description = "Deterministic daily financial intelligence pipeline: evidence-only Feed, canonical events, constrained LLM analysis, Chinese Morning Money Brief."
+description = "Deterministic evidence-only financial intelligence Feed for AI Agents: evidence collection, canonical events, ledger, market state, scoring, and safety audit."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Proprietary" }
@@ -9,7 +9,6 @@ dependencies = [
     "httpx>=0.27,<1",
     "PyYAML>=6.0,<7",
     "jsonschema>=4.22,<5",
-    "openai>=1.40,<3",
     "feedparser>=6.0,<7",
     "exchange-calendars>=4.8,<5",
 ]
@@ -27,9 +26,6 @@ dev = [
     "pytest-cov>=5.0,<7",
     "ruff>=0.6,<1",
 ]
-
-[project.scripts]
-follow-the-money = "follow_the_money.cli:main"
 
 [build-system]
 requires = ["hatchling"]

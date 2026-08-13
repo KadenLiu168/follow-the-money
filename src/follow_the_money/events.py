@@ -137,8 +137,9 @@ def build_event(
     """Construct a canonical Event object with script-owned identity.
 
     The event's key facts are looked up from the frozen ledger; the display
-    label is derived deterministically. Returns a dict matching
-    ``event.schema.json``.
+    label is derived deterministically. Returns a closed structured dict with
+    script-owned identity; the old ``event.schema.json`` contract was removed
+    with the four-pass pipeline.
     """
     evidence = tuple(sorted(set(evidence_ids)))
     entities = tuple(sorted(set(entity_ids)))

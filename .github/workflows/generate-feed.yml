@@ -79,7 +79,7 @@ jobs:
       - name: One staged generation
         id: feed
         run: |
-          uv run follow-the-money feed \
+          uv run python -m follow_the_money.feed.cli \
             --output-root "$OUTPUT_ROOT" \
             --status-file feed-status.json
       - name: Validate generated Feed

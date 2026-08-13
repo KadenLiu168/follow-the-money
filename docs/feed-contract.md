@@ -83,12 +83,14 @@ observations not source-available at cutoff are rejected.
   self-hosted runner with a persistent shared output root and durable rate
   state; an ephemeral hosted runner/fresh root fails the contract.
 
-## Feed CLI
+## Minimal internal Feed entry
 
-- `follow-the-money feed` supports explicit config/output roots, `--dry-run`,
-  fixture clocks/windows, and deterministic exit codes (0 healthy/degraded,
-  1 generation/publication failure, 2 usage/config).
-- `feed --dry-run` publishes nothing but real sends still lock and durably
+- The minimal internal entry (`python -m follow_the_money.feed.cli` behind
+  `scripts/feed/follow-the-money-feed`) supports explicit config/output
+  roots, `--dry-run`, fixture clocks/windows, and deterministic exit codes
+  (0 healthy/degraded, 1 generation/publication failure, 2 usage/config).
+- `--dry-run` publishes nothing but real sends still lock and durably
   debit/reconcile rate state; an explicit no-send fixture dry run may leave
   rate state unchanged.
-- The Feed command never imports or initializes the LLM adapter.
+- There is no LLM adapter anywhere: the Feed pipeline is fully deterministic
+  and credential-free, and no public user-facing CLI product form exists.

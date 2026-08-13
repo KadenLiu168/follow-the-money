@@ -1,27 +1,44 @@
 ---
 name: follow-the-money
 description: |
-  Deterministic daily financial intelligence: evidence-only Feed from free
-  China/US official and public sources, canonical events, constrained LLM
-  analysis, and the fixed Chinese Morning Money Brief. Script-first, LLM-last.
-  Triggers on "/money", on a schedule, or when the user asks for a morning
-  money brief / fund flow digest / macro policy roundup.
+  Evidence-grounded financial research Skill for AI Agents: deterministic,
+  credential-free evidence Feed from free China/US official and public
+  sources, plus a retained deterministic engine (ledger, canonical events,
+  market state, watchlist, scoring/selection rules, safety audit). Triggers
+  on "/money", on a schedule, or when the user asks for a money/flow/macro
+  research digest backed by primary sources.
 ---
 
 # Follow the Money — Skill Orchestration Contract
 
 This Skill is the orchestration layer over the local repository. It delegates
-every network call and every deterministic step to the Python CLI under
-`follow-the-money`; the Skill runtime stays a thin coordinator and never
-re-implements pipeline logic.
+every network call and every deterministic step to the minimal internal Feed
+entry; the Skill runtime stays a thin coordinator and never re-implements
+pipeline logic.
+
+## Transitional state
+
+The repository is intentionally transitional: the deterministic core is live
+and tested, but the structured Agent delivery contract (research context,
+analysis and Brief schemas, validation) is **not yet built**. The host Agent
+is expected to:
+
+1. Collect the evidence Feed (below), then
+2. Perform the financial analysis and produce the research digest itself,
+   grounding every factual claim in the Feed's evidence and provenance.
+
+The fixed Brief pipeline and its structured contracts are deferred to a
+future Change. Do not invent a substitute contract or a fake pipeline in the
+meantime.
 
 ## Investment-assistance boundary
 
-Output the Brief exactly as rendered. It contains financial intelligence and
-uncertainty but must **never** be rewritten to add buy, sell, add, reduce,
-position-size, entry, exit, stop-loss, or target-price instructions. If a
-step fails, surface the exact stderr and stop — do not silently substitute a
-partial digest or invent events.
+The digest may contain financial intelligence and uncertainty but must
+**never** contain buy, sell, add, reduce, position-size, entry, exit,
+stop-loss, or target-price instructions — in Chinese or English. If a step
+fails, surface the exact stderr and stop — do not silently substitute a
+partial digest or invent events. The retained `ClaimAuditor` may be applied
+to any submitted text as a deterministic safety check.
 
 ## Non-Go boundary (do not claim)
 
@@ -29,45 +46,40 @@ partial digest or invent events.
   enabled workflow unless separately authorized.
 - GitHub Actions does **not** invoke this Skill at 08:30. External scheduling
   is configured by the deployment environment after Feed publication.
-- The Brief reflects one fixed evidence cutoff captured before provider
+- The Feed reflects one fixed evidence cutoff captured before provider
   requests; it never claims coverage through collection completion or a
   nominal 08:30 value.
 
 ## Pipeline
 
 ```text
-follow-the-money feed          # evidence-only Feed, no LLM
-  -> follow-the-money brief    # full Brief (requires one OpenAI credential)
-     or follow-the-money brief --degraded-report   # deterministic, no LLM
-  -> follow-the-money replay <bundle>              # audit/replay
-  -> follow-the-money eval     # offline or credentialed live evaluation
+scripts/feed/follow-the-money-feed      # evidence-only Feed, deterministic,
+                                        # credential-free, no LLM anywhere
+  -> host Agent: analyze the evidence and write the research digest
 ```
 
-## CLI exit-code contract
+## Exit-code contract
 
-- `0` complete success
-- `1` runtime/domain/schema/reference/integrity/deadline/publication/delivery failure
-- `2` usage/config/missing credential/startup capability error
+- `0` complete success (healthy or degraded Feed; warnings on stderr/status)
+- `1` runtime/domain/schema/reference/integrity/deadline/publication failure
+- `2` usage/config/startup capability error
 
 ## Daily flow (scheduled or /money)
 
-1. **Feed**: `uv run follow-the-money feed` (or `scripts/feed/follow-the-money-feed`).
-   Exit 0 with healthy or degraded Feed; warnings are on stderr and in status.
-   A Feed failure means no Brief should run.
-2. **Brief**: `uv run follow-the-money brief --feed feeds/latest.json --output out.md`.
-   Requires `OPENAI_API_KEY` + configured model. Without a credential, only
-   `--degraded-report` may succeed. Delivery happens only after the atomic
-   run bundle commits; the bundle-contained Markdown is authoritative.
-3. **Output**: render the committed Markdown to the conversation. Never
-   summarize away uncertainty or coverage warnings.
-4. **Replay/audit**: `uv run follow-the-money replay runs/<brief_run_id>/` —
-   offline, no network/LLM, fails on any drift or integrity mismatch.
+1. **Feed**: `scripts/feed/follow-the-money-feed` (or
+   `uv run python -m follow_the_money.feed.cli`). Exit 0 with healthy or
+   degraded Feed; warnings are on stderr and in status. A Feed failure means
+   no digest should be produced from it.
+2. **Evidence**: read `feeds/latest.json` (or the dated
+   `feeds/daily/<date>/<run_id>.json`). Every item carries source provenance;
+   the window, cutoff, and run identity are authoritative.
+3. **Analysis**: the host Agent analyzes the evidence and writes the digest,
+   citing Feed items. No other repository entry exists.
 
-If a required step fails, surface the exact stderr and stop. Partial output is
-worse than no output.
+If a required step fails, surface the exact stderr and stop. Partial output
+is worse than no output.
 
 ## Credentials
 
-Only one OpenAI credential is required, only for `brief` and live `eval`.
-The Feed needs none. Provider secrets (if any) must be at least 8 UTF-8 bytes
-and are never logged; source URLs are credential-free by validation.
+None. The Feed needs no credential, model, or network configuration beyond
+the configured providers.

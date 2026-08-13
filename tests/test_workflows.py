@@ -33,7 +33,9 @@ def test_test_workflow_offline_only():
     steps_text = yaml.safe_dump(data)
     # No secrets, no provider credentials, no live endpoint dependency.
     assert "secrets:" not in steps_text
-    assert "OPENAI_API_KEY:" in steps_text  # explicitly blanked
+    # No OpenAI/LLM credential exists anywhere in the deterministic engine.
+    assert "OPENAI_API_KEY" not in steps_text
+    assert "openai" not in steps_text
     assert "pytest" in steps_text
 
 
@@ -101,9 +103,14 @@ def test_feed_workflow_uploads_artifact_on_failure():
 def test_entry_points_referenced_exist():
     data = _load("test.yml")
     text = yaml.safe_dump(data)
-    assert "follow-the-money" in text
-    from follow_the_money.cli import _build_parser
+    assert "follow_the_money.feed.cli" in text
+    # The only invocation surface is the minimal internal Feed entry.
+    from follow_the_money.feed.cli import _build_parser
 
     parser = _build_parser()
-    subcommands = set(parser._subparsers._actions[-1].choices.keys())
-    assert {"feed", "brief", "eval", "replay"} <= subcommands
+    actions = {a.dest for a in parser._actions}
+    assert {"config", "output_root", "dry_run", "cutoff", "window_start", "status_file"} <= actions
+    # No public CLI subcommands survive.
+    from argparse import _SubParsersAction
+
+    assert not any(isinstance(a, _SubParsersAction) for a in parser._actions)

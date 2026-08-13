@@ -128,24 +128,3 @@ class ClaimAuditor:
             if term in cleaned:
                 return True
         return False
-
-
-def audit_language_findings(
-    audit_output: Mapping[str, Any],
-    severity_map: Mapping[str, tuple[str, ...]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Map language-audit categories to severity; any critical blocks
-    publication, warnings remain visible."""
-    critical = severity_map.get("critical", ())
-    warning = severity_map.get("warning", ())
-    critical_findings: list[dict[str, Any]] = []
-    warning_findings: list[dict[str, Any]] = []
-    for finding in audit_output.get("findings", []):
-        category = finding["category"]
-        if category in critical:
-            critical_findings.append({**finding, "severity": "critical"})
-        elif category in warning:
-            warning_findings.append({**finding, "severity": "warning"})
-        else:
-            critical_findings.append({**finding, "severity": "critical"})
-    return critical_findings, warning_findings

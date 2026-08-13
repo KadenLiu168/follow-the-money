@@ -25,7 +25,22 @@ from follow_the_money.ledger import (
     build_ledger_entry,
     canonical_fact_key,
 )
-from follow_the_money.schema import SchemaError, validate_against
+
+EVENT_KEYS = {
+    "schema_version",
+    "event_id",
+    "event_type",
+    "evidence_ids",
+    "key_fact_ids",
+    "fully_known_at",
+    "story_family_id",
+    "coexistence_pair_ids",
+    "display_label",
+    "economic_effective_time",
+    "common_effective_time",
+    "multiple_effective_times",
+    "key_fact_effective_times",
+}
 
 T1 = "2026-08-11T01:00:00Z"
 T2 = "2026-08-11T02:30:00Z"
@@ -149,7 +164,7 @@ def test_build_event_fully_known_and_key_facts():
     assert event["fully_known_at"] == T2
     assert event["key_fact_ids"] == sorted([f1.fact_id, f2.fact_id])
     assert event["schema_version"] == 1
-    validate_against("event.schema.json", event)
+    assert set(event) == EVENT_KEYS  # closed structured contract, no free text
 
 
 def test_event_id_discriminates_fact_time_and_value():
@@ -256,7 +271,7 @@ def test_event_family_and_pairs_schema():
         member_events=["evt_a", "evt_b"],
         coexistence_pairs=[("evt_b", "evt_a")],
     )
-    validate_against("event.schema.json", e1)
+    assert set(e1) == EVENT_KEYS
     assert e1["story_family_id"] == story_family_id(["evt_a", "evt_b"])
     assert e1["coexistence_pair_ids"] == [["evt_a", "evt_b"]]
 
@@ -326,7 +341,9 @@ def test_invalid_entry_type_rejected():
         )
 
 
-def test_event_schema_rejects_unknown_fields():
+def test_event_never_carries_free_text_fields():
+    # Events are script-derived from closed structured facts only; no free-text
+    # or LLM title field can enter the object.
     ledger = Ledger()
     f = _fact(ledger)
     event = build_event(
@@ -337,6 +354,5 @@ def test_event_schema_rejects_unknown_fields():
         ledger=ledger,
         subject_zh="美联储",
     )
-    event["llm_title"] = "invented"
-    with pytest.raises(SchemaError):
-        validate_against("event.schema.json", event)
+    assert set(event) == EVENT_KEYS
+    assert all(isinstance(v, (list, dict, str, int, type(None))) for v in event.values())

@@ -27,17 +27,14 @@ from .model import (
     V1_ROLE_IDS,
     AppConfig,
     AssetGroupMapping,
-    AuditSeverity,
     CalendarPolicy,
     CoverageMatrix,
     CoverageRow,
     Entity,
     FeedLimits,
     FetchRule,
-    LlmRuntime,
     MarketRole,
     MarketState,
-    PassConfig,
     ProviderEntry,
     RatePolicy,
     RateRegistry,
@@ -138,11 +135,9 @@ ALLOWED_CONFIG_KEYS: frozenset[str] = frozenset(
         "freshness_limit_minutes",
         "normal_lag_hours",
         "feed",
-        "llm",
         "scoring",
         "market_state",
         "calendar",
-        "audit_severity",
         "safety_lexicon",
         "rate_registry",
         "roles",
@@ -470,7 +465,7 @@ def load_config(
 
     _require_keys(
         data,
-        {"schema_version", "name", "feed", "llm", "scoring"},
+        {"schema_version", "name", "feed", "scoring"},
         str(config_path),
     )
     schema_version = int(data["schema_version"])
@@ -493,7 +488,6 @@ def load_config(
         _validate_rate_policies(providers)
 
     feed_raw = data["feed"]
-    llm_raw = data["llm"]
     scoring = _parse_scoring(data["scoring"], "scoring")
 
     roles = _parse_roles(data.get("roles", []), "roles")
@@ -586,38 +580,8 @@ def load_config(
         if value <= 0:
             raise ConfigError(f"feed.{name_} must be positive, got {value}")
 
-    def _pass(name_: str) -> PassConfig:
-        p = llm_raw.get(name_, {}) or {}
-        return PassConfig(
-            attempt_timeout_seconds=int(p.get("attempt_timeout_seconds", 30)),
-            max_output_tokens=int(p.get("max_output_tokens", 72000)),
-            dynamic_cap_bytes=int(p.get("dynamic_cap_bytes", 32 * 1024)),
-            concurrency=int(p.get("concurrency", 4)),
-            max_attempts=int(p.get("max_attempts", 2)),
-        )
-
-    llm = LlmRuntime(
-        model=str(llm_raw.get("model", "")),
-        organization=llm_raw.get("organization"),
-        project=llm_raw.get("project"),
-        resolver=_pass("resolver"),
-        analyst=_pass("analyst"),
-        editor=_pass("editor"),
-        audit=_pass("audit"),
-        max_resolver_blocks=int(llm_raw.get("max_resolver_blocks", 40)),
-        max_analyst_packets=int(llm_raw.get("max_analyst_packets", 20)),
-        brief_pre_commit_deadline_seconds=int(
-            llm_raw.get("brief_pre_commit_deadline_seconds", 300)
-        ),
-        brief_commit_reserve_seconds=int(llm_raw.get("brief_commit_reserve_seconds", 15)),
-    )
-    # The shipped default ships an empty model name: the single model is
-    # deployment configuration and startup rejects it, but the config file
-    # itself must remain loadable for structural validation and tests.
-
     market_state = MarketState()
     calendar = CalendarPolicy()
-    audit_severity = AuditSeverity()
     safety = SafetyLexicon()
     rate_registry = RateRegistry()
 
@@ -632,11 +596,9 @@ def load_config(
         sessions=sessions,
         watched_companies=watched,
         feed=feed_limits,
-        llm=llm,
         scoring=scoring,
         market_state=market_state,
         calendar=calendar,
-        audit_severity=audit_severity,
         safety_lexicon=safety,
         rate_registry=rate_registry,
         output_root=str(data.get("output_root", "feeds")),

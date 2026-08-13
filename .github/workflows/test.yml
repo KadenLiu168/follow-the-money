@@ -22,9 +22,8 @@ jobs:
         run: uv run pytest -q
         env:
           # Ensure no implicit credential or machine-global config is read.
-          OPENAI_API_KEY: ""
           CI: "true"
       - name: Validate workflows and entry points
         run: |
           uv run python -c "import follow_the_money; print(follow_the_money.__version__)"
-          uv run follow-the-money --help >/dev/null
+          uv run python -m follow_the_money.feed.cli --help >/dev/null

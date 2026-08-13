@@ -71,7 +71,6 @@ def _minimal_config(**overrides) -> dict:
             "pre_commit_deadline_seconds": 300,
             "commit_reserve_seconds": 15,
         },
-        "llm": {"model": "gpt-test"},
         "scoring": {
             "significance_weights": [30, 20, 20, 20, 10],
             "asset_groups": V1_ASSET_GROUPS,
@@ -175,14 +174,6 @@ def test_shipped_defaults_load_structure_without_enablement():
     assert cfg.feed.per_host_concurrency == 2
     assert cfg.feed.http_attempt_timeout_seconds == 20
     assert cfg.feed.max_attempts == 3
-    assert cfg.llm.resolver.attempt_timeout_seconds == 30
-    assert cfg.llm.analyst.attempt_timeout_seconds == 45
-    assert cfg.llm.editor.attempt_timeout_seconds == 45
-    assert cfg.llm.audit.attempt_timeout_seconds == 30
-    assert cfg.llm.max_resolver_blocks == 40
-    assert cfg.llm.max_analyst_packets == 20
-    assert cfg.llm.brief_pre_commit_deadline_seconds == 300
-    assert cfg.llm.brief_commit_reserve_seconds == 15
     assert cfg.scoring.full_priority_threshold == "60"
     assert cfg.scoring.compact_priority_threshold == "40"
     assert cfg.scoring.family_penalty == "15"
@@ -590,9 +581,13 @@ def test_shipped_config_does_not_require_optional_extras():
     assert "akshare" not in sys.modules
 
 
-def test_unknown_llm_model_rejected():
+def test_config_loads_without_any_llm_section():
+    # The deterministic engine is credential-free: no `llm:` section exists
+    # in the config contract and loading never reads a model or API key.
     cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=False)
-    assert cfg.llm.model == ""  # empty shipped; startup rejects missing config
+    assert not hasattr(cfg, "llm")
+    assert not hasattr(cfg, "audit_severity")
+    assert cfg.safety_lexicon.zh_terms  # deterministic safety contract still loads
 
 
 # ---------------------------------------------------------------------------

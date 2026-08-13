@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Thin wrapper around `follow-the-money feed`. Keeps the CLI the single
-# implementation; this wrapper only forwards arguments and exit codes.
+# Minimal internal Feed entry for Agent/Skill use. Forwards arguments and
+# exit codes to the deterministic feed pipeline; there is no public CLI.
 set -euo pipefail
-exec follow-the-money feed "$@"
+exec uv run python -m follow_the_money.feed.cli "$@"

@@ -18,6 +18,7 @@ Exit contract: 0 healthy/degraded success; 1 generation/publication failure;
 
 from __future__ import annotations
 
+import argparse
 import json
 import time
 from collections.abc import Callable, Mapping
@@ -805,3 +806,80 @@ def _build_feed(
     feed["content_digest"] = digest
     feed["run_id"] = run_id
     return feed
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Minimal internal Feed entry used by the Agent/Skill (no public CLI)."""
+    parser = argparse.ArgumentParser(
+        prog="follow-the-money-feed",
+        description="Collect and publish the evidence-only Feed (deterministic, credential-free).",
+    )
+    parser.add_argument(
+        "--config", default=None, help="Explicit config file path (default: repo default)."
+    )
+    parser.add_argument(
+        "--output-root", default=None, help="Explicit output root for feeds/ and rate state."
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Validate and report without publishing."
+    )
+    parser.add_argument(
+        "--cutoff", default=None, help="Fixture: explicit ISO-8601 evidence cutoff."
+    )
+    parser.add_argument(
+        "--window-start", default=None, help="Fixture: explicit ISO-8601 window start."
+    )
+    parser.add_argument(
+        "--status-file", default=None, help="Write machine-readable status JSON here."
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run one Feed collection. Exit contract: 0 healthy/degraded success;
+    1 generation/publication failure; 2 usage/config/startup-capability error."""
+    import sys
+
+    args = _build_parser().parse_args(argv)
+    cutoff = None
+    if args.cutoff:
+        from datetime import datetime
+
+        cutoff = datetime.fromisoformat(args.cutoff)
+    try:
+        result = run_feed(
+            config_path=args.config,
+            output_root=args.output_root,
+            dry_run=args.dry_run,
+            cutoff=cutoff,
+            window_start=args.window_start,
+        )
+    except (FeedCliError, FeedPlanError) as exc:
+        print(f"follow-the-money-feed: {exc}", file=sys.stderr)
+        return 2 if "non_advancing" in str(exc) or "config" in str(exc).lower() else 1
+    if args.status_file:
+        status = {"status": result.status, "warnings": result.warnings}
+        if result.feed is not None:
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+
+            cutoff = datetime.fromisoformat(result.feed["evidence_cutoff_at"])
+            asia_date = cutoff.astimezone(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
+            status.update(
+                {
+                    "run_id": result.feed["run_id"],
+                    "evidence_cutoff_at": result.feed["evidence_cutoff_at"],
+                    "dated_relative_path": f"daily/{asia_date}/{result.feed['run_id']}.json",
+                    "latest_relative_path": "latest.json",
+                }
+            )
+        Path(args.status_file).write_text(json.dumps(status), encoding="utf-8")
+    for warning in result.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    if result.feed is not None and args.dry_run:
+        print(json.dumps(result.feed, ensure_ascii=False, indent=2)[:2000])
+    return result.exit_code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
