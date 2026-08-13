@@ -1,6 +1,7 @@
 # Yahoo Finance (compatible) — provider contract manifest
 # Contract status: verified on 2026-08-11 against the public chart JSON
-# contract and the checked-in fixture. All 13 v1 roles have explicit mappings.
+# contract and checked-in evidence. Roles without exact evidence remain explicit
+# but unavailable to Market State rather than being silently proxied.
 
 contract_version: 1
 provider_id: yahoo_market
@@ -13,7 +14,7 @@ verification:
     Historical/quote market data for the 13 dashboard roles (S&P 500, CSI 300,
     Hang Seng, VIX, US 2y/10y, China 10y, DXY, USD/CNH, copper, WTI, gold,
     BTC). The v1 symbol/source mappings, units, and availability lag are
-    explicit in this manifest and verified for the chart contract.
+    explicit in this manifest; exact role verification is recorded per mapping.
 
 authentication: none
 user_agent: "follow-the-money/0.1 (+https://github.com/KadenLiu168/follow-the-money)"
@@ -61,19 +62,19 @@ freshness:
   policy: observation_available_before_cutoff
 
 role_mappings:
-  - { role_id: sp500, instrument: "^GSPC", unit: index }
-  - { role_id: csi300, instrument: "000300.SS", unit: index }
-  - { role_id: hsi, instrument: "^HSI", unit: index }
-  - { role_id: vix, instrument: "^VIX", unit: index }
-  - { role_id: us2y, instrument: "^IRX", unit: percent }
-  - { role_id: us10y, instrument: "^TNX", unit: percent }
-  - { role_id: cn10y, instrument: "CN10Y", unit: percent }
-  - { role_id: dxy, instrument: "DX-Y.NYB", unit: index }
-  - { role_id: usdcnh, instrument: "CNH=X", unit: fx }
-  - { role_id: copper, instrument: "HG=F", unit: price }
-  - { role_id: wti, instrument: "CL=F", unit: price }
-  - { role_id: gold, instrument: "GC=F", unit: price }
-  - { role_id: btc, instrument: "BTC-USD", unit: price }
+  - { role_id: sp500, instrument: "^GSPC", unit: index, mapping_verified: true }
+  - { role_id: csi300, instrument: "000300.SS", unit: index, mapping_verified: true }
+  - { role_id: hsi, instrument: "^HSI", unit: index, mapping_verified: false, reason: "no exact checked-in Yahoo fixture" }
+  - { role_id: vix, instrument: "^VIX", unit: index, mapping_verified: false, reason: "checked-in body identifies the symbol but not the configured XNYS close contract" }
+  - { role_id: us2y, instrument: "^IRX", unit: percent, mapping_verified: false, reason: "^IRX is 13-week, not 2-year" }
+  - { role_id: us10y, instrument: "^TNX", unit: percent, mapping_verified: false, reason: "no exact checked-in Yahoo fixture" }
+  - { role_id: cn10y, instrument: "CN10Y", unit: percent, mapping_verified: false, reason: "no exact checked-in Yahoo fixture" }
+  - { role_id: dxy, instrument: "DX-Y.NYB", unit: index, mapping_verified: false, reason: "no exact checked-in Yahoo fixture" }
+  - { role_id: usdcnh, instrument: "CNH=X", unit: fx, mapping_verified: false, reason: "no exact checked-in Yahoo fixture" }
+  - { role_id: copper, instrument: "HG=F", unit: price, mapping_verified: false, reason: "no exact checked-in Yahoo fixture" }
+  - { role_id: wti, instrument: "CL=F", unit: price, mapping_verified: false, reason: "checked-in body does not verify the configured UTC daily boundary" }
+  - { role_id: gold, instrument: "GC=F", unit: price, mapping_verified: false, reason: "checked-in body does not verify the configured UTC daily boundary" }
+  - { role_id: btc, instrument: "BTC-USD", unit: price, mapping_verified: false, reason: "no exact checked-in Yahoo fixture" }
 
 adjustment_policy:
   splits_dividends_adjusted: false

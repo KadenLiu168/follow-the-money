@@ -45,6 +45,13 @@ class MarketRole:
     name_zh: str
     instrument: str
     unit: str
+    provider_id: str
+    economic_identity: str
+    daily_close_semantics: str
+    source_provenance: str
+    mapping_verified: bool
+    availability_lag_seconds: int
+    session_id: str
     session_class: str = "exchange_traded"  # exchange_traded | continuous_247 | continuous_245
     kind: str = "price"  # price | yield | index | fx | commodity | crypto
 
@@ -58,6 +65,7 @@ class Session:
     session_class: str
     timezone: str = "UTC"
     annualization_factor: str = "252"  # Decimal string
+    availability_lag_seconds: int = 300
 
 
 @dataclass(frozen=True)

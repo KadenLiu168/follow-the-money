@@ -43,7 +43,14 @@ FULL_SLOT_KINDS = (
 COMPACT_SLOT_KINDS = ("event_fact_summary", "why_it_matters", "uncertainty")
 
 FACTUAL_KINDS = frozenset(
-    {"event_fact_summary", "reaction_attribution", "price_in", "money_flow", "asset_mapping"}
+    {
+        "market_state_explanation",
+        "event_fact_summary",
+        "reaction_attribution",
+        "price_in",
+        "money_flow",
+        "asset_mapping",
+    }
 )
 CAUSAL_KINDS = frozenset({"why_it_matters", "alternative", "bottom_line_point"})
 
@@ -171,6 +178,12 @@ def merge_editor_output(
     watchlist priority/order, bottom-line ownership) come only from the script
     side; the editor supplies only wording fragments and evidence references.
     """
+    for forbidden in ("headings", "dashboard", "market_state", "score", "status", "urls"):
+        if forbidden in editor_output:
+            raise BriefError(f"editor output must not supply {forbidden!r}")
+    from .schema import validate_against
+
+    validate_against("editor-output.schema.json", editor_output)
 
     slot_by_alias = {s.alias: s for s in slots}
     filled = editor_output.get("filled_slots", [])
@@ -178,11 +191,13 @@ def merge_editor_output(
         raise BriefError(f"editor filled {len(filled)} slots; only {len(slots)} allocated")
 
     wording: dict[str, str] = {}
-    filled_kinds: set[str] = set()
+    reference_aliases_by_slot: dict[str, tuple[str, ...]] = {}
     for entry in filled:
         alias = entry["slot_alias"]
         if alias not in slot_by_alias:
             raise BriefError(f"editor filled unallocated slot {alias!r}")
+        if alias in wording:
+            raise BriefError(f"editor filled slot {alias!r} more than once")
         refs = entry.get("reference_aliases", [])
         allowed = set(slot_by_alias[alias].exposed_aliases)
         if not set(refs) <= allowed:
@@ -190,18 +205,29 @@ def merge_editor_output(
                 f"slot {alias}: editor referenced non-exposed evidence aliases {sorted(set(refs) - allowed)}"
             )
         wording[alias] = entry["wording_fragment"]
-        filled_kinds.add(slot_by_alias[alias].kind)
+        reference_aliases_by_slot[alias] = tuple(refs)
 
     # Required unfilled slots fail assembly (no fallback).
     for s in slots:
         if s.required and s.alias not in wording:
             raise BriefError(f"required editor slot {s.alias!r} ({s.kind}) was not filled")
+        if (
+            s.kind == "market_state_explanation"
+            and market_state.get("regime") != "unknown"
+            and not reference_aliases_by_slot.get(s.alias)
+        ):
+            raise BriefError(
+                "classified Market State explanation requires at least one evidence reference"
+            )
 
     slot_meta = {
         s.alias: {
             "class": "editor" if s.kind != "bottom_line_point" else "bottom_line",
             "slot_kind": s.kind,
-            "is_factual": s.is_factual,
+            "is_factual": s.is_factual
+            and (
+                s.kind != "market_state_explanation" or bool(reference_aliases_by_slot.get(s.alias))
+            ),
             "is_causal": s.is_causal,
         }
         for s in slots
@@ -220,6 +246,16 @@ def merge_editor_output(
     # market_state: script-owned (editor may not change it).
     market_out = dict(market_state)
     market_out.pop("evidence_ids", None)
+    market_out.pop("evidence_cutoff_at", None)
+    state_explanation = next(
+        (
+            wording[s.alias]
+            for s in slots
+            if s.kind == "market_state_explanation" and s.alias in wording
+        ),
+        "",
+    )
+    market_out["explanation"] = state_explanation
     # watchlist: label is script-derived from the calendar title; explanation
     # is the editor's ``watchlist_explanation`` wording for that item.
     watchlist_out = []

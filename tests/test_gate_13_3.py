@@ -12,14 +12,20 @@ a separate explicit path that never satisfies this gate.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+import warnings
+from copy import deepcopy
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
+import exchange_calendars as xcals
 import pytest
 
+from follow_the_money import pipeline as pipeline_module
 from follow_the_money.brief_cli import run_brief
 from follow_the_money.feed.validate import recompute_feed_identity
+from follow_the_money.market.formulas import normative_decimal_context
 from follow_the_money.pipeline import PipelineError, feed_to_ledger, run_pipeline
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -338,15 +344,16 @@ def test_feed_to_ledger_builds_facts_and_observations():
 # ---------------------------------------------------------------------------
 
 
-def _adapter_for(feed: dict):
+def _adapter_for(feed: dict, cfg=None):
     from follow_the_money.config import load_config
     from follow_the_money.llm import ResponsesAdapter
 
-    cfg = load_config(
-        REPO_ROOT / "config" / "config.yaml",
-        REPO_ROOT / "config" / "providers.yaml",
-        require_verified_enabled=True,
-    )
+    if cfg is None:
+        cfg = load_config(
+            REPO_ROOT / "config" / "config.yaml",
+            REPO_ROOT / "config" / "providers.yaml",
+            require_verified_enabled=True,
+        )
     seed_ids = [
         e.fact_id
         for e in feed_to_ledger(
@@ -418,6 +425,288 @@ def test_normal_pipeline_full_run_produces_valid_brief():
     # Deterministic components present.
     assert result.events and result.packets and result.analyses
     assert result.selected
+
+
+def _verified_market_config():
+    """A synthetic verified contract owned only by the complete Feed fixture."""
+    from dataclasses import replace
+
+    from follow_the_money.config import load_config
+
+    cfg = load_config(
+        REPO_ROOT / "config" / "config.yaml",
+        REPO_ROOT / "config" / "providers.yaml",
+        require_verified_enabled=True,
+    )
+    return replace(
+        cfg,
+        roles=tuple(
+            replace(
+                role,
+                mapping_verified=True,
+                daily_close_semantics="synthetic completed-session close fixture",
+                source_provenance="tests/test_gate_13_3.py::_complete_market_feed",
+            )
+            for role in cfg.roles
+        ),
+    )
+
+
+def _market_labels(session, count: int = 22) -> list[date]:
+    if session.session_class == "continuous_247":
+        latest = date(2026, 8, 2)
+        return [latest - timedelta(days=i) for i in range(count - 1, -1, -1)]
+    if session.session_class == "continuous_245":
+        labels: list[date] = []
+        cursor = date(2026, 7, 31)
+        while len(labels) < count:
+            if cursor.weekday() < 5:
+                labels.append(cursor)
+            cursor -= timedelta(days=1)
+        return list(reversed(labels))
+    calendar = _calendar(session.calendar)
+    return [
+        value.date() for value in calendar.sessions_in_range("2026-06-01", "2026-07-31")[-count:]
+    ]
+
+
+def _market_values(*, role_kind: str, direction: str) -> list[str]:
+    reference = [Decimal("0.01"), Decimal("-0.005")] * 10
+    current = {
+        "positive": Decimal("0.05"),
+        "negative": Decimal("-0.05"),
+        "neutral": sum(reference) / Decimal(len(reference)),
+    }[direction]
+    changes = [*reference, current]
+    values = [Decimal(100) if role_kind != "yield" else Decimal(5)]
+    with normative_decimal_context():
+        for change in changes:
+            if role_kind == "yield":
+                values.append(values[-1] + change)
+            else:
+                values.append(values[-1] * (Decimal(1) + change))
+    return [str(value) for value in values]
+
+
+def _complete_market_feed(regime: str, cfg) -> dict:
+    from follow_the_money.feed.validate import recompute_feed_identity
+
+    directions = {
+        "risk_on": {
+            "sp500": "positive",
+            "csi300": "positive",
+            "hsi": "positive",
+            "vix": "negative",
+            "us2y": "negative",
+            "us10y": "negative",
+            "cn10y": "negative",
+            "dxy": "negative",
+            "usdcnh": "negative",
+            "copper": "positive",
+            "wti": "negative",
+        },
+        "risk_off": {
+            "sp500": "negative",
+            "csi300": "negative",
+            "hsi": "negative",
+            "vix": "positive",
+            "us2y": "positive",
+            "us10y": "positive",
+            "cn10y": "positive",
+            "dxy": "positive",
+            "usdcnh": "positive",
+            "copper": "negative",
+            "wti": "positive",
+        },
+        "neutral": {
+            "sp500": "positive",
+            "csi300": "positive",
+            "hsi": "positive",
+            "vix": "negative",
+            "us2y": "negative",
+            "us10y": "negative",
+            "cn10y": "negative",
+            "dxy": "neutral",
+            "usdcnh": "neutral",
+            "copper": "negative",
+            "wti": "positive",
+        },
+    }[regime]
+    cutoff = datetime(2026, 8, 3, 2, 0, tzinfo=UTC)
+    items: list[dict] = []
+    for role in cfg.roles:
+        session = next(session for session in cfg.sessions if session.id == role.session_id)
+        labels = _market_labels(session)
+        values = _market_values(role_kind=role.kind, direction=directions.get(role.id, "neutral"))
+        observations = []
+        for label, value in zip(labels, values):
+            if session.session_class == "exchange_traded":
+                timestamp = (
+                    _calendar(session.calendar)
+                    .schedule.loc[label.isoformat(), "close"]
+                    .to_pydatetime()
+                )
+            else:
+                timestamp = datetime.combine(label, datetime.min.time(), tzinfo=UTC) + timedelta(
+                    hours=12
+                )
+            observations.append(
+                {
+                    "as_of": _ts(timestamp),
+                    "available_at": _ts(timestamp + timedelta(minutes=5)),
+                    "value": value,
+                    "unit": role.unit,
+                }
+            )
+        items.append(
+            {
+                "id": f"market-{role.id}",
+                "provider_id": role.provider_id,
+                "source": {"knowledge_available_at": _ts(cutoff)},
+                "payload": {
+                    "type": "market_data",
+                    "instrument_id": role.id,
+                    "unit": role.unit,
+                    "observations": observations,
+                    "raw_metadata": {},
+                },
+            }
+        )
+    for series_id in ("us_cpi_all_items_sa_mom",):
+        actual = "0.0" if regime == "risk_on" else "0.2"
+        items.append(
+            {
+                "id": "ev_1",
+                "provider_id": "bls",
+                "source": {
+                    "knowledge_available_at": _ts(cutoff - timedelta(hours=1)),
+                    "name": "BLS",
+                    "tier": "Tier 1",
+                },
+                "payload": {
+                    "type": "macro_release",
+                    "series_id": series_id,
+                    "released_at": _ts(cutoff - timedelta(hours=2)),
+                    "actual": {"value": actual, "unit": "percent"},
+                    "consensus": {"value": "0.1", "unit": "percent"},
+                    "raw_metadata": {},
+                },
+            }
+        )
+    feed = _valid_feed()
+    feed["evidence_cutoff_at"] = _ts(cutoff)
+    feed["items"] = items
+    digest, run_id = recompute_feed_identity(feed)
+    feed["content_digest"] = digest
+    feed["run_id"] = run_id
+    return feed
+
+
+def _run_with_market_feed(feed: dict, cfg):
+    from follow_the_money.engine.entities import EntityResolver
+
+    adapter, client = _adapter_for(feed, cfg)
+    client.outputs["editor"]["filled_slots"][0]["reference_aliases"] = ["e1"]
+    result = run_pipeline(
+        cfg=cfg,
+        feed=feed,
+        brief_generated_at=_ts(T0 + timedelta(minutes=10)),
+        adapter=adapter,
+        resolver=EntityResolver(cfg.entities),
+        prompts={
+            "resolver": (REPO_ROOT / "prompts" / "resolve-events.md").read_text(),
+            "analyst": (REPO_ROOT / "prompts" / "analyze-event.md").read_text(),
+            "editor": (REPO_ROOT / "prompts" / "render-digest.md").read_text(),
+            "audit": (REPO_ROOT / "prompts" / "audit-claims.md").read_text(),
+        },
+    )
+    return result
+
+
+def _calendar(name: str):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return xcals.get_calendar(name)
+
+
+def test_normal_pipeline_classifies_complete_market_observations_and_preserves_known_dimensions():
+    cfg = _verified_market_config()
+
+    for expected in ("risk_on", "neutral", "risk_off"):
+        result = _run_with_market_feed(_complete_market_feed(expected, cfg), cfg)
+        state = result.brief["market_state"]
+        assert state["regime"] == expected
+        assert state["known_dimensions"] == 5
+        assert result.market_snapshot["dashboard"][-1]["role_id"] == "btc"
+
+    insufficient_feed = deepcopy(_complete_market_feed("risk_on", cfg))
+    insufficient_feed["items"] = [
+        item
+        for item in insufficient_feed["items"]
+        if item.get("payload", {}).get("instrument_id")
+        not in {"sp500", "csi300", "hsi", "vix", "copper"}
+    ]
+    result = _run_with_market_feed(insufficient_feed, cfg)
+    state = result.brief["market_state"]
+    assert state["regime"] == "unknown"
+    assert state["vector"]["risk_appetite"] == "unknown"
+    assert state["vector"]["rates"] == "supportive"
+    assert state["vector"]["liquidity"] == "supportive"
+    assert state["vector"]["growth"] == "unknown"
+    assert state["vector"]["inflation"] == "supportive"
+    assert set(state["missing_roles"]) >= {"sp500", "csi300", "hsi", "vix", "copper"}
+
+
+def test_market_state_activation_preserves_selection_inputs_and_outputs(monkeypatch):
+    cfg = _verified_market_config()
+    activated_feed = _complete_market_feed("risk_on", cfg)
+    insufficient_feed = deepcopy(activated_feed)
+    insufficient_feed["items"] = [
+        item
+        for item in insufficient_feed["items"]
+        if item.get("payload", {}).get("instrument_id")
+        not in {"sp500", "csi300", "hsi", "vix", "copper"}
+    ]
+    captured: list[tuple] = []
+    snapshot_calls: list[dict] = []
+    classifier_calls: list[dict] = []
+    real_select_events = pipeline_module.select_events
+    real_build_snapshot = pipeline_module.build_market_snapshot
+    real_classify = pipeline_module.classify_market_state
+
+    def capture_selection(items, scoring):
+        captured.append(tuple(items))
+        return real_select_events(items, scoring)
+
+    def capture_snapshot(feed, config):
+        snapshot_calls.append(feed)
+        return real_build_snapshot(feed, config)
+
+    def capture_classification(**kwargs):
+        classifier_calls.append(kwargs)
+        return real_classify(**kwargs)
+
+    monkeypatch.setattr(pipeline_module, "select_events", capture_selection)
+    monkeypatch.setattr(pipeline_module, "build_market_snapshot", capture_snapshot)
+    monkeypatch.setattr(pipeline_module, "classify_market_state", capture_classification)
+    baseline = _run_with_market_feed(insufficient_feed, cfg)
+    activated = _run_with_market_feed(activated_feed, cfg)
+
+    assert snapshot_calls == [insufficient_feed, activated_feed]
+    assert len(classifier_calls) == 2
+    assert baseline.events  # a real event reached selection (non-vacuous)
+    assert activated.selected  # and was selected in both runs
+    assert captured[0] == captured[1]
+    assert baseline.events == activated.events
+    assert baseline.analyses == activated.analyses
+    assert baseline.selected == activated.selected
+    assert [(item.event_id, item.format) for item in baseline.selected] == [
+        (item.event_id, item.format) for item in activated.selected
+    ]
+    # The same event inputs produce the identical selection while the Brief
+    # gains the deterministic non-placeholder Market State.
+    assert baseline.brief["market_state"]["regime"] == "unknown"
+    assert activated.brief["market_state"]["regime"] == "risk_on"
 
 
 def test_normal_pipeline_requires_llm_client_in_cli(tmp_path):

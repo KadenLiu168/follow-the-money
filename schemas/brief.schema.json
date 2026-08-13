@@ -35,6 +35,7 @@
       "required": ["regime", "vector", "missing_roles", "explanation"],
       "properties": {
         "regime": { "enum": ["risk_on", "neutral", "risk_off", "unknown"] },
+        "known_dimensions": { "type": "integer", "minimum": 0, "maximum": 5 },
         "vector": {
           "type": "object",
           "additionalProperties": false,
@@ -112,6 +113,9 @@
         "available": { "type": "boolean" },
         "display": { "type": "string" },
         "return_pct": { "type": ["string", "null"], "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$" },
+        "yield_change_bps": { "type": ["string", "null"], "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$" },
+        "change_kind": { "enum": ["return", "yield_bps"] },
+        "unknown_reason": { "type": "string" },
         "anomalous": { "type": ["boolean", "null"] },
         "representative_link": { "type": ["string", "null"], "format": "uri" }
       }

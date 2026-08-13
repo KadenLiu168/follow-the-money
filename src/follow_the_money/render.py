@@ -102,10 +102,13 @@ def render_dashboard(roles: Sequence[Mapping[str, Any]]) -> str:
             lines.append(f"- {display}：不可用")
             continue
         ret = role.get("return_pct")
+        yield_change = role.get("yield_change_bps")
         anomaly = role.get("anomalous")
         parts = [f"- {display}"]
         if ret is not None:
             parts.append(f"：{ret}%")
+        elif yield_change is not None:
+            parts.append(f"：{yield_change} bp")
         if anomaly:
             parts.append(" **异常波动**")
         if role.get("representative_link"):

@@ -169,7 +169,8 @@ def classify_market_state(
             else:
                 regime = "neutral"
 
-    missing = tuple(r for r in config.role_ids if r not in role_zs and r not in role_return_zs)
+    available_roles = set(role_zs) | set(role_return_zs) | set(yield_change_zs)
+    missing = tuple(r for r in config.role_ids if r not in available_roles)
     return MarketStateResult(
         regime=regime, vector=vector, known_dimensions=known, missing_roles=missing
     )

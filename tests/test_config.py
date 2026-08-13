@@ -47,6 +47,20 @@ V1_ASSET_GROUPS = [
 
 
 def _minimal_config(**overrides) -> dict:
+    sessions = [
+        {
+            "id": "exchange",
+            "calendar": "XNYS",
+            "session_class": "exchange_traded",
+            "timezone": "UTC",
+        },
+        {
+            "id": "crypto",
+            "calendar": "UTC",
+            "session_class": "continuous_247",
+            "timezone": "UTC",
+        },
+    ]
     cfg = {
         "schema_version": 1,
         "name": "test",
@@ -64,8 +78,23 @@ def _minimal_config(**overrides) -> dict:
         },
         "coverage": [],
         "roles": [
-            {"id": rid, "name": rid, "instrument": rid, "unit": "index"} for rid in V1_ROLE_IDS
+            {
+                "id": rid,
+                "name": rid,
+                "instrument": rid,
+                "unit": "index",
+                "provider_id": "prov_a",
+                "economic_identity": f"{rid} economic identity",
+                "daily_close_semantics": "provider_daily_close",
+                "source_provenance": "fixture:role-contract-v1",
+                "mapping_verified": True,
+                "availability_lag_seconds": 300,
+                "session_id": "crypto" if rid == "btc" else "exchange",
+                "session_class": "continuous_247" if rid == "btc" else "exchange_traded",
+            }
+            for rid in V1_ROLE_IDS
         ],
+        "sessions": sessions,
     }
     cfg.update(overrides)
     return cfg
@@ -340,6 +369,102 @@ def test_role_order_must_match_canonical(tmp_path):
     cfg["roles"] = list(reversed(cfg["roles"]))
     with pytest.raises(ConfigError, match="canonical v1 set"):
         _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+
+
+def test_every_role_requires_explicit_session_id(tmp_path):
+    cfg = _minimal_config()
+    del cfg["roles"][0]["session_id"]
+    with pytest.raises(ConfigError, match="session_id"):
+        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+
+
+def test_role_unknown_session_id_rejected(tmp_path):
+    cfg = _minimal_config()
+    cfg["roles"][0]["session_id"] = "missing"
+    with pytest.raises(ConfigError, match="unknown session"):
+        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+
+
+def test_role_session_class_mismatch_rejected(tmp_path):
+    cfg = _minimal_config()
+    cfg["roles"][0]["session_id"] = "crypto"
+    with pytest.raises(ConfigError, match="incompatible"):
+        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+
+
+def test_exchange_traded_session_unknown_calendar_rejected(tmp_path):
+    cfg = _minimal_config()
+    cfg["sessions"][0]["calendar"] = "XNYX"
+    with pytest.raises(ConfigError, match="unknown exchange calendar"):
+        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+
+
+def test_duplicate_role_ownership_rejected(tmp_path):
+    cfg = _minimal_config()
+    cfg["roles"][1]["id"] = cfg["roles"][0]["id"]
+    with pytest.raises(ConfigError, match="duplicate role"):
+        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+
+
+def test_role_contract_requires_provenance_and_semantics(tmp_path):
+    cfg = _minimal_config()
+    del cfg["roles"][0]["source_provenance"]
+    with pytest.raises(ConfigError, match="source_provenance"):
+        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+
+
+def test_role_contract_requires_non_negative_availability_lag(tmp_path):
+    cfg = _minimal_config()
+    cfg["roles"][0]["availability_lag_seconds"] = -1
+    with pytest.raises(ConfigError, match="availability_lag_seconds"):
+        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+
+
+def test_role_mapping_verified_must_be_boolean(tmp_path):
+    cfg = _minimal_config()
+    cfg["roles"][0]["mapping_verified"] = "false"
+    with pytest.raises(ConfigError, match="mapping_verified must be boolean"):
+        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+
+
+def test_shipped_roles_expose_a_complete_verified_contract():
+    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=True)
+    assert all(role.provider_id == "yahoo_market" for role in cfg.roles)
+    assert all(role.economic_identity for role in cfg.roles)
+    assert all(role.daily_close_semantics for role in cfg.roles)
+    assert all(role.source_provenance for role in cfg.roles)
+    assert {role.id for role in cfg.roles if not role.mapping_verified} == {
+        "hsi",
+        "vix",
+        "us2y",
+        "us10y",
+        "cn10y",
+        "dxy",
+        "usdcnh",
+        "copper",
+        "wti",
+        "gold",
+        "btc",
+    }
+    assert all(role.availability_lag_seconds >= 0 for role in cfg.roles)
+
+
+def test_shipped_role_contract_matches_yahoo_manifest_mappings():
+    from follow_the_money.providers.manifest import load_all_manifests
+
+    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=True)
+    mappings = {str(m["role_id"]): m for m in load_all_manifests()["yahoo_market"]["role_mappings"]}
+    assert set(mappings) == set(cfg.role_ids)
+    for role in cfg.roles:
+        mapping = mappings[role.id]
+        assert mapping["instrument"] == role.instrument, role.id
+        assert mapping["unit"] == role.unit, role.id
+        assert mapping["mapping_verified"] == role.mapping_verified, role.id
+        if role.mapping_verified:
+            assert "unverified" not in role.daily_close_semantics.lower(), role.id
+        else:
+            assert str(mapping.get("reason", "")).strip(), f"{role.id} lacks an explicit reason"
+            assert role.source_provenance.strip()
 
 
 # ---------------------------------------------------------------------------

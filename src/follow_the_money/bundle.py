@@ -390,6 +390,9 @@ def replay_bundle(
             "ledger": json.loads((bundle / "pipeline" / "ledger.json").read_bytes()),
             "packets": json.loads((bundle / "pipeline" / "packets.json").read_bytes()),
             "analyses": json.loads((bundle / "pipeline" / "analyses.json").read_bytes()),
+            "market_snapshot": json.loads(
+                (bundle / "pipeline" / "market_snapshot.json").read_bytes()
+            ),
             "selection": json.loads((bundle / "pipeline" / "selection.json").read_bytes()),
             "brief": json.loads((bundle / "output" / "brief.json").read_bytes()),
             "rendered": (bundle / "output" / "brief.md").read_bytes(),
@@ -438,6 +441,7 @@ def replay_bundle(
         "ledger": ledger_to_records(result.ledger),
         "packets": result.packets,
         "analyses": result.analyses,
+        "market_snapshot": result.market_snapshot,
         "selection": [
             {
                 "event_id": s.event_id,
@@ -463,6 +467,7 @@ def replay_bundle(
         "ledger",
         "packets",
         "analyses",
+        "market_snapshot",
         "selection",
         "brief",
         "rendered",

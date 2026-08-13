@@ -8,6 +8,7 @@ URL provider-bound validation, and empty-window behavior.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -295,7 +296,70 @@ def test_yahoo_role_unit_and_availability_time_are_preserved():
     )[0]
     observation = item["payload"]["observations"][0]
     assert observation["unit"] == "percent"
-    assert item["source"]["knowledge_available_at"] == "2026-08-07T16:05:00.000Z"
+    assert item["source"]["knowledge_available_at"] == "2026-08-11T00:20:00.000Z"
+    assert observation["available_at"] is None
+
+
+def test_yahoo_fetch_requests_explicit_cutoff_bounded_daily_history():
+    client = FakeClient(b"{}")
+    adapter = YahooMarketAdapter(instrument="^GSPC", role_id="sp500")
+    end = "2026-08-11T00:20:00Z"
+    adapter.fetch({"start": "2026-08-01T00:00:00Z", "end": end}, client)
+    assert len(client.requests) == 1
+    query = parse_qs(urlsplit(client.requests[0]).query)
+    assert query["interval"] == ["1d"]
+    assert int(query["period2"][0]) == int(datetime.fromisoformat(end).timestamp())
+    assert int(query["period2"][0]) - int(query["period1"][0]) == 90 * 24 * 60 * 60
+
+
+def test_yahoo_normalize_enforces_260_chronological_observations():
+    import json
+
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+    body = json.dumps(
+        {
+            "chart": {
+                "result": [
+                    {
+                        "timestamp": [
+                            int((start + timedelta(days=i)).timestamp()) for i in range(300)
+                        ],
+                        "indicators": {"quote": [{"close": [str(i + 1) for i in range(300)]}]},
+                    }
+                ]
+            }
+        }
+    ).encode()
+    items = YahooMarketAdapter(instrument="^GSPC", role_id="sp500").normalize(
+        FakeResponse(body), {"start": "2025-01-01T00:00:00Z", "end": "2026-01-01T00:00:00Z"}
+    )
+    observations = items[0]["payload"]["observations"]
+    assert len(observations) == 260
+    assert [o["as_of"] for o in observations] == sorted(o["as_of"] for o in observations)
+
+
+def test_yahoo_normalize_preserves_bar_for_session_aware_eligibility():
+    import json
+
+    partial = int((NOW - timedelta(seconds=299)).timestamp())
+    complete = int((NOW - timedelta(seconds=301)).timestamp())
+    body = json.dumps(
+        {
+            "chart": {
+                "result": [
+                    {
+                        "timestamp": [partial, complete],
+                        "indicators": {"quote": [{"close": ["101", "100"]}]},
+                    }
+                ]
+            }
+        }
+    ).encode()
+    items = YahooMarketAdapter(instrument="^GSPC", role_id="sp500").normalize(
+        FakeResponse(body), {"start": "2026-08-10T00:00:00Z", "end": NOW.isoformat()}
+    )
+    assert [row["value"] for row in items[0]["payload"]["observations"]] == ["100", "101"]
+    assert all(row["available_at"] is None for row in items[0]["payload"]["observations"])
 
 
 def test_sec_unknown_response_is_empty():

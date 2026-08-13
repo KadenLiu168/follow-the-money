@@ -303,6 +303,7 @@ def test_full_bundle_contains_all_members_and_replays(tmp_path):
         "pipeline/ledger.json",
         "pipeline/packets.json",
         "pipeline/analyses.json",
+        "pipeline/market_snapshot.json",
         "pipeline/selection.json",
         "pipeline/llm.json",
         "output/brief.json",
@@ -324,6 +325,19 @@ def test_full_bundle_contains_all_members_and_replays(tmp_path):
     # Saved LLM outcomes present and complete for replay injection.
     llm = json.loads((bundle / "pipeline" / "llm.json").read_bytes())
     assert llm["resolver"] and llm["analyst"] and llm["editor"] and llm["language-audit"]
+
+
+def test_replay_detects_market_snapshot_drift(tmp_path):
+    bundle = _run_normal_brief(tmp_path)
+    assert replay_bundle(bundle, repo_root=REPO_ROOT).ok
+    snapshot = json.loads((bundle / "pipeline" / "market_snapshot.json").read_bytes())
+    snapshot["missing_roles"] = ["tampered"]
+    (bundle / "pipeline" / "market_snapshot.json").write_bytes(
+        json.dumps(snapshot, ensure_ascii=False).encode("utf-8")
+    )
+    replay = replay_bundle(bundle, repo_root=REPO_ROOT)
+    assert not replay.ok
+    assert any("market_snapshot.json" in error or "digest" in error for error in replay.errors)
 
 
 def test_replay_detects_output_drift(tmp_path):

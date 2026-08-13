@@ -25,7 +25,7 @@ from decimal import Decimal, InvalidOperation
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import quote, urlencode, urljoin
 from zoneinfo import ZoneInfo
 
 from ..config.model import FetchRule, SourceLinkRule
@@ -605,13 +605,15 @@ class SzseAdapter(BaseAdapter):
 class YahooMarketAdapter(BaseAdapter):
     """Yahoo-compatible market data for the 13 v1 dashboard roles.
 
-    ``fetch`` requests the chart API for one configured symbol; production
+    ``fetch`` requests the chart API for one configured symbol with an
+    explicit cutoff-derived 90-calendar-day daily-history query; production
     orchestration fans out over all 13 roles. ``normalize`` decodes the chart
-    JSON, enforces the manifest's conservative availability lag on every
-    observation, and emits ``market_data`` payloads with strictly
-    chronological bounded lookbacks. Missing/empty result sets are retained
-    as role-absent records so the coverage matrix can record missing roles
-    instead of silently degrading.
+    JSON into strictly chronological bounded ``market_data`` observations.
+    Daily timestamps are session labels, not completed closes, so
+    observation-level eligibility (session close plus the role's configured
+    availability lag) is applied by the market snapshot, not here. Missing/
+    empty result sets are retained as role-absent records so the coverage
+    matrix can record missing roles instead of silently degrading.
     """
 
     provider_id: str = "yahoo_market"
@@ -627,14 +629,16 @@ class YahooMarketAdapter(BaseAdapter):
         self._instrument = instrument
         self._role_id = role_id
         self._unit = unit or self._manifest.get("units", {}).get("index", "index")
-        self._availability_lag = int(
-            self._manifest.get("time", {}).get("availability_lag_seconds", 300)
-        )
 
     def fetch(self, window: Mapping[str, str], client: Any) -> Any:
+        cutoff = _parse_timestamp(window["end"])
+        period2 = int(cutoff.timestamp())
+        period1 = int((cutoff - timedelta(days=90)).timestamp())
+        query = urlencode({"period1": period1, "period2": period2, "interval": "1d"})
+        instrument = quote(self._instrument, safe="")
         return self._fetch(
             client,
-            f"https://query1.finance.yahoo.com/v8/finance/chart/{self._instrument}",
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{instrument}?{query}",
         )
 
     def normalize(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
@@ -656,23 +660,24 @@ class YahooMarketAdapter(BaseAdapter):
             return []
 
         observations: list[Mapping[str, Any]] = []
-        cutoff = _parse_timestamp(window["end"])
         for ts, close in zip(timestamps, closes):
             if close is None:
                 continue
             as_of = _epoch_to_iso(int(ts))
-            available_at = _parse_timestamp(as_of) + timedelta(seconds=self._availability_lag)
-            if available_at > cutoff:
-                continue
             observations.append(
                 {
                     "as_of": as_of,
                     "value": str(close),
                     "unit": self._unit,
-                    "available_at": _format_timestamp(available_at),
+                    # Yahoo's daily timestamp is a session label/open for
+                    # exchange instruments, not proof that the close exists.
+                    # The snapshot applies the role's configured close + lag.
+                    "available_at": None,
                 }
             )
         observations = _chronological_dedup(observations)
+        max_observations = int(self._manifest.get("limits", {}).get("max_observations", 260))
+        observations = observations[-max_observations:]
         if not observations:
             return []
 
@@ -683,7 +688,7 @@ class YahooMarketAdapter(BaseAdapter):
             tier="Tier 2",
             url=url,
             published_at=None,
-            knowledge=observations[-1]["available_at"],
+            knowledge=_format_timestamp(_parse_timestamp(window["end"])),
         )
         return [
             {

@@ -49,6 +49,7 @@ from .engine.resolution import (
 from .ledger import Ledger, LedgerEntry, build_ledger_entry
 from .llm import LlmOutcome, ResponsesAdapter, invoke_pass
 from .market.confidence import event_confidence
+from .market.snapshot import build_market_snapshot
 from .scoring import (
     brief_priority,
     event_significance,
@@ -56,6 +57,7 @@ from .scoring import (
     significance_components,
 )
 from .selection import SelectedEvent, SelectionInput, select_events
+from .state import classify_market_state
 from .watchlist import build_watchlist
 
 
@@ -80,6 +82,7 @@ class PipelineResult:
     # Saved into the run bundle so deterministic replay can re-merge them
     # without network or LLM access.
     llm_data: dict[str, Any] = field(default_factory=dict)
+    market_snapshot: dict[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -526,22 +529,29 @@ def run_pipeline(
         evidence_ids.extend(obj.get("evidence_ids", []))
     alias_to_evidence = {f"e{i}": eid for i, eid in enumerate(dict.fromkeys(evidence_ids))}
 
+    snapshot = build_market_snapshot(feed, cfg)
+    classification = classify_market_state(
+        config=cfg,
+        role_zs=snapshot.role_zs,
+        role_return_zs=snapshot.role_return_zs,
+        yield_change_zs=snapshot.yield_change_zs,
+        equity_breadth=snapshot.equity_breadth,
+        surprise_votes=snapshot.surprise_votes,
+    )
     market_state = {
-        "regime": "unknown",
-        "vector": {
-            d: "unknown"
-            for d in (
-                "risk_appetite",
-                "rates",
-                "liquidity",
-                "growth",
-                "inflation",
-            )
-        },
-        "missing_roles": [],
-        "explanation": "市场状态未判定（确定性组件）。",
-        "evidence_ids": [],
+        "regime": classification.regime,
+        "vector": dict(classification.vector),
+        "known_dimensions": classification.known_dimensions,
+        "missing_roles": list(classification.missing_roles),
+        "explanation": "",
+        "evidence_cutoff_at": feed.get("evidence_cutoff_at", ""),
+        "evidence_ids": list(snapshot.evidence_ids),
     }
+    # Event aliases remain byte-for-byte stable; Market State contributors are
+    # appended only after the selected-event alias map is complete.
+    for evidence_id in snapshot.evidence_ids:
+        if evidence_id not in alias_to_evidence.values():
+            alias_to_evidence[f"e{len(alias_to_evidence)}"] = evidence_id
     watchlist = _watchlist(feed, brief_generated_at, cfg)
     bottom_line_owners = [s.event_id for s in result.selected][: min(3, len(result.selected))]
 
@@ -599,7 +609,7 @@ def run_pipeline(
         editor_output=editor_output,
         alias_to_evidence=alias_to_evidence,
         slot_meta=merged["slot_meta"],
-        dashboard=_dashboard(feed),
+        dashboard=list(snapshot.dashboard),
         market_state=merged["market_state"],
         full_events=merged["full_events"],
         compact_events=merged["compact_events"],
@@ -673,6 +683,7 @@ def run_pipeline(
         unresolved_groups=unresolved_groups,
         warnings=warnings,
         llm_data=llm_data,
+        market_snapshot=snapshot.to_dict(),
     )
 
 
@@ -801,23 +812,6 @@ def _packet_confidence(packet: Mapping[str, Any], ledger: Ledger) -> str:
     entries = [ledger.get(fid) for fid in packet.get("key_fact_ids", [])]
     result = event_confidence(entries)
     return result.confidence
-
-
-def _dashboard(feed: Mapping[str, Any]) -> list[dict[str, Any]]:
-    roles: list[dict[str, Any]] = []
-    for item in feed.get("items", []):
-        payload = item.get("payload", {})
-        if payload.get("type") == "market_data":
-            obs = payload.get("observations", [])
-            roles.append(
-                {
-                    "role_id": payload.get("instrument_id", item.get("id", "")),
-                    "available": bool(obs),
-                    "display": payload.get("instrument_id", item.get("id", "")),
-                    "return_pct": str(obs[-1].get("value")) if obs else None,
-                }
-            )
-    return roles
 
 
 def _watchlist(

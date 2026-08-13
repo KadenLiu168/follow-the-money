@@ -20,6 +20,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+import exchange_calendars as xcals
 import yaml
 
 from .model import (
@@ -324,9 +325,40 @@ def _parse_entities(raw: Any, where: str) -> tuple[Entity, ...]:
 def _parse_roles(raw: Any, where: str) -> tuple[MarketRole, ...]:
     roles: list[MarketRole] = []
     for item in raw or []:
-        _require_keys(item, {"id", "name", "instrument", "unit"}, f"{where}.role")
+        _require_keys(
+            item,
+            {
+                "id",
+                "name",
+                "instrument",
+                "unit",
+                "provider_id",
+                "economic_identity",
+                "daily_close_semantics",
+                "source_provenance",
+                "mapping_verified",
+                "availability_lag_seconds",
+                "session_id",
+            },
+            f"{where}.role",
+        )
         session_class = str(item.get("session_class", "exchange_traded"))
         _check_enum(session_class, "session_class", f"{where}.role.{item['id']}")
+        availability_lag_seconds = int(item["availability_lag_seconds"])
+        if availability_lag_seconds < 0:
+            raise ConfigError(
+                f"{where}.role.{item['id']}.availability_lag_seconds must be non-negative"
+            )
+        for field_name in (
+            "provider_id",
+            "economic_identity",
+            "daily_close_semantics",
+            "source_provenance",
+        ):
+            if not str(item[field_name]).strip():
+                raise ConfigError(f"{where}.role.{item['id']}.{field_name} must be non-empty")
+        if not isinstance(item["mapping_verified"], bool):
+            raise ConfigError(f"{where}.role.{item['id']}.mapping_verified must be boolean")
         roles.append(
             MarketRole(
                 id=str(item["id"]),
@@ -334,6 +366,13 @@ def _parse_roles(raw: Any, where: str) -> tuple[MarketRole, ...]:
                 name_zh=str(item.get("name_zh", item["name"])),
                 instrument=str(item["instrument"]),
                 unit=str(item["unit"]),
+                provider_id=str(item["provider_id"]),
+                economic_identity=str(item["economic_identity"]),
+                daily_close_semantics=str(item["daily_close_semantics"]),
+                source_provenance=str(item["source_provenance"]),
+                mapping_verified=bool(item["mapping_verified"]),
+                availability_lag_seconds=availability_lag_seconds,
+                session_id=str(item["session_id"]),
                 session_class=session_class,
                 kind=str(item.get("kind", "price")),
             )
@@ -372,6 +411,9 @@ def _parse_scoring(raw: Any, where: str) -> Scoring:
 
 def _validate_role_ids(roles: tuple[MarketRole, ...]) -> None:
     actual = tuple(r.id for r in roles)
+    if len(set(actual)) != len(actual):
+        duplicates = sorted({role_id for role_id in actual if actual.count(role_id) > 1})
+        raise ConfigError(f"duplicate role ownership: {duplicates}")
     if actual != V1_ROLE_IDS:
         raise ConfigError(
             f"roles must be exactly the canonical v1 set {V1_ROLE_IDS!r}, got {actual!r}"
@@ -474,9 +516,37 @@ def load_config(
             session_class=str(s.get("session_class", "exchange_traded")),
             timezone=str(s.get("timezone", "UTC")),
             annualization_factor=str(s.get("annualization_factor", "252")),
+            availability_lag_seconds=int(s.get("availability_lag_seconds", 300)),
         )
         for s in data.get("sessions", [])
     )
+    session_by_id: dict[str, Session] = {}
+    for session in sessions:
+        if session.id in session_by_id:
+            raise ConfigError(f"duplicate session id {session.id!r}")
+        if session.session_class not in SCORING_ENUMS["session_class"]:
+            _check_enum(session.session_class, "session_class", f"sessions.{session.id}")
+        if session.availability_lag_seconds < 0:
+            raise ConfigError(
+                f"sessions.{session.id}.availability_lag_seconds must be non-negative"
+            )
+        if session.session_class == "exchange_traded" and session.calendar not in set(
+            xcals.get_calendar_names()
+        ):
+            raise ConfigError(
+                f"sessions.{session.id}: unknown exchange calendar {session.calendar!r}"
+            )
+        session_by_id[session.id] = session
+    if require_verified_enabled:
+        for role in roles:
+            role_session = session_by_id.get(role.session_id)
+            if role_session is None:
+                raise ConfigError(f"role {role.id!r}: unknown session {role.session_id!r}")
+            if role_session.session_class != role.session_class:
+                raise ConfigError(
+                    f"role {role.id!r}: session {role.session_id!r} is incompatible "
+                    f"with role session_class {role.session_class!r}"
+                )
     watched = tuple(
         WatchCompany(
             cik=str(w["cik"]),

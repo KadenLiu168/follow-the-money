@@ -125,6 +125,20 @@ def test_missing_risk_appetite_unknown():
     assert result.regime == "unknown"
 
 
+def test_missing_roles_accounts_for_yield_change_zs_in_configured_order():
+    cfg = _cfg()
+    result = classify_market_state(
+        config=cfg,
+        role_zs={"sp500": Decimal(1)},
+        role_return_zs={},
+        yield_change_zs={"us2y": Decimal(1), "cn10y": Decimal(1)},
+        equity_breadth=None,
+    )
+    assert "us2y" not in result.missing_roles
+    assert "cn10y" not in result.missing_roles
+    assert result.missing_roles.index("csi300") < result.missing_roles.index("hsi")
+
+
 def test_regime_sum_boundaries():
     cfg = _cfg()
     # RA supportive, but dimension sum < 2 => neutral.

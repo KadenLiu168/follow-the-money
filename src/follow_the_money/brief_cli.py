@@ -149,6 +149,9 @@ def run_brief(
     if degraded_report or skip_llm:
         # Deterministic degraded path: no LLM passes.
         from .brief import build_degraded_report
+        from .market.snapshot import build_market_snapshot
+
+        snapshot = build_market_snapshot(feed, cfg)
 
         report = build_degraded_report(
             report_id=run_id,
@@ -156,8 +159,13 @@ def run_brief(
             evidence_cutoff_at=feed["evidence_cutoff_at"],
             feed_run_id=feed["run_id"],
             feed_health={"status": health.status, "warnings": health.warnings},
-            dashboard=_dashboard(feed),
-            analytics={},
+            dashboard=[dict(row) for row in snapshot.dashboard],
+            analytics={
+                "equity_breadth": (
+                    str(snapshot.equity_breadth) if snapshot.equity_breadth is not None else None
+                ),
+                "missing_roles": list(snapshot.missing_roles),
+            },
             unresolved_counts={
                 "candidate_blocks": 0,
                 "unresolved_groups": 0,
@@ -224,23 +232,6 @@ def run_brief(
     )
 
 
-def _dashboard(feed: Mapping[str, Any]) -> list[dict[str, Any]]:
-    roles: list[dict[str, Any]] = []
-    for item in feed.get("items", []):
-        payload = item.get("payload", {})
-        if payload.get("type") == "market_data":
-            obs = payload.get("observations", [])
-            roles.append(
-                {
-                    "role_id": payload.get("instrument_id", item["id"]),
-                    "available": bool(obs),
-                    "display": payload.get("instrument_id", item["id"]),
-                    "return_pct": str(obs[-1].get("value")) if obs else None,
-                }
-            )
-    return roles
-
-
 def _commit_and_deliver(
     *,
     cfg,
@@ -304,6 +295,9 @@ def _commit_and_deliver(
                 ).encode("utf-8"),
                 "pipeline/analyses.json": json.dumps(
                     pipeline.analyses, ensure_ascii=False, separators=(",", ":")
+                ).encode("utf-8"),
+                "pipeline/market_snapshot.json": json.dumps(
+                    pipeline.market_snapshot, ensure_ascii=False, separators=(",", ":")
                 ).encode("utf-8"),
                 "pipeline/selection.json": json.dumps(
                     [

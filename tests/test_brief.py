@@ -12,6 +12,7 @@ from follow_the_money.brief import (
     assemble_brief,
     build_degraded_report,
 )
+from follow_the_money.render import render_dashboard
 from follow_the_money.schema import SchemaError, validate_against
 
 ALIASES = {"ev_1": "evidence_1", "ev_2": "evidence_2"}
@@ -255,6 +256,32 @@ def test_lone_surrogate_in_fragment_rejected():
     editor["filled_slots"][0]["wording_fragment"] = "bad\ud800"
     with pytest.raises(SchemaError, match="surrogate"):
         assemble_brief(**_brief_kwargs(editor_output=editor))
+
+
+def test_dashboard_render_types_price_returns_vs_yield_basis_points():
+    rows = [
+        {
+            "role_id": "sp500",
+            "available": True,
+            "display": "标普500",
+            "change_kind": "return",
+            "return_pct": "0.120000",
+        },
+        {
+            "role_id": "us10y",
+            "available": True,
+            "display": "美债10年期",
+            "change_kind": "yield_bps",
+            "yield_change_bps": "3.50",
+        },
+        {"role_id": "hsi", "available": False, "display": "恒生指数"},
+    ]
+    rendered = render_dashboard(rows)
+    assert "标普500：0.120000%" in rendered
+    assert "美债10年期：3.50 bp" in rendered
+    assert "恒生指数：不可用" in rendered
+    # Raw levels are never labeled as percentage returns.
+    assert "0.120000% bp" not in rendered
 
 
 def test_brief_heading_order_fixed():
