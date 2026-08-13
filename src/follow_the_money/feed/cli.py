@@ -32,11 +32,14 @@ from typing import Any
 from ..boundary import application_build_fingerprint, build_fingerprint_to_dict
 from ..canonical import canonical_digest, canonical_sha256, load_canonical_json
 from ..config import load_config
+from ..config.load import ConfigError
 from ..config.model import AppConfig
 from ..feed.validate import assert_feed_identity, recompute_feed_identity, validate_feed
 from ..providers.http import FetchError
 from ..providers.lock import CollectionLock, CollectionLockError
+from ..providers.manifest import ManifestError
 from ..providers.rate import RateRegistry, RateStateError, eligibility_delay, refill_tokens
+from ..schema import SchemaError
 from .dedupe import deduplicate_items, deterministic_item_order
 from .plan import FeedPlanError, ProviderOutcome, assess_pipeline, plan_window
 from .publish import PublishError, publish_feed
@@ -47,6 +50,14 @@ SCHEMA_ROOT = REPO_ROOT / "schemas"
 
 class FeedCliError(ValueError):
     """Typed Feed CLI failure."""
+
+
+class FeedInputError(FeedCliError):
+    """Invalid invocation, configuration, or startup-capability failure."""
+
+
+class FeedExecutionError(FeedCliError):
+    """Failure after a valid Feed invocation entered execution."""
 
 
 @dataclass
@@ -69,7 +80,10 @@ def _default_providers_path() -> Path:
 def _load_app_config(config_path: str | None) -> AppConfig:
     cfg = config_path or str(_default_config_path())
     providers = str(_default_providers_path())
-    return load_config(cfg, providers, require_verified_enabled=True)
+    try:
+        return load_config(cfg, providers, require_verified_enabled=True)
+    except ConfigError as exc:
+        raise FeedInputError(str(exc)) from exc
 
 
 def run_feed(
@@ -106,7 +120,10 @@ def run_feed(
     deadline_seconds = cfg.feed.pre_commit_deadline_seconds - cfg.feed.commit_reserve_seconds
     deadline_at = deadline_started + deadline_seconds
     root = Path(output_root or cfg.output_root)
-    root.mkdir(parents=True, exist_ok=True)
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise FeedExecutionError(f"cannot prepare output root {root}: {exc}") from exc
     latest_path = root / "latest.json"
 
     # Production path acquires the exclusive output-root collection lock
@@ -125,7 +142,7 @@ def run_feed(
             )
             lock.acquire()
         except CollectionLockError as exc:
-            raise FeedCliError(str(exc)) from exc
+            raise FeedExecutionError(str(exc)) from exc
 
     # Capture the fixed cutoff only after the cooperating run owns the lock.
     # This prevents lock wait time from freezing a stale planning window.
@@ -133,7 +150,7 @@ def run_feed(
     if cutoff.tzinfo is None:
         if lock is not None:
             lock.release()
-        raise FeedCliError("cutoff must be timezone-aware")
+        raise FeedInputError("cutoff must be timezone-aware")
 
     try:
         plan = plan_window(
@@ -146,7 +163,7 @@ def run_feed(
     except FeedPlanError as exc:
         if lock is not None:
             lock.release()
-        raise FeedCliError(str(exc)) from exc
+        raise FeedExecutionError(str(exc)) from exc
 
     # Durable rate-state registry is created only after planning succeeds:
     # an invalid latest makes zero writes beyond the lock file itself.
@@ -154,10 +171,10 @@ def run_feed(
         try:
             rate = RateRegistry(root)
             rate.ensure_registry(now=now_fn)
-        except RateStateError as exc:
+        except (OSError, RateStateError) as exc:
             if lock is not None:
                 lock.release()
-            raise FeedCliError(str(exc)) from exc
+            raise FeedExecutionError(str(exc)) from exc
 
     try:
         # Registry: production uses the verified-enabled manifest registry.
@@ -165,19 +182,25 @@ def run_feed(
             registry = providers_fn()
             adapters_by_id = {pid: [a] for pid, a in registry.items()}
         else:
-            adapters_by_id = _production_adapters(cfg, build_registry())
+            try:
+                adapters_by_id = _production_adapters(cfg, build_registry())
+            except (KeyError, ManifestError, OSError, ValueError) as exc:
+                raise FeedInputError(str(exc)) from exc
 
         if enabled_provider_ids is not None:
             enabled_ids = [pid for pid in enabled_provider_ids if pid in adapters_by_id]
         else:
             enabled_ids = [p.id for p in cfg.providers if p.enabled and p.id in adapters_by_id]
         if not enabled_ids:
-            raise FeedCliError("no provider enabled")
+            raise FeedInputError("no provider enabled")
 
         # Pre-initialize every shared rate scope under the exclusive lock so
         # concurrent providers sharing one scope cannot race on first use.
         if rate is not None:
-            _preinitialize_scopes(cfg, rate, enabled_ids, now_fn)
+            try:
+                _preinitialize_scopes(cfg, rate, enabled_ids, now_fn)
+            except (OSError, RateStateError) as exc:
+                raise FeedExecutionError(str(exc)) from exc
 
         outcomes: dict[str, ProviderOutcome] = {}
         items: list[dict[str, Any]] = []
@@ -337,6 +360,8 @@ def run_feed(
                     future.result()
                 except CancelledError:
                     continue
+                except (OSError, RateStateError) as exc:
+                    raise FeedExecutionError(str(exc)) from exc
         finally:
             pool.shutdown(wait=True, cancel_futures=True)
 
@@ -363,14 +388,17 @@ def run_feed(
         )
 
         # Validate before publication.
-        validate_feed(feed)
-        assert_feed_identity(feed)
+        try:
+            validate_feed(feed)
+            assert_feed_identity(feed)
+        except SchemaError as exc:
+            raise FeedExecutionError(str(exc)) from exc
 
         if dry_run:
             return FeedRunResult(status=status, exit_code=0, feed=feed, warnings=warnings)
 
         if monotonic() - deadline_started > deadline_seconds:
-            raise FeedCliError("pre_commit_deadline_exceeded: no dated/latest publication")
+            raise FeedExecutionError("pre_commit_deadline_exceeded: no dated/latest publication")
 
         feed_bytes = json.dumps(feed, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         try:
@@ -381,12 +409,16 @@ def run_feed(
                 feed_bytes=feed_bytes,
                 latest_bytes=feed_bytes,
             )
-        except PublishError as exc:
-            raise FeedCliError(str(exc)) from exc
+        except (OSError, PublishError) as exc:
+            raise FeedExecutionError(str(exc)) from exc
         if publication.commit_durability_unknown:
-            raise FeedCliError("commit_durability_unknown: Feed publication durability is unknown")
+            raise FeedExecutionError(
+                "commit_durability_unknown: Feed publication durability is unknown"
+            )
         if not publication.latest_replaced:
-            raise FeedCliError("Feed dated artifact committed but latest.json was not updated")
+            raise FeedExecutionError(
+                "Feed dated artifact committed but latest.json was not updated"
+            )
 
         code = 0 if status in ("healthy", "degraded") else 1
         return FeedRunResult(status=status, exit_code=code, feed=feed, warnings=warnings)
@@ -674,7 +706,7 @@ def _schema_descriptor(rel: str) -> dict[str, str]:
     try:
         sha = canonical_sha256(path.read_bytes())
     except OSError as exc:
-        raise FeedCliError(f"cannot read schema {rel}: {exc}") from exc
+        raise FeedExecutionError(f"cannot read schema {rel}: {exc}") from exc
     return {"path": f"schemas/{rel}", "sha256": sha}
 
 
@@ -835,18 +867,28 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _parse_cli_datetime(value: str, option: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise FeedInputError(f"{option} must be a valid ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise FeedInputError(f"{option} must include a timezone")
+    return parsed
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run one Feed collection. Exit contract: 0 healthy/degraded success;
     1 generation/publication failure; 2 usage/config/startup-capability error."""
     import sys
 
-    args = _build_parser().parse_args(argv)
-    cutoff = None
-    if args.cutoff:
-        from datetime import datetime
-
-        cutoff = datetime.fromisoformat(args.cutoff)
     try:
+        args = _build_parser().parse_args(argv)
+        cutoff = _parse_cli_datetime(args.cutoff, "--cutoff") if args.cutoff else None
+        if args.window_start:
+            window_start = _parse_cli_datetime(args.window_start, "--window-start")
+            if cutoff is not None and window_start >= cutoff:
+                raise FeedInputError("--window-start must precede --cutoff")
         result = run_feed(
             config_path=args.config,
             output_root=args.output_root,
@@ -854,9 +896,12 @@ def main(argv: list[str] | None = None) -> int:
             cutoff=cutoff,
             window_start=args.window_start,
         )
-    except (FeedCliError, FeedPlanError) as exc:
+    except FeedInputError as exc:
         print(f"follow-the-money-feed: {exc}", file=sys.stderr)
-        return 2 if "non_advancing" in str(exc) or "config" in str(exc).lower() else 1
+        return 2
+    except FeedExecutionError as exc:
+        print(f"follow-the-money-feed: {exc}", file=sys.stderr)
+        return 1
     if args.status_file:
         status = {"status": result.status, "warnings": result.warnings}
         if result.feed is not None:
@@ -873,7 +918,11 @@ def main(argv: list[str] | None = None) -> int:
                     "latest_relative_path": "latest.json",
                 }
             )
-        Path(args.status_file).write_text(json.dumps(status), encoding="utf-8")
+        try:
+            Path(args.status_file).write_text(json.dumps(status), encoding="utf-8")
+        except OSError as exc:
+            print(f"follow-the-money-feed: {exc}", file=sys.stderr)
+            return 1
     for warning in result.warnings:
         print(f"warning: {warning}", file=sys.stderr)
     if result.feed is not None and args.dry_run:

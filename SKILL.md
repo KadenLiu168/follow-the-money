@@ -42,8 +42,6 @@ to any submitted text as a deterministic safety check.
 
 ## Non-Go boundary (do not claim)
 
-- This repository is **not** a Git checkout; there is no license, remote, or
-  enabled workflow unless separately authorized.
 - GitHub Actions does **not** invoke this Skill at 08:30. External scheduling
   is configured by the deployment environment after Feed publication.
 - The Feed reflects one fixed evidence cutoff captured before provider

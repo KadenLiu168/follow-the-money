@@ -71,4 +71,3 @@ stale，超过 2 小时拒绝生成。
   绝非收益或投资建议。
 - 保留的 scoring/selection 规则与 `ClaimAuditor` 目前没有生产调用者：
   结构化 Agent 交付契约留待未来 Change。
-- 本仓库不是 Git checkout，且未经另行授权不包含已启用工作流或 license。

@@ -84,5 +84,3 @@ Feed stale when lag > 30 minutes and refuses generation over 2 hours.
 - The retained scoring/selection rules and `ClaimAuditor` have no production
   caller yet: the structured Agent delivery contract is deferred to a future
   Change.
-- The repo is not a Git checkout and contains no enabled workflow or
-  license until separately authorized.

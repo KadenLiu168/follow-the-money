@@ -55,11 +55,6 @@ uv run python -m follow_the_money.feed.cli --dry-run
 不存在公开的用户面向 CLI 产品形态：`brief`、`eval`、`replay` 子命令与
 独立 console script 均已移除。
 
-## 当前引导边界
-
-本仓库**不是** Git checkout，也尚未初始化为 Git 仓库：没有 license 文件、
-没有 Git 历史、没有远端、没有已启用的工作流。这些属于另行明确授权的部署决策。
-
 ## 真实外部调度边界
 
 定时 Feed 工作流是仓库内的**模板**：运行前必须单独准备一台带标签的专用

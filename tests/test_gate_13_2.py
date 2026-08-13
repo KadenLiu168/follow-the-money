@@ -18,7 +18,7 @@ from unittest import mock
 
 import pytest
 
-from follow_the_money.feed.cli import FeedCliError, run_feed
+from follow_the_money.feed.cli import FeedCliError, FeedExecutionError, run_feed
 from follow_the_money.feed.publish import (
     PublishError,
     atomic_no_replace_rename,
@@ -364,7 +364,7 @@ def test_non_advancing_cutoff_no_artifact(tmp_path):
         providers_fn=_minimal_registry,
         enabled_provider_ids=["federal_reserve"],
     )
-    with pytest.raises(FeedCliError, match="non_advancing"):
+    with pytest.raises(FeedExecutionError, match="non_advancing"):
         run_feed(
             output_root=str(out),
             cutoff=T0,
@@ -393,7 +393,7 @@ def test_deadline_reserve_blocks_publication(tmp_path):
         clock["calls"] += 1
         return clock["t"] if clock["calls"] == 1 else 290.0
 
-    with pytest.raises(FeedCliError, match="pre_commit_deadline_exceeded"):
+    with pytest.raises(FeedExecutionError, match="pre_commit_deadline_exceeded"):
         run_feed(
             output_root=str(out),
             cutoff=T0,
@@ -435,7 +435,7 @@ def test_zero_mutation_after_invalid_latest(tmp_path):
     out = tmp_path / "out"
     out.mkdir()
     (out / "latest.json").write_bytes(b"{corrupt")
-    with pytest.raises(FeedCliError, match="invalid_latest_integrity"):
+    with pytest.raises(FeedExecutionError, match="invalid_latest_integrity"):
         run_feed(
             output_root=str(out),
             cutoff=T0 + timedelta(hours=1),
@@ -542,7 +542,7 @@ def test_collection_lock_timeout_typed(tmp_path):
 
         from follow_the_money.feed.cli import run_feed
 
-        with pytest.raises(FeedCliError, match="collection_lock_timeout"):
+        with pytest.raises(FeedExecutionError, match="collection_lock_timeout"):
             run_feed(
                 output_root=str(out),
                 cutoff=T0,

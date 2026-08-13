@@ -59,12 +59,6 @@ uv run python -m follow_the_money.feed.cli --dry-run
 There is no public user-facing CLI product form: `brief`, `eval`, and
 `replay` subcommands and the standalone console script were removed.
 
-## Current bootstrap boundary
-
-This repository is **not** a Git checkout and is not yet initialized as one.
-It contains no license file, no Git history, no remote, and no enabled
-workflow. Those are separate, explicitly authorized deployment decisions.
-
 ## Real external scheduling boundary
 
 The scheduled Feed workflow is a checked-in **template**: it requires a

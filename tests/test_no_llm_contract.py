@@ -20,7 +20,12 @@ from pathlib import Path
 
 from follow_the_money.audit import ClaimAuditor
 from follow_the_money.config import load_config
-from follow_the_money.feed.cli import FeedCliError, FeedRunResult, run_feed
+from follow_the_money.feed.cli import (
+    FeedExecutionError,
+    FeedInputError,
+    FeedRunResult,
+    run_feed,
+)
 from follow_the_money.feed.validate import assert_feed_identity, validate_feed
 from follow_the_money.schema import validate_against
 from tests.test_gate_13_1 import CUTOFF, _fixture_registry
@@ -189,13 +194,13 @@ def test_minimal_entry_status_file_and_exit_contract(tmp_path, monkeypatch, caps
 
     # Usage/config failures map to exit 2; runtime failures to exit 1.
     def _config_error(**kw):
-        raise FeedCliError("config bad")
+        raise FeedInputError("publication invalid non_advancing")
 
     monkeypatch.setattr(feed_cli, "run_feed", _config_error)
     assert feed_cli.main(["--output-root", str(out)]) == 2
 
     def _runtime_error(**kw):
-        raise FeedCliError("publication failed")
+        raise FeedExecutionError("config invalid provider")
 
     monkeypatch.setattr(feed_cli, "run_feed", _runtime_error)
     assert feed_cli.main(["--output-root", str(out)]) == 1
