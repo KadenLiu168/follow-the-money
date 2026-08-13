@@ -1,4 +1,9 @@
-## ADDED Requirements
+# production-story-family-resolution Specification
+
+## Purpose
+Define fail-closed materialization of resolver `story_family_label` and coexistence-relation semantics into canonical family IDs and unordered Event-ID pairs, propagate that canonical data through live and replay pipelines into deterministic selection, and enforce the frozen-first-member 15-point routine-family penalty with its exact-pair exemption.
+
+## Requirements
 
 ### Requirement: Resolver family semantics are materialized into canonical Events
 Scripts SHALL consume every resolver proposal's exact response-position alias, `story_family_label`, and `coexistence_relations` while constructing canonical Events. Scripts SHALL first derive every canonical Event ID, then derive each non-singleton family ID from the sorted member Event IDs. Literal `unknown` and every non-unknown one-member family SHALL remain Event-ID-specific singleton families. Response-local labels SHALL NOT be persisted as authoritative family IDs.
