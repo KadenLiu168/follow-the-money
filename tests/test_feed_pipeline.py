@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from follow_the_money.config import load_config
+from follow_the_money.feed.cli import run_feed
 from follow_the_money.feed.plan import (
     FeedPlanError,
     ProviderOutcome,
@@ -197,6 +199,186 @@ def test_all_enabled_empty_is_failure():
     }
     status, _ = assess_pipeline(config=cfg, outcomes=outcomes, total_accepted=0)
     assert status == "failure"
+
+
+def _all_healthy_outcomes(cfg) -> dict[str, ProviderOutcome]:
+    return {
+        member: ProviderOutcome(member, state="healthy", accepted=1)
+        for row in cfg.coverage.rows
+        for member in row.members
+    }
+
+
+def test_permitted_empty_contributes_to_coverage():
+    cfg = _cfg()
+    outcomes = _all_healthy_outcomes(cfg)
+    outcomes["federal_reserve"] = ProviderOutcome("federal_reserve", state="empty")
+
+    status, warnings = assess_pipeline(config=cfg, outcomes=outcomes, total_accepted=1)
+
+    assert status == "healthy"
+    assert warnings == []
+
+
+def test_non_permitted_empty_does_not_contribute_and_names_provider():
+    cfg = _cfg()
+    outcomes = _all_healthy_outcomes(cfg)
+    outcomes["yahoo_market"] = ProviderOutcome("yahoo_market", state="empty")
+
+    status, warnings = assess_pipeline(config=cfg, outcomes=outcomes, total_accepted=1)
+
+    assert status == "degraded"
+    assert any("yahoo_market" in warning for warning in warnings)
+    assert any("china_hk_cross_asset_market" in warning for warning in warnings)
+
+
+@pytest.mark.parametrize("state", ["partial", "failed", "skipped"])
+def test_incomplete_provider_states_do_not_contribute_and_name_provider(state):
+    cfg = _cfg()
+    outcomes = _all_healthy_outcomes(cfg)
+    outcomes["sec_edgar"] = ProviderOutcome("sec_edgar", state=state, accepted=1)
+
+    status, warnings = assess_pipeline(config=cfg, outcomes=outcomes, total_accepted=1)
+
+    assert status == "degraded"
+    assert any("sec_edgar" in warning for warning in warnings)
+    assert any("us_company_filings" in warning for warning in warnings)
+
+
+def test_zero_accepted_retains_provider_and_group_warnings():
+    cfg = _cfg()
+    outcomes = {
+        member: ProviderOutcome(member, state="empty")
+        for row in cfg.coverage.rows
+        for member in row.members
+    }
+    outcomes["sec_edgar"] = ProviderOutcome("sec_edgar", state="failed")
+    outcomes["yahoo_market"] = ProviderOutcome("yahoo_market", state="empty")
+
+    status, warnings = assess_pipeline(config=cfg, outcomes=outcomes, total_accepted=0)
+
+    assert status == "failure"
+    assert any("no accepted" in warning for warning in warnings)
+    assert any("sec_edgar" in warning for warning in warnings)
+    assert any("us_company_filings" in warning for warning in warnings)
+
+
+def _feed_item(provider_id: str, item_id: str) -> dict:
+    return {
+        "id": item_id,
+        "provider_id": provider_id,
+        "source": {
+            "id": f"{item_id}-source",
+            "name": "Fixture source",
+            "tier": "Tier 1",
+            "kind": "news",
+            "url": f"https://example.com/{item_id}",
+            "published_at": "2026-08-11T00:10:00Z",
+            "knowledge_available_at": "2026-08-11T00:10:00Z",
+        },
+        "payload": {
+            "type": "policy",
+            "title": item_id,
+            "announced_at": "2026-08-11T00:10:00Z",
+            "raw_metadata": {},
+        },
+    }
+
+
+class _FixtureAdapter:
+    provider_id = "yahoo_market"
+
+    def __init__(self, *, items=None, error: Exception | None = None):
+        self.items = items or []
+        self.error = error
+
+    def fetch(self, window, client=None):
+        if self.error is not None:
+            raise self.error
+        return SimpleNamespace(body_bytes=b"fixture")
+
+    def normalize(self, raw, window):
+        return self.items
+
+
+def test_accepted_and_rejected_items_make_provider_partial(tmp_path):
+    adapter = _FixtureAdapter(items=[_feed_item("yahoo_market", "accepted"), {"source": {}}])
+
+    result = run_feed(
+        output_root=str(tmp_path / "out"),
+        cutoff=datetime(2026, 8, 11, 0, 20, tzinfo=UTC),
+        dry_run=True,
+        providers_fn=lambda: {"yahoo_market": adapter},
+        enabled_provider_ids=["yahoo_market"],
+    )
+
+    assert result.status == "degraded"
+    assert result.feed is not None
+    outcome = result.feed["provider_outcomes"][0]
+    assert outcome["state"] == "partial"
+    assert outcome["accepted"] == 1
+    assert outcome["rejected"] == 1
+
+
+def test_accepted_evidence_survives_later_failed_role_as_partial(tmp_path):
+    adapters = [
+        _FixtureAdapter(items=[_feed_item("yahoo_market", "accepted")]),
+        _FixtureAdapter(error=RuntimeError("later role failed")),
+    ]
+
+    result = run_feed(
+        output_root=str(tmp_path / "out"),
+        cutoff=datetime(2026, 8, 11, 0, 20, tzinfo=UTC),
+        dry_run=True,
+        providers_fn=lambda: {"yahoo_market": adapters},
+        enabled_provider_ids=["yahoo_market"],
+    )
+
+    assert result.status == "degraded"
+    assert result.feed is not None
+    outcome = result.feed["provider_outcomes"][0]
+    assert outcome["state"] == "partial"
+    assert outcome["accepted"] == 1
+    assert len(result.feed["items"]) == 1
+
+
+@pytest.mark.parametrize("empty_first", [True, False])
+def test_non_permitted_empty_and_accepted_roles_are_partial_in_any_order(tmp_path, empty_first):
+    empty = _FixtureAdapter()
+    accepted = _FixtureAdapter(items=[_feed_item("yahoo_market", "accepted")])
+    adapters = [empty, accepted] if empty_first else [accepted, empty]
+
+    result = run_feed(
+        output_root=str(tmp_path / "out"),
+        cutoff=datetime(2026, 8, 11, 0, 20, tzinfo=UTC),
+        dry_run=True,
+        providers_fn=lambda: {"yahoo_market": adapters},
+        enabled_provider_ids=["yahoo_market"],
+    )
+
+    assert result.status == "degraded"
+    assert result.feed is not None
+    outcome = result.feed["provider_outcomes"][0]
+    assert outcome["state"] == "partial"
+    assert outcome["accepted"] == 1
+    assert len(result.feed["items"]) == 1
+
+
+def test_all_rejected_provider_is_failed_not_empty(tmp_path):
+    adapter = _FixtureAdapter(items=[{"source": {}}])
+
+    result = run_feed(
+        output_root=str(tmp_path / "out"),
+        cutoff=datetime(2026, 8, 11, 0, 20, tzinfo=UTC),
+        dry_run=True,
+        providers_fn=lambda: {"yahoo_market": adapter},
+        enabled_provider_ids=["yahoo_market"],
+    )
+
+    assert result.status == "failure"
+    assert result.exit_code == 1
+    assert result.feed is not None
+    assert result.feed["provider_outcomes"][0]["state"] == "failed"
 
 
 # ---------------------------------------------------------------------------

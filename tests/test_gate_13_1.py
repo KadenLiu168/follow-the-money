@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from follow_the_money.feed.cli import FeedCliError, run_feed
+from follow_the_money.feed.cli import FeedCliError, FeedExecutionError, run_feed
 from follow_the_money.feed.validate import assert_feed_identity, validate_feed
 from follow_the_money.providers.adapters import (
     YahooMarketAdapter,
@@ -281,20 +281,20 @@ def test_retry_after_beyond_deadline_is_not_admitted(tmp_path):
             return []
 
     adapter = RetryAfterAdapter()
-    result = run_feed(
-        output_root=str(tmp_path / "out"),
-        cutoff=CUTOFF,
-        providers_fn=lambda: {"federal_reserve": adapter},
-        enabled_provider_ids=["federal_reserve"],
-        sleep_fn=lambda _delay: pytest.fail("Retry-After wait must not be admitted past deadline"),
-    )
-    assert result.exit_code == 1
+    out = tmp_path / "out"
+    with pytest.raises(FeedExecutionError, match="retry_not_admitted_before_deadline"):
+        run_feed(
+            output_root=str(out),
+            cutoff=CUTOFF,
+            providers_fn=lambda: {"federal_reserve": adapter},
+            enabled_provider_ids=["federal_reserve"],
+            sleep_fn=lambda _delay: pytest.fail(
+                "Retry-After wait must not be admitted past deadline"
+            ),
+        )
     assert adapter.calls == 1
-    outcome = next(
-        row for row in result.feed["provider_outcomes"] if row["provider_id"] == "federal_reserve"
-    )
-    assert outcome["attempted"] == 1
-    assert "retry_not_admitted_before_deadline" in outcome["error"]
+    assert not (out / "latest.json").exists()
+    assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
 def test_no_provider_enabled_still_fails_closed(tmp_path):

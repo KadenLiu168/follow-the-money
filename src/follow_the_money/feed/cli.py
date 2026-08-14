@@ -182,7 +182,10 @@ def run_feed(
         # Registry: production uses the verified-enabled manifest registry.
         if providers_fn is not None:
             registry = providers_fn()
-            adapters_by_id = {pid: [a] for pid, a in registry.items()}
+            adapters_by_id = {
+                pid: list(adapter) if isinstance(adapter, (list, tuple)) else [adapter]
+                for pid, adapter in registry.items()
+            }
         else:
             try:
                 adapters_by_id = _production_adapters(cfg, build_registry())
@@ -301,8 +304,9 @@ def run_feed(
                 acquired = False
                 while not acquired:
                     if cancel_event.is_set() or monotonic() >= deadline_at:
-                        outcome.state = "failed"
+                        outcome.state = "partial" if outcome.accepted else "failed"
                         outcome.error = "pre_commit_deadline_exceeded: scope lock wait cancelled"
+                        outcome.execution_failure = True
                         return
                     remaining = max(0.0, deadline_at - monotonic())
                     acquired = scope_lock.acquire(timeout=min(0.1, remaining))
@@ -329,6 +333,7 @@ def run_feed(
             if monotonic() - deadline_started > deadline_seconds:
                 outcome = ProviderOutcome(provider_id=pid, state="skipped")
                 outcome.error = "pre_commit_deadline_exceeded"
+                outcome.execution_failure = True
                 outcomes[pid] = outcome
                 return
             outcome = ProviderOutcome(provider_id=pid)
@@ -367,6 +372,12 @@ def run_feed(
         finally:
             pool.shutdown(wait=True, cancel_futures=True)
 
+        deadline_failure = next(
+            (outcome for outcome in outcomes.values() if outcome.execution_failure), None
+        )
+        if deadline_failure is not None:
+            raise FeedExecutionError(deadline_failure.error or "pre_commit_deadline_exceeded")
+
         # Dedup + deterministic order.
         deduped, _dropped = deduplicate_items(items)
         ordered = deterministic_item_order(deduped)
@@ -395,6 +406,15 @@ def run_feed(
             assert_feed_identity(feed)
         except SchemaError as exc:
             raise FeedExecutionError(str(exc)) from exc
+
+        if status == "failure":
+            return FeedRunResult(
+                status=status,
+                exit_code=1,
+                feed=feed,
+                warnings=warnings,
+                message="no accepted evidence; Feed was not admitted for publication",
+            )
 
         if dry_run:
             return FeedRunResult(status=status, exit_code=0, feed=feed, warnings=warnings)
@@ -466,6 +486,13 @@ def _adapter_fetch_host(pid: str, cfg: AppConfig) -> str | None:
     return None
 
 
+def _provider_empty_valid_for_window(pid: str, cfg: AppConfig) -> bool:
+    for provider in cfg.providers:
+        if provider.id == pid:
+            return provider.empty_valid_for_window
+    return False
+
+
 def _run_adapter(
     outcome: ProviderOutcome,
     adapter: Any,
@@ -486,10 +513,15 @@ def _run_adapter(
     window = {"start": plan.window_start, "end": plan.evidence_cutoff_at}
     scope = _provider_scope(outcome.provider_id, cfg)
     max_attempts = max(1, int(cfg.feed.max_attempts))
+    empty_valid_for_window = _provider_empty_valid_for_window(outcome.provider_id, cfg)
+
+    def mark_incomplete(message: str) -> None:
+        outcome.state = "partial" if outcome.accepted else "failed"
+        outcome.error = message
 
     def reject_late_result(state) -> None:
-        outcome.state = "failed"
-        outcome.error = "pre_commit_deadline_exceeded: late provider result ignored"
+        mark_incomplete("pre_commit_deadline_exceeded: late provider result ignored")
+        outcome.execution_failure = True
         if rate is not None and scope is not None and state is not None:
             rate.reconcile(state, now=now_fn)
 
@@ -500,28 +532,23 @@ def _run_adapter(
 
     for attempt in range(max_attempts):
         if deadline_expired():
-            outcome.state = "failed"
-            outcome.error = "pre_commit_deadline_exceeded: provider work cancelled"
+            mark_incomplete("pre_commit_deadline_exceeded: provider work cancelled")
+            outcome.execution_failure = True
             return
         state = None
         if rate is not None and scope is not None:
-            try:
+            state = _ensure_scope_state(rate, scope, cfg, now_fn)
+            state = refill_tokens(state, now=now_fn)
+            delay = eligibility_delay(state, now=now_fn)
+            if delay > 0:
+                if delay >= deadline_at - monotonic_now():
+                    mark_incomplete("rate_not_eligible_before_deadline")
+                    outcome.execution_failure = True
+                    return
+                sleep_fn(delay)
                 state = _ensure_scope_state(rate, scope, cfg, now_fn)
                 state = refill_tokens(state, now=now_fn)
-                delay = eligibility_delay(state, now=now_fn)
-                if delay > 0:
-                    if delay >= deadline_at - monotonic_now():
-                        outcome.state = "failed"
-                        outcome.error = "rate_not_eligible_before_deadline"
-                        return
-                    sleep_fn(delay)
-                    state = _ensure_scope_state(rate, scope, cfg, now_fn)
-                    state = refill_tokens(state, now=now_fn)
-                state = rate.debit_and_cooldown(state, now=now_fn)
-            except RateStateError as exc:
-                outcome.state = "failed"
-                outcome.error = f"rate_state: {exc}"
-                return
+            state = rate.debit_and_cooldown(state, now=now_fn)
 
         outcome.attempted += 1
         request_started = False
@@ -548,13 +575,30 @@ def _run_adapter(
             accepted = len(accepted_items)
             outcome.accepted += accepted
             outcome.rejected += rejected
-            outcome.state = "healthy" if accepted else "empty"
+            if not accepted and not rejected and not empty_valid_for_window:
+                outcome.non_permitted_empty_observed = True
+            if rejected:
+                outcome.state = "partial" if outcome.accepted else "failed"
+            elif accepted:
+                if outcome.state == "partial" or outcome.non_permitted_empty_observed:
+                    outcome.state = "partial"
+                else:
+                    outcome.state = "healthy"
+            elif outcome.accepted:
+                if empty_valid_for_window and outcome.state != "partial":
+                    outcome.state = "healthy"
+                else:
+                    outcome.state = "partial"
+                    outcome.error = "non-permitted empty result after accepted evidence"
+            else:
+                outcome.state = "empty"
             if rate is not None and scope is not None and state is not None:
                 rate.reconcile(state, now=now_fn)
             return
         except FetchError as exc:
-            outcome.state = "failed"
-            outcome.error = str(exc)
+            mark_incomplete(str(exc))
+            if deadline_expired():
+                outcome.execution_failure = True
             if rate is not None and scope is not None and state is not None:
                 rate.reconcile(state, now=now_fn, retry_after_seconds=exc.retry_after_seconds)
             if deadline_expired():
@@ -568,17 +612,20 @@ def _run_adapter(
                 remaining = deadline_at - monotonic_now()
                 if delay > remaining:
                     outcome.error = f"{exc}; retry_not_admitted_before_deadline"
+                    outcome.execution_failure = True
                     return
                 if delay > 0:
                     sleep_fn(delay)
                 if monotonic_now() >= deadline_at:
                     outcome.error = f"{exc}; retry_not_admitted_before_deadline"
+                    outcome.execution_failure = True
                     return
                 continue
             return
+        except RateStateError:
+            raise
         except Exception as exc:  # noqa: BLE001 - orchestration boundary
-            outcome.state = "failed"
-            outcome.error = str(exc)
+            mark_incomplete(str(exc))
             if rate is not None and scope is not None and state is not None:
                 if request_started:
                     rate.reconcile(state, now=now_fn)
@@ -905,7 +952,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if args.status_file:
         status = {"status": result.status, "warnings": result.warnings}
-        if result.feed is not None:
+        if result.feed is not None and result.status in ("healthy", "degraded"):
             from datetime import datetime
             from zoneinfo import ZoneInfo
 
@@ -926,7 +973,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     for warning in result.warnings:
         print(f"warning: {warning}", file=sys.stderr)
-    if result.feed is not None and args.dry_run:
+    if result.feed is not None and args.dry_run and result.status != "failure":
         print(json.dumps(result.feed, ensure_ascii=False, indent=2)[:2000])
     return result.exit_code
 

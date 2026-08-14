@@ -22,6 +22,11 @@ from follow_the_money.engine.feed_health import (
     check_calendar_horizon,
     load_latest_feed,
 )
+from follow_the_money.feed.validate import (
+    assert_feed_identity,
+    recompute_feed_identity,
+    validate_feed,
+)
 from follow_the_money.ledger import Ledger, build_ledger_entry
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -111,6 +116,18 @@ def test_degraded_feed_carries_warnings():
     health = assess_health(feed, brief_generated_at=_ts(T0 + timedelta(minutes=10)))
     assert health.status == "degraded"
     assert "某来源不可用" in health.warnings
+
+
+def test_schema_valid_failure_feed_is_not_consumable():
+    feed = _feed(pipeline={"status": "failure", "warnings": ["no accepted item"]})
+    digest, run_id = recompute_feed_identity(feed)
+    feed["content_digest"] = digest
+    feed["run_id"] = run_id
+    validate_feed(feed)
+    assert_feed_identity(feed)
+
+    with pytest.raises(FeedLoadError, match="pipeline.status=failure"):
+        assess_health(feed, brief_generated_at=_ts(T0 + timedelta(minutes=10)))
 
 
 def test_calendar_horizon_contract():

@@ -708,19 +708,20 @@ def test_late_provider_result_is_not_normalized_or_added_to_feed(tmp_path):
     def monotonic() -> float:
         return next(clock_values, 285.0)
 
-    result = run_feed(
-        output_root=str(tmp_path / "out"),
-        cutoff=T0,
-        dry_run=True,
-        providers_fn=lambda: {"federal_reserve": adapter},
-        enabled_provider_ids=["federal_reserve"],
-        monotonic_now=monotonic,
-    )
+    out = tmp_path / "out"
+    with pytest.raises(FeedExecutionError, match="pre_commit_deadline_exceeded"):
+        run_feed(
+            output_root=str(out),
+            cutoff=T0,
+            dry_run=True,
+            providers_fn=lambda: {"federal_reserve": adapter},
+            enabled_provider_ids=["federal_reserve"],
+            monotonic_now=monotonic,
+        )
 
-    assert result.feed is not None
-    assert result.feed["items"] == []
-    assert result.feed["provider_outcomes"][0]["error"].startswith("pre_commit_deadline_exceeded")
     adapter.normalize.assert_not_called()
+    assert not (out / "latest.json").exists()
+    assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
 def test_zero_mutation_after_invalid_latest(tmp_path):

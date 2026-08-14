@@ -6,10 +6,13 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from follow_the_money.feed.cli import FeedExecutionError, FeedInputError, run_feed
+from follow_the_money.feed.cli import FeedExecutionError, FeedInputError, FeedRunResult, run_feed
+from follow_the_money.providers.http import FetchError
+from follow_the_money.providers.rate import RateStateError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -130,15 +133,345 @@ def test_publication_failure_is_execution_error(tmp_path, monkeypatch):
     def fail(**_kwargs):
         raise PublishError("config invalid publication")
 
+    out = tmp_path / "out"
+    baseline = run_feed(
+        config_path=str(REPO_ROOT / "config" / "config.yaml"),
+        output_root=str(out),
+        cutoff=_cutoff(),
+        providers_fn=lambda: {"federal_reserve": FakeAdapter()},
+        enabled_provider_ids=["federal_reserve"],
+    )
+    assert baseline.status == "degraded"
+    previous_latest = (out / "latest.json").read_bytes()
+
     monkeypatch.setattr(feed_cli, "publish_feed", fail)
     with pytest.raises(FeedExecutionError):
         run_feed(
             config_path=str(REPO_ROOT / "config" / "config.yaml"),
-            output_root=str(tmp_path / "out"),
-            cutoff=_cutoff(),
+            output_root=str(out),
+            cutoff=_cutoff().replace(hour=1),
             providers_fn=lambda: {"federal_reserve": FakeAdapter()},
             enabled_provider_ids=["federal_reserve"],
         )
+    assert (out / "latest.json").read_bytes() == previous_latest
+
+
+class _OutcomeAdapter:
+    def __init__(self, *, items=None, error: Exception | None = None):
+        self.items = items or []
+        self.error = error
+
+    def fetch(self, window, client=None):
+        if self.error is not None:
+            raise self.error
+        return SimpleNamespace(body_bytes=b"fixture")
+
+    def normalize(self, raw, window):
+        return self.items
+
+
+def _accepted_item(provider_id: str, item_id: str) -> dict:
+    return {
+        "id": item_id,
+        "provider_id": provider_id,
+        "source": {
+            "id": f"{item_id}-source",
+            "name": "Fixture source",
+            "tier": "Tier 1",
+            "kind": "news",
+            "url": f"https://example.com/{item_id}",
+            "published_at": "2026-08-11T00:10:00Z",
+            "knowledge_available_at": "2026-08-11T00:10:00Z",
+        },
+        "payload": {
+            "type": "policy",
+            "title": item_id,
+            "announced_at": "2026-08-11T00:10:00Z",
+            "raw_metadata": {},
+        },
+    }
+
+
+def test_failed_provider_and_successful_provider_are_degraded_with_both_causes(tmp_path):
+    result = run_feed(
+        output_root=str(tmp_path / "out"),
+        cutoff=_cutoff(),
+        dry_run=True,
+        providers_fn=lambda: {
+            "federal_reserve": _OutcomeAdapter(
+                items=[_accepted_item("federal_reserve", "accepted")]
+            ),
+            "bls": _OutcomeAdapter(error=RuntimeError("provider unavailable")),
+        },
+        enabled_provider_ids=["federal_reserve", "bls"],
+    )
+
+    assert result.status == "degraded"
+    assert result.exit_code == 0
+    assert any("bls" in warning for warning in result.warnings)
+    assert any("us_official_macro_policy" in warning for warning in result.warnings)
+
+
+def test_dry_run_late_result_after_retained_evidence_is_execution_failure(tmp_path):
+    clock = {"now": 0.0}
+
+    class LateAdapter(_OutcomeAdapter):
+        def fetch(self, window, client=None):
+            clock["now"] = 285.0
+            return super().fetch(window, client)
+
+    out = tmp_path / "out"
+
+    with pytest.raises(FeedExecutionError, match="pre_commit_deadline_exceeded"):
+        run_feed(
+            output_root=str(out),
+            cutoff=_cutoff(),
+            dry_run=True,
+            providers_fn=lambda: {
+                "yahoo_market": [
+                    _OutcomeAdapter(items=[_accepted_item("yahoo_market", "accepted")]),
+                    LateAdapter(items=[_accepted_item("yahoo_market", "late")]),
+                ]
+            },
+            enabled_provider_ids=["yahoo_market"],
+            monotonic_now=lambda: clock["now"],
+        )
+
+    assert not (out / "latest.json").exists()
+    assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
+
+
+def test_dry_run_provider_start_after_global_deadline_is_execution_failure(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from threading import current_thread
+
+    from follow_the_money.feed import cli as feed_cli
+
+    cfg = feed_cli._load_app_config(None)
+    cfg = replace(cfg, feed=replace(cfg.feed, global_concurrency=1))
+    monkeypatch.setattr(feed_cli, "_load_app_config", lambda _path: cfg)
+    clock = {"armed": False, "worker_reads": 0}
+
+    def monotonic() -> float:
+        if current_thread().name == "MainThread" or not clock["armed"]:
+            return 0.0
+        clock["worker_reads"] += 1
+        return 0.0 if clock["worker_reads"] == 1 else 286.0
+
+    class FirstAdapter(_OutcomeAdapter):
+        def normalize(self, raw, window):
+            clock["armed"] = True
+            return super().normalize(raw, window)
+
+    out = tmp_path / "out"
+
+    with pytest.raises(FeedExecutionError, match="pre_commit_deadline_exceeded"):
+        run_feed(
+            output_root=str(out),
+            cutoff=_cutoff(),
+            dry_run=True,
+            providers_fn=lambda: {
+                "federal_reserve": FirstAdapter(
+                    items=[_accepted_item("federal_reserve", "accepted")]
+                ),
+                "yahoo_market": _OutcomeAdapter(items=[_accepted_item("yahoo_market", "late")]),
+            },
+            enabled_provider_ids=["federal_reserve", "yahoo_market"],
+            monotonic_now=monotonic,
+        )
+
+    assert not (out / "latest.json").exists()
+    assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
+
+
+def test_rate_state_failure_remains_execution_error_with_other_accepted_evidence(
+    tmp_path, monkeypatch
+):
+    from follow_the_money.feed import cli as feed_cli
+
+    original = feed_cli._ensure_scope_state
+
+    def fail_market_rate_state(rate, scope_id, cfg, now_fn):
+        if scope_id == "yahoo_market":
+            raise RateStateError("config invalid provider")
+        return original(rate, scope_id, cfg, now_fn)
+
+    monkeypatch.setattr(feed_cli, "_ensure_scope_state", fail_market_rate_state)
+    out = tmp_path / "out"
+
+    with pytest.raises(FeedExecutionError, match="config invalid provider"):
+        run_feed(
+            output_root=str(out),
+            cutoff=_cutoff(),
+            providers_fn=lambda: {
+                "federal_reserve": _OutcomeAdapter(
+                    items=[_accepted_item("federal_reserve", "accepted")]
+                ),
+                "yahoo_market": _OutcomeAdapter(items=[_accepted_item("yahoo_market", "market")]),
+            },
+            enabled_provider_ids=["federal_reserve", "yahoo_market"],
+        )
+
+    assert not (out / "latest.json").exists()
+    assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
+
+
+def test_rate_wait_beyond_deadline_is_execution_failure_with_other_accepted_evidence(
+    tmp_path, monkeypatch
+):
+    from follow_the_money.feed import cli as feed_cli
+
+    def delay_beyond_deadline(state, *, now):
+        return 10_000.0 if state.scope_id == "yahoo_market" else 0.0
+
+    monkeypatch.setattr(feed_cli, "eligibility_delay", delay_beyond_deadline)
+    out = tmp_path / "out"
+
+    with pytest.raises(FeedExecutionError, match="rate_not_eligible_before_deadline"):
+        run_feed(
+            output_root=str(out),
+            cutoff=_cutoff(),
+            providers_fn=lambda: {
+                "federal_reserve": _OutcomeAdapter(
+                    items=[_accepted_item("federal_reserve", "accepted")]
+                ),
+                "yahoo_market": _OutcomeAdapter(items=[_accepted_item("yahoo_market", "market")]),
+            },
+            enabled_provider_ids=["federal_reserve", "yahoo_market"],
+        )
+
+    assert not (out / "latest.json").exists()
+    assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
+
+
+def test_retry_wait_beyond_deadline_is_execution_failure_with_other_accepted_evidence(
+    tmp_path,
+):
+    retrying = _OutcomeAdapter(error=FetchError("retry", retry_after_seconds=3600, retryable=True))
+    out = tmp_path / "out"
+
+    with pytest.raises(FeedExecutionError, match="retry_not_admitted_before_deadline"):
+        run_feed(
+            output_root=str(out),
+            cutoff=_cutoff(),
+            providers_fn=lambda: {
+                "federal_reserve": _OutcomeAdapter(
+                    items=[_accepted_item("federal_reserve", "accepted")]
+                ),
+                "yahoo_market": retrying,
+            },
+            enabled_provider_ids=["federal_reserve", "yahoo_market"],
+        )
+
+    assert not (out / "latest.json").exists()
+    assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
+
+
+def test_rate_reconcile_failure_is_not_retried_as_provider_degradation(tmp_path, monkeypatch):
+    from follow_the_money.feed import cli as feed_cli
+
+    original = feed_cli.RateRegistry.reconcile
+    failed = False
+
+    def fail_market_reconcile_once(registry, state, **kwargs):
+        nonlocal failed
+        if state.scope_id == "yahoo_market" and not failed:
+            failed = True
+            raise RateStateError("provider unavailable during reconcile")
+        return original(registry, state, **kwargs)
+
+    monkeypatch.setattr(feed_cli.RateRegistry, "reconcile", fail_market_reconcile_once)
+    out = tmp_path / "out"
+
+    with pytest.raises(FeedExecutionError, match="provider unavailable during reconcile"):
+        run_feed(
+            output_root=str(out),
+            cutoff=_cutoff(),
+            providers_fn=lambda: {
+                "federal_reserve": _OutcomeAdapter(
+                    items=[_accepted_item("federal_reserve", "accepted")]
+                ),
+                "yahoo_market": _OutcomeAdapter(items=[_accepted_item("yahoo_market", "market")]),
+            },
+            enabled_provider_ids=["federal_reserve", "yahoo_market"],
+        )
+
+    assert failed
+    assert not (out / "latest.json").exists()
+    assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
+
+
+def test_all_permitted_empty_is_failure_in_dry_run(tmp_path):
+    result = run_feed(
+        output_root=str(tmp_path / "out"),
+        cutoff=_cutoff(),
+        dry_run=True,
+        providers_fn=lambda: {"federal_reserve": _OutcomeAdapter()},
+        enabled_provider_ids=["federal_reserve"],
+    )
+
+    assert result.status == "failure"
+    assert result.exit_code == 1
+    assert not (tmp_path / "out" / "latest.json").exists()
+    assert (
+        not list((tmp_path / "out" / "daily").rglob("*.json"))
+        if (tmp_path / "out" / "daily").exists()
+        else True
+    )
+
+
+def test_failure_does_not_call_publication_or_replace_latest(tmp_path, monkeypatch):
+    from follow_the_money.feed import cli as feed_cli
+
+    called = False
+
+    def fail_if_called(**_kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("failure candidates must not enter publication")
+
+    monkeypatch.setattr(feed_cli, "publish_feed", fail_if_called)
+    result = run_feed(
+        output_root=str(tmp_path / "out"),
+        cutoff=_cutoff(),
+        providers_fn=lambda: {"federal_reserve": _OutcomeAdapter()},
+        enabled_provider_ids=["federal_reserve"],
+    )
+
+    assert result.status == "failure"
+    assert result.exit_code == 1
+    assert not called
+    assert not (tmp_path / "out" / "latest.json").exists()
+    assert (
+        not list((tmp_path / "out" / "daily").rglob("*.json"))
+        if (tmp_path / "out" / "daily").exists()
+        else True
+    )
+
+
+def test_failure_status_file_does_not_expose_success_paths(tmp_path, monkeypatch):
+    from follow_the_money.feed import cli as feed_cli
+
+    result = FeedRunResult(
+        status="failure",
+        exit_code=1,
+        feed={
+            "run_id": "failure-run",
+            "evidence_cutoff_at": "2026-08-11T00:20:00Z",
+        },
+        warnings=["no accepted item"],
+    )
+    monkeypatch.setattr(feed_cli, "run_feed", lambda **_kwargs: result)
+    status_file = tmp_path / "status.json"
+
+    assert (
+        feed_cli.main(
+            ["--dry-run", "--output-root", str(tmp_path / "out"), "--status-file", str(status_file)]
+        )
+        == 1
+    )
+    payload = __import__("json").loads(status_file.read_text())
+    assert payload == {"status": "failure", "warnings": ["no accepted item"]}
 
 
 def test_dry_run_publishes_nothing(tmp_path):

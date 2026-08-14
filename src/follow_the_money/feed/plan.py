@@ -108,6 +108,8 @@ class ProviderOutcome:
     rejected: int = 0
     error: str | None = None
     retrieved_at: str | None = None
+    execution_failure: bool = False
+    non_permitted_empty_observed: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -128,8 +130,12 @@ class ProviderOutcome:
 
     @property
     def healthy(self) -> bool:
-        """Healthy for group counting: success with items OR permitted empty."""
-        return self.state in ("healthy", "empty")
+        """Whether the serialized provider state is explicitly healthy."""
+        return self.state == "healthy"
+
+    def contributes_to_coverage(self, *, empty_valid_for_window: bool) -> bool:
+        """Return whether this outcome satisfies one mandatory member slot."""
+        return self.state == "healthy" or (self.state == "empty" and empty_valid_for_window)
 
 
 def assess_pipeline(
@@ -142,27 +148,43 @@ def assess_pipeline(
 
     status: healthy | degraded | failure.
     """
+    provider_config = {provider.id: provider for provider in config.providers}
     warnings: list[str] = []
     by_group: dict[str, list[ProviderOutcome]] = {}
     for row in config.coverage.rows:
         by_group[row.group] = [outcomes.get(m, ProviderOutcome(m)) for m in row.members]
 
-    if total_accepted == 0:
-        return "failure", ["no accepted item from any enabled provider"]
+    degraded_providers: list[str] = []
+    for provider_id, provider in provider_config.items():
+        if not provider.enabled:
+            continue
+        outcome = outcomes.get(provider_id, ProviderOutcome(provider_id))
+        if outcome.state == "healthy":
+            continue
+        if outcome.state == "empty" and provider.empty_valid_for_window:
+            continue
+        degraded_providers.append(provider_id)
+    if degraded_providers:
+        warnings.append(f"degraded providers: {', '.join(sorted(degraded_providers))}")
 
     deficient: list[str] = []
     for row in config.coverage.rows:
-        healthy_count = sum(1 for o in by_group[row.group] if o.healthy)
+        healthy_count = sum(
+            1
+            for member, outcome in zip(row.members, by_group[row.group], strict=True)
+            if outcome.contributes_to_coverage(
+                empty_valid_for_window=provider_config[member].empty_valid_for_window
+            )
+        )
         if healthy_count < row.minimum and not row.optional:
             deficient.append(row.group)
 
     if deficient:
         warnings.append(f"deficient coverage groups: {', '.join(deficient)}")
-        return "degraded", warnings
-
-    failed = [o.provider_id for o in outcomes.values() if o.state in ("failed", "partial")]
-    if failed:
-        warnings.append(f"degraded providers: {', '.join(sorted(failed))}")
+    if total_accepted == 0:
+        warnings.insert(0, "no accepted item from any enabled provider")
+        return "failure", warnings
+    if degraded_providers or deficient:
         return "degraded", warnings
 
     return "healthy", warnings

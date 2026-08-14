@@ -87,7 +87,10 @@ def assess_health(
         status = "degraded"
 
     pipeline = feed.get("pipeline", {})
-    if pipeline.get("status") == "degraded":
+    pipeline_status = pipeline.get("status")
+    if pipeline_status == "failure":
+        raise FeedLoadError("pipeline.status=failure: Feed is not consumable")
+    if pipeline_status == "degraded":
         warnings.extend(pipeline.get("warnings", []))
         status = "degraded"
 
