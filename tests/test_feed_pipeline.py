@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -27,6 +28,14 @@ def _cfg():
 
 def _latest(cutoff: datetime) -> dict:
     return {"evidence_cutoff_at": cutoff.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"}
+
+
+def _publication_bytes(cutoff: datetime, digest: str = "a" * 64) -> bytes:
+    return json.dumps(
+        {"content_digest": digest, "evidence_cutoff_at": cutoff.isoformat().replace("+00:00", "Z")},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -199,17 +208,18 @@ def test_publish_dated_then_latest(tmp_path):
     root = tmp_path / "out"
     root.mkdir()
     cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
+    feed = _publication_bytes(cutoff)
     result = publish_feed(
         output_root=root,
         cutoff=cutoff,
         run_id="run_1",
-        feed_bytes=b"feed-bytes",
-        latest_bytes=b"latest-bytes",
+        feed_bytes=feed,
+        latest_bytes=feed,
     )
     dated = root / "daily" / "2026-08-11" / "run_1.json"
     assert dated.exists()
-    assert dated.read_bytes() == b"feed-bytes"
-    assert (root / "latest.json").read_bytes() == b"latest-bytes"
+    assert dated.read_bytes() == feed
+    assert (root / "latest.json").read_bytes() == feed
     assert result.latest_replaced
 
 
@@ -217,11 +227,12 @@ def test_publish_idempotent_same_run(tmp_path):
     root = tmp_path / "out"
     root.mkdir()
     cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
+    feed = _publication_bytes(cutoff)
     publish_feed(
-        output_root=root, cutoff=cutoff, run_id="run_1", feed_bytes=b"f", latest_bytes=b"l"
+        output_root=root, cutoff=cutoff, run_id="run_1", feed_bytes=feed, latest_bytes=feed
     )
     result = publish_feed(
-        output_root=root, cutoff=cutoff, run_id="run_1", feed_bytes=b"f", latest_bytes=b"l"
+        output_root=root, cutoff=cutoff, run_id="run_1", feed_bytes=feed, latest_bytes=feed
     )
     assert result.idempotent
 
@@ -230,16 +241,18 @@ def test_publish_same_path_incompatible_fails(tmp_path):
     root = tmp_path / "out"
     root.mkdir()
     cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
+    feed = _publication_bytes(cutoff)
     publish_feed(
-        output_root=root, cutoff=cutoff, run_id="run_1", feed_bytes=b"f", latest_bytes=b"l"
+        output_root=root, cutoff=cutoff, run_id="run_1", feed_bytes=feed, latest_bytes=feed
     )
+    incompatible = _publication_bytes(cutoff, "b" * 64)
     with pytest.raises(PublishError, match="incompatible content"):
         publish_feed(
             output_root=root,
             cutoff=cutoff,
             run_id="run_1",
-            feed_bytes=b"DIFFERENT",
-            latest_bytes=b"l",
+            feed_bytes=incompatible,
+            latest_bytes=incompatible,
         )
 
 
@@ -247,8 +260,9 @@ def test_publish_no_staging_leftovers(tmp_path):
     root = tmp_path / "out"
     root.mkdir()
     cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
+    feed = _publication_bytes(cutoff)
     publish_feed(
-        output_root=root, cutoff=cutoff, run_id="run_1", feed_bytes=b"f", latest_bytes=b"l"
+        output_root=root, cutoff=cutoff, run_id="run_1", feed_bytes=feed, latest_bytes=feed
     )
     leftovers = [p.name for p in root.rglob("*") if ".stage-" in p.name]
     assert leftovers == []
@@ -258,14 +272,15 @@ def test_publish_latest_ownership_mismatch_rejected(tmp_path):
     root = tmp_path / "out"
     root.mkdir()
     cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
+    feed = _publication_bytes(cutoff)
     # existing_latest_sha256 says the current latest has a different hash.
     with pytest.raises(PublishError, match="ownership mismatch"):
         publish_feed(
             output_root=root,
             cutoff=cutoff,
             run_id="run_1",
-            feed_bytes=b"f",
-            latest_bytes=b"l",
+            feed_bytes=feed,
+            latest_bytes=feed,
             existing_latest_sha256="0" * 64,
         )
 
@@ -274,16 +289,17 @@ def test_dated_path_uses_asia_shanghai_cutoff_date(tmp_path):
     root = tmp_path / "out"
     root.mkdir()
     cutoff = datetime(2026, 8, 10, 20, 30, 0, tzinfo=UTC)
+    feed = _publication_bytes(cutoff)
 
     result = publish_feed(
         output_root=root,
         cutoff=cutoff,
         run_id="run_1",
-        feed_bytes=b"feed-bytes",
-        latest_bytes=b"latest-bytes",
+        feed_bytes=feed,
+        latest_bytes=feed,
     )
 
     expected = root / "daily" / "2026-08-11" / "run_1.json"
     assert result.dated_path == expected
-    assert expected.read_bytes() == b"feed-bytes"
+    assert expected.read_bytes() == feed
     assert not (root / "daily" / "2026-08-10").exists()

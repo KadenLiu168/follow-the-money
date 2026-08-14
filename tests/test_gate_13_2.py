@@ -13,6 +13,7 @@ import errno
 import json
 import time
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from unittest import mock
 
@@ -93,6 +94,19 @@ def _healthy_feed_dict() -> dict:
     }
 
 
+def _publication_bytes(cutoff: datetime, digest: str, marker: str) -> bytes:
+    """Minimal canonical ownership envelope for the publisher boundary."""
+    return json.dumps(
+        {
+            "content_digest": digest,
+            "evidence_cutoff_at": _ts(cutoff),
+            "marker": marker,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
 # ---------------------------------------------------------------------------
 # Atomic no-replace dated commit
 # ---------------------------------------------------------------------------
@@ -116,13 +130,15 @@ def test_asia_shanghai_cutoff_date_boundary(tmp_path):
     root = tmp_path / "out"
     root.mkdir()
     cutoff = datetime(2026, 8, 10, 15, 59, 59, tzinfo=UTC)
+    feed_1 = _publication_bytes(cutoff, "a" * 64, "r1")
     r1 = publish_feed(
-        output_root=root, cutoff=cutoff, run_id="r1", feed_bytes=b"f1", latest_bytes=b"l1"
+        output_root=root, cutoff=cutoff, run_id="r1", feed_bytes=feed_1, latest_bytes=feed_1
     )
     assert r1.dated_path.parent.name == "2026-08-10"
     cutoff2 = datetime(2026, 8, 10, 16, 0, 0, tzinfo=UTC)
+    feed_2 = _publication_bytes(cutoff2, "b" * 64, "r2")
     r2 = publish_feed(
-        output_root=root, cutoff=cutoff2, run_id="r2", feed_bytes=b"f2", latest_bytes=b"l2"
+        output_root=root, cutoff=cutoff2, run_id="r2", feed_bytes=feed_2, latest_bytes=feed_2
     )
     assert r2.dated_path.parent.name == "2026-08-11"
 
@@ -131,27 +147,84 @@ def test_equal_cutoff_different_digest_both_orders(tmp_path):
     root = tmp_path / "out"
     root.mkdir()
     cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
-    # Submission order A then B: distinct run IDs => both dated artifacts.
+    feed_a = _publication_bytes(cutoff, "a" * 64, "a")
+    feed_b = _publication_bytes(cutoff, "b" * 64, "b")
+    # Submission order A then B: distinct run IDs => both dated artifacts and
+    # the lexicographically greater ownership digest wins latest.
     publish_feed(
-        output_root=root, cutoff=cutoff, run_id="run_a", feed_bytes=b"aa", latest_bytes=b"aa"
+        output_root=root, cutoff=cutoff, run_id="run_a", feed_bytes=feed_a, latest_bytes=feed_a
     )
     publish_feed(
-        output_root=root, cutoff=cutoff, run_id="run_b", feed_bytes=b"bb", latest_bytes=b"bb"
+        output_root=root, cutoff=cutoff, run_id="run_b", feed_bytes=feed_b, latest_bytes=feed_b
     )
     dated_dir = root / "daily" / "2026-08-11"
     assert (dated_dir / "run_a.json").exists()
     assert (dated_dir / "run_b.json").exists()
+    assert (root / "latest.json").read_bytes() == feed_b
     # Reverse order on a fresh root.
     root2 = tmp_path / "out2"
     root2.mkdir()
     publish_feed(
-        output_root=root2, cutoff=cutoff, run_id="run_b", feed_bytes=b"bb", latest_bytes=b"bb"
+        output_root=root2, cutoff=cutoff, run_id="run_b", feed_bytes=feed_b, latest_bytes=feed_b
     )
     publish_feed(
-        output_root=root2, cutoff=cutoff, run_id="run_a", feed_bytes=b"aa", latest_bytes=b"aa"
+        output_root=root2, cutoff=cutoff, run_id="run_a", feed_bytes=feed_a, latest_bytes=feed_a
     )
     assert (root2 / "daily" / "2026-08-11" / "run_a.json").exists()
     assert (root2 / "daily" / "2026-08-11" / "run_b.json").exists()
+    assert (root2 / "latest.json").read_bytes() == feed_b
+
+
+def test_older_candidate_keeps_newer_latest_and_dated_artifact(tmp_path):
+    root = tmp_path / "out"
+    root.mkdir()
+    older = _publication_bytes(T0, "a" * 64, "older")
+    newer = _publication_bytes(T0 + timedelta(hours=1), "a" * 64, "newer")
+
+    publish_feed(
+        output_root=root,
+        cutoff=T0 + timedelta(hours=1),
+        run_id="newer",
+        feed_bytes=newer,
+        latest_bytes=newer,
+    )
+    result = publish_feed(
+        output_root=root,
+        cutoff=T0,
+        run_id="older",
+        feed_bytes=older,
+        latest_bytes=older,
+    )
+
+    assert not result.latest_replaced
+    assert not result.idempotent
+    assert (root / "latest.json").read_bytes() == newer
+    assert (root / "daily" / "2026-08-11" / "older.json").read_bytes() == older
+
+
+def test_incompatible_equal_owner_fails_closed(tmp_path):
+    root = tmp_path / "out"
+    root.mkdir()
+    first = _publication_bytes(T0, "a" * 64, "first")
+    incompatible = _publication_bytes(T0, "a" * 64, "different")
+
+    publish_feed(
+        output_root=root,
+        cutoff=T0,
+        run_id="first",
+        feed_bytes=first,
+        latest_bytes=first,
+    )
+    with pytest.raises(PublishError, match="equal ownership"):
+        publish_feed(
+            output_root=root,
+            cutoff=T0,
+            run_id="different",
+            feed_bytes=incompatible,
+            latest_bytes=incompatible,
+        )
+    assert (root / "latest.json").read_bytes() == first
+    assert (root / "daily" / "2026-08-11" / "different.json").read_bytes() == incompatible
 
 
 # ---------------------------------------------------------------------------
@@ -175,13 +248,18 @@ def test_latest_parent_fsync_failure_durability_unknown(tmp_path):
         return original(path)
 
     with mock.patch(real_fsync_dir, side_effect=flaky_fsync):
+        feed = _publication_bytes(cutoff, "a" * 64, "run_1")
         result = publish_feed(
-            output_root=root, cutoff=cutoff, run_id="run_1", feed_bytes=b"f", latest_bytes=b"l"
+            output_root=root,
+            cutoff=cutoff,
+            run_id="run_1",
+            feed_bytes=feed,
+            latest_bytes=feed,
         )
     # Artifact committed; durability unknown reported, never raised/rolled back.
     assert result.commit_durability_unknown
     assert (root / "daily" / "2026-08-11" / "run_1.json").exists()
-    assert (root / "latest.json").read_bytes() == b"l"
+    assert (root / "latest.json").read_bytes() == feed
 
 
 def test_dated_parent_fsync_failure_durability_unknown(tmp_path):
@@ -201,8 +279,13 @@ def test_dated_parent_fsync_failure_durability_unknown(tmp_path):
         return original(path)
 
     with mock.patch("follow_the_money.feed.publish._fsync_dir", side_effect=flaky_fsync):
+        feed = _publication_bytes(cutoff, "a" * 64, "run_1")
         result = publish_feed(
-            output_root=root, cutoff=cutoff, run_id="run_1", feed_bytes=b"f", latest_bytes=b"l"
+            output_root=root,
+            cutoff=cutoff,
+            run_id="run_1",
+            feed_bytes=feed,
+            latest_bytes=feed,
         )
     assert result.commit_durability_unknown
     assert (root / "daily" / "2026-08-11" / "run_1.json").exists()
@@ -226,8 +309,13 @@ def test_staging_fsync_failure_fails_before_commit(tmp_path):
         mock.patch("follow_the_money.feed.publish._fsync_dir", side_effect=fail_on_first),
         pytest.raises(OSError),
     ):
+        feed = _publication_bytes(cutoff, "a" * 64, "run_1")
         publish_feed(
-            output_root=root, cutoff=cutoff, run_id="run_1", feed_bytes=b"f", latest_bytes=b"l"
+            output_root=root,
+            cutoff=cutoff,
+            run_id="run_1",
+            feed_bytes=feed,
+            latest_bytes=feed,
         )
     # No dated or latest artifact committed.
     assert not (root / "latest.json").exists()
@@ -243,13 +331,42 @@ def test_crash_recovery_dated_committed_latest_not(tmp_path):
     # Manually stage the dated commit (as if the process died mid-publication).
     date_dir = root / "daily" / "2026-08-11"
     date_dir.mkdir(parents=True)
-    (date_dir / "run_1.json").write_bytes(b"f")
+    feed = _publication_bytes(cutoff, "a" * 64, "run_1")
+    (date_dir / "run_1.json").write_bytes(feed)
     # Re-run: idempotent for the same run + digest.
     result = publish_feed(
-        output_root=root, cutoff=cutoff, run_id="run_1", feed_bytes=b"f", latest_bytes=b"l"
+        output_root=root,
+        cutoff=cutoff,
+        run_id="run_1",
+        feed_bytes=feed,
+        latest_bytes=feed,
     )
     assert result.idempotent
-    assert (root / "latest.json").read_bytes() == b"l"
+    assert (root / "latest.json").read_bytes() == feed
+
+
+def test_same_run_recovery_does_not_regress_newer_latest(tmp_path):
+    root = tmp_path / "out"
+    root.mkdir()
+    older = _publication_bytes(T0, "a" * 64, "older")
+    newer = _publication_bytes(T0 + timedelta(hours=1), "a" * 64, "newer")
+    date_dir = root / "daily" / "2026-08-11"
+    date_dir.mkdir(parents=True)
+    (date_dir / "older.json").write_bytes(older)
+    (root / "latest.json").write_bytes(newer)
+
+    result = publish_feed(
+        output_root=root,
+        cutoff=T0,
+        run_id="older",
+        feed_bytes=older,
+        latest_bytes=older,
+    )
+
+    assert result.idempotent
+    assert not result.latest_replaced
+    assert (root / "latest.json").read_bytes() == newer
+    assert not [p for p in root.rglob("*") if ".stage-" in p.name]
 
 
 # ---------------------------------------------------------------------------
@@ -261,14 +378,16 @@ def test_latest_ownership_stale_candidate_rejected(tmp_path):
     root = tmp_path / "out"
     root.mkdir()
     cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
-    (root / "latest.json").write_bytes(b"newer")
+    newer = _publication_bytes(cutoff, "b" * 64, "newer")
+    (root / "latest.json").write_bytes(newer)
+    candidate = _publication_bytes(cutoff, "a" * 64, "candidate")
     with pytest.raises(PublishError, match="ownership mismatch"):
         publish_feed(
             output_root=root,
             cutoff=cutoff,
             run_id="run_1",
-            feed_bytes=b"f",
-            latest_bytes=b"l",
+            feed_bytes=candidate,
+            latest_bytes=candidate,
             existing_latest_sha256="0" * 64,
         )
 
@@ -402,6 +521,179 @@ def test_deadline_reserve_blocks_publication(tmp_path):
             monotonic_now=monotonic,
         )
     # Zero mutation: no dated/latest artifact after a deadline refusal.
+    assert not (out / "latest.json").exists()
+    assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
+
+
+def test_staging_crossing_admission_boundary_refuses_before_any_rename(tmp_path, monkeypatch):
+    root = tmp_path / "out"
+    root.mkdir()
+    feed = _publication_bytes(T0, "a" * 64, "late-stage")
+    clock = {"now": 284.0}
+    original_fsync_file = __import__(
+        "follow_the_money.feed.publish", fromlist=["_fsync_file"]
+    )._fsync_file
+
+    def crossing_fsync(path):
+        clock["now"] = 285.0
+        return original_fsync_file(path)
+
+    monkeypatch.setattr("follow_the_money.feed.publish._fsync_file", crossing_fsync)
+    with pytest.raises(PublishError, match="pre_commit_deadline_exceeded"):
+        publish_feed(
+            output_root=root,
+            cutoff=T0,
+            run_id="late-stage",
+            feed_bytes=feed,
+            latest_bytes=feed,
+            monotonic_now=lambda: clock["now"],
+            deadline_at=285.0,
+        )
+
+    assert not (root / "latest.json").exists()
+    assert not list((root / "daily").rglob("*.json")) if (root / "daily").exists() else True
+    assert not [p for p in root.rglob("*") if ".stage-" in p.name]
+
+
+def test_idempotent_recovery_crossing_admission_keeps_dated_only(tmp_path):
+    root = tmp_path / "out"
+    root.mkdir()
+    feed = _publication_bytes(T0, "a" * 64, "recovery")
+    date_dir = root / "daily" / "2026-08-11"
+    date_dir.mkdir(parents=True)
+    (date_dir / "recovery.json").write_bytes(feed)
+
+    with pytest.raises(PublishError, match="pre_commit_deadline_exceeded"):
+        publish_feed(
+            output_root=root,
+            cutoff=T0,
+            run_id="recovery",
+            feed_bytes=feed,
+            latest_bytes=feed,
+            monotonic_now=lambda: 285.0,
+            deadline_at=285.0,
+        )
+
+    assert (date_dir / "recovery.json").read_bytes() == feed
+    assert not (root / "latest.json").exists()
+    assert not [p for p in root.rglob("*") if ".stage-" in p.name]
+
+
+def test_admitted_commit_crossing_nominal_deadline_is_not_cancelled(tmp_path, monkeypatch):
+    root = tmp_path / "out"
+    root.mkdir()
+    feed = _publication_bytes(T0, "a" * 64, "overrun")
+    fsync_calls = {"root": 0}
+    original_fsync_dir = __import__(
+        "follow_the_money.feed.publish", fromlist=["_fsync_dir"]
+    )._fsync_dir
+
+    def overrun_after_admission(path):
+        if path == root:
+            fsync_calls["root"] += 1
+            if fsync_calls["root"] == 2:
+                clock["now"] = 301.0
+        return original_fsync_dir(path)
+
+    clock = {"now": 284.0}
+    monkeypatch.setattr("follow_the_money.feed.publish._fsync_dir", overrun_after_admission)
+    result = publish_feed(
+        output_root=root,
+        cutoff=T0,
+        run_id="overrun",
+        feed_bytes=feed,
+        latest_bytes=feed,
+        monotonic_now=lambda: clock["now"],
+        deadline_at=285.0,
+    )
+
+    assert result.latest_replaced
+    assert (root / "latest.json").read_bytes() == feed
+
+
+def test_recovery_post_rename_fsync_failure_reports_durability_unknown(tmp_path, monkeypatch):
+    root = tmp_path / "out"
+    root.mkdir()
+    feed = _publication_bytes(T0, "a" * 64, "recovery-fsync")
+    date_dir = root / "daily" / "2026-08-11"
+    date_dir.mkdir(parents=True)
+    (date_dir / "recovery-fsync.json").write_bytes(feed)
+    original_fsync_dir = __import__(
+        "follow_the_money.feed.publish", fromlist=["_fsync_dir"]
+    )._fsync_dir
+    root_calls = {"count": 0}
+
+    def fail_after_recovery_replace(path):
+        if path == root:
+            root_calls["count"] += 1
+            if root_calls["count"] == 2:
+                raise OSError("simulated recovery fsync failure")
+        return original_fsync_dir(path)
+
+    monkeypatch.setattr("follow_the_money.feed.publish._fsync_dir", fail_after_recovery_replace)
+    result = publish_feed(
+        output_root=root,
+        cutoff=T0,
+        run_id="recovery-fsync",
+        feed_bytes=feed,
+        latest_bytes=feed,
+    )
+
+    assert result.commit_durability_unknown
+    assert (root / "latest.json").read_bytes() == feed
+
+
+def test_malformed_current_latest_ownership_fails_closed(tmp_path):
+    root = tmp_path / "out"
+    root.mkdir()
+    (root / "latest.json").write_bytes(b'{"evidence_cutoff_at":"not-a-date"}')
+    feed = _publication_bytes(T0, "a" * 64, "candidate")
+
+    with pytest.raises(PublishError, match="current latest Feed ownership key invalid"):
+        publish_feed(
+            output_root=root,
+            cutoff=T0,
+            run_id="candidate",
+            feed_bytes=feed,
+            latest_bytes=feed,
+        )
+
+
+def test_production_dry_run_coordinates_and_reconciles_rate_state(tmp_path, monkeypatch):
+    from follow_the_money.feed import cli as feed_cli
+
+    out = tmp_path / "out"
+    acquire_calls: list[Path] = []
+    original_acquire = feed_cli.CollectionLock.acquire
+
+    def acquire(lock):
+        acquire_calls.append(out)
+        return original_acquire(lock)
+
+    monkeypatch.setattr(feed_cli.CollectionLock, "acquire", acquire)
+    monkeypatch.setattr(
+        feed_cli,
+        "_production_adapters",
+        lambda _cfg, _registry: {"federal_reserve": [_MinimalAdapter()]},
+    )
+    monkeypatch.setattr("follow_the_money.providers.adapters.build_registry", lambda: object())
+
+    result = run_feed(
+        output_root=str(out),
+        cutoff=T0,
+        dry_run=True,
+        enabled_provider_ids=["federal_reserve"],
+    )
+
+    assert result.feed is not None
+    assert acquire_calls == [out]
+    assert (out / "rate-registry.json").exists()
+    scope_files = [p for p in out.glob("scope-*.json")]
+    assert len(scope_files) == 1
+    state = json.loads(scope_files[0].read_bytes())
+    assert Decimal(state["tokens"]) < Decimal(state["capacity"])
+    assert state["last_dispatch_wall"] is not None
+    assert state["cooldown_until"] is not None
     assert not (out / "latest.json").exists()
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 

@@ -126,11 +126,13 @@ def run_feed(
         raise FeedExecutionError(f"cannot prepare output root {root}: {exc}") from exc
     latest_path = root / "latest.json"
 
-    # Production path acquires the exclusive output-root collection lock
-    # before planning (lock-before-cutoff) and holds it through publication.
+    # Coordinate every run that can use production adapters. Fixture-injected
+    # dry runs cannot send a real request and remain write-light and
+    # deterministic.
+    coordinates_run = not dry_run or providers_fn is None
     lock: CollectionLock | None = None
     rate: RateRegistry | None = None
-    if not dry_run:
+    if coordinates_run:
         try:
             lock = CollectionLock(
                 root,
@@ -167,7 +169,7 @@ def run_feed(
 
     # Durable rate-state registry is created only after planning succeeds:
     # an invalid latest makes zero writes beyond the lock file itself.
-    if not dry_run:
+    if coordinates_run:
         try:
             rate = RateRegistry(root)
             rate.ensure_registry(now=now_fn)
@@ -397,9 +399,6 @@ def run_feed(
         if dry_run:
             return FeedRunResult(status=status, exit_code=0, feed=feed, warnings=warnings)
 
-        if monotonic() - deadline_started > deadline_seconds:
-            raise FeedExecutionError("pre_commit_deadline_exceeded: no dated/latest publication")
-
         feed_bytes = json.dumps(feed, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         try:
             publication = publish_feed(
@@ -408,6 +407,8 @@ def run_feed(
                 run_id=feed["run_id"],
                 feed_bytes=feed_bytes,
                 latest_bytes=feed_bytes,
+                monotonic_now=monotonic,
+                deadline_at=deadline_at,
             )
         except (OSError, PublishError) as exc:
             raise FeedExecutionError(str(exc)) from exc

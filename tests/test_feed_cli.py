@@ -188,6 +188,7 @@ def test_dry_run_publishes_nothing(tmp_path):
     # but dry-run publishes no dated/latest artifact.
     assert not (out / "latest.json").exists()
     assert not list((out / "daily").glob("**/*.json")) if (out / "daily").exists() else True
+    assert not (out / "rate-registry.json").exists()
     assert result.feed is not None
     assert result.feed["pipeline"]["status"] in ("healthy", "degraded")
 

@@ -19,13 +19,14 @@ from __future__ import annotations
 
 import os
 import secrets
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from ..canonical import canonical_sha256
+from ..canonical import canonical_sha256, load_canonical_json
 
 
 class PublishError(ValueError):
@@ -65,16 +66,43 @@ def _stage_bytes(parent: Path, data: bytes) -> Path:
     if not parent.exists():
         raise PublishError(f"staging parent {parent} does not exist")
     tmp = parent / f".stage-{os.getpid()}-{secrets.token_hex(8)}"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
-        os.write(fd, data)
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            os.write(fd, data)
+        finally:
+            os.close(fd)
+        _fsync_file(tmp)
+    except BaseException:
+        if tmp.exists():
+            tmp.unlink()
+        raise
     if not _same_device(tmp, parent):
         tmp.unlink()
         raise PublishError("staging file on a different device than parent")
     return tmp
+
+
+def _ownership_key(data: bytes, *, where: str) -> tuple[datetime, str]:
+    """Read the validated Feed ownership tuple from canonical JSON bytes."""
+    try:
+        feed = load_canonical_json(data, where=where)
+        if not isinstance(feed, dict):
+            raise TypeError("Feed must be an object")
+        cutoff_value = feed.get("evidence_cutoff_at")
+        if not isinstance(cutoff_value, str):
+            raise TypeError("evidence_cutoff_at is missing")
+        cutoff = datetime.fromisoformat(cutoff_value)
+        if cutoff.tzinfo is None:
+            raise ValueError("evidence_cutoff_at must be timezone-aware")
+        digest = feed.get("content_digest")
+        if not isinstance(digest, str) or len(digest) != 64:
+            raise ValueError("content_digest must be a 64-character hexadecimal string")
+        if any(char not in "0123456789abcdef" for char in digest):
+            raise ValueError("content_digest must be lowercase hexadecimal")
+        return cutoff.astimezone(UTC), digest
+    except Exception as exc:
+        raise PublishError(f"{where} ownership key invalid: {exc}") from exc
 
 
 def atomic_no_replace_rename(src: Path, dst: Path) -> None:
@@ -95,6 +123,7 @@ def publish_feed(
     latest_bytes: bytes,
     existing_latest_sha256: str | None = None,
     monotonic_now: Callable[[], float] | None = None,
+    deadline_at: float | None = None,
 ) -> PublishResult:
     """Serialize dated (no-replace) then latest (atomic replace) publication.
 
@@ -107,11 +136,42 @@ def publish_feed(
     typed ``commit_durability_unknown``. A failure after latest replacement
     likewise retains both artifacts without making a false durability claim.
     """
+    candidate_key = _ownership_key(feed_bytes, where="candidate Feed")
+    latest_key = _ownership_key(latest_bytes, where="latest Feed")
+    if candidate_key != latest_key or feed_bytes != latest_bytes:
+        raise PublishError("candidate/latest Feed bytes have incompatible ownership")
+
     digest = canonical_sha256(feed_bytes)
+    monotonic = monotonic_now or time.monotonic
     asia = cutoff.astimezone(ZoneInfo("Asia/Shanghai"))
     date_dir = output_root / "daily" / asia.strftime("%Y-%m-%d")
     date_dir.mkdir(parents=True, exist_ok=True)
     dated = date_dir / f"{run_id}.json"
+
+    def latest_action(latest_path: Path) -> str:
+        """Return replace, retain, or same for the serialized latest owner."""
+        if existing_latest_sha256 is not None:
+            if not latest_path.exists():
+                raise PublishError(
+                    "latest.json absent but ownership was declared (ownership mismatch)"
+                )
+            if canonical_sha256(latest_path.read_bytes()) != existing_latest_sha256:
+                raise PublishError("latest.json changed during publication (ownership mismatch)")
+        if not latest_path.exists():
+            return "replace"
+        current_bytes = latest_path.read_bytes()
+        current_key = _ownership_key(current_bytes, where="current latest Feed")
+        if current_key > candidate_key:
+            return "retain"
+        if current_key == candidate_key:
+            if current_bytes != latest_bytes:
+                raise PublishError("incompatible equal ownership in latest.json")
+            return "same"
+        return "replace"
+
+    def admit_commit() -> None:
+        if deadline_at is not None and monotonic() >= deadline_at:
+            raise PublishError("pre_commit_deadline_exceeded: commit admission refused")
 
     if dated.exists():
         existing = dated.read_bytes()
@@ -121,34 +181,40 @@ def publish_feed(
             # re-publishing the dated artifact.
             latest_path = output_root / "latest.json"
             latest_replaced = False
-            if not latest_path.exists() or canonical_sha256(latest_path.read_bytes()) != digest:
-                if (
-                    latest_path.exists()
-                    and existing_latest_sha256 is not None
-                    and canonical_sha256(latest_path.read_bytes()) != existing_latest_sha256
-                ):
-                    raise PublishError("latest.json changed during recovery (ownership mismatch)")
-                latest_stage = _stage_bytes(output_root, latest_bytes)
+            durability_unknown = False
+            action = latest_action(latest_path)
+            if action == "replace":
+                recovery_stage = _stage_bytes(output_root, latest_bytes)
                 try:
-                    os.replace(latest_stage, latest_path)
+                    _fsync_dir(output_root)
+                    admit_commit()
+                    os.replace(recovery_stage, latest_path)
                     try:
                         _fsync_dir(output_root)
                     except OSError:
-                        pass  # durability unknown handled by caller contract
+                        durability_unknown = True
                 finally:
-                    if latest_stage.exists():
-                        latest_stage.unlink()
+                    if recovery_stage.exists():
+                        recovery_stage.unlink()
                 latest_replaced = True
-            return PublishResult(dated_path=dated, latest_replaced=latest_replaced, idempotent=True)
+            return PublishResult(
+                dated_path=dated,
+                latest_replaced=latest_replaced,
+                commit_durability_unknown=durability_unknown,
+                idempotent=True,
+            )
         raise PublishError(f"existing dated path {dated} has incompatible content")
 
     # Stage both artifacts as unpredictable siblings.
-    feed_stage = _stage_bytes(date_dir, feed_bytes)
-    latest_stage = _stage_bytes(output_root, latest_bytes)
+    feed_stage: Path | None = None
+    latest_stage: Path | None = None
     durability_unknown = False
     try:
+        feed_stage = _stage_bytes(date_dir, feed_bytes)
+        latest_stage = _stage_bytes(output_root, latest_bytes)
         _fsync_dir(date_dir)
         _fsync_dir(output_root)
+        admit_commit()
         # Dated: atomic no-replace. After the rename commits, a parent fsync
         # failure is durability-unknown, never a rollback.
         atomic_no_replace_rename(feed_stage, dated)
@@ -162,33 +228,27 @@ def publish_feed(
                 commit_durability_unknown=True,
             )
         # Latest: ownership validation then atomic replace.
-        if existing_latest_sha256 is not None:
-            latest_path = output_root / "latest.json"
-            if latest_path.exists():
-                current = canonical_sha256(latest_path.read_bytes())
-                if current != existing_latest_sha256:
-                    # Stale externally prepared candidate: do not replace.
-                    raise PublishError(
-                        "latest.json changed during publication (ownership mismatch)"
-                    )
-            else:
-                raise PublishError(
-                    "latest.json absent but ownership was declared (ownership mismatch)"
-                )
-        os.replace(latest_stage, output_root / "latest.json")
-        try:
-            _fsync_dir(output_root)
-        except OSError:
-            durability_unknown = True
+        action = latest_action(output_root / "latest.json")
+        latest_replaced = False
+        if action == "replace":
+            os.replace(latest_stage, output_root / "latest.json")
+            latest_replaced = True
+            try:
+                _fsync_dir(output_root)
+            except OSError:
+                durability_unknown = True
     except PublishError:
         for p in (feed_stage, latest_stage):
-            if p.exists():
+            if p is not None and p.exists():
                 p.unlink()
         raise
     finally:
         for p in (feed_stage, latest_stage):
-            if p.exists():
+            if p is not None and p.exists():
                 p.unlink()
     return PublishResult(
-        dated_path=dated, latest_replaced=True, commit_durability_unknown=durability_unknown
+        dated_path=dated,
+        latest_replaced=latest_replaced,
+        commit_durability_unknown=durability_unknown,
+        idempotent=action == "same",
     )
