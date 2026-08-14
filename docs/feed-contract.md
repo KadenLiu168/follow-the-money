@@ -7,22 +7,65 @@
 `positioning`, `filing`, and `calendar`. The envelope includes:
 
 - `schema_version` (supported major; unknown/incompatible fails closed),
-- `run_id` derived from the fixed cutoff plus the canonical digest,
+- `run_id` derived from the fixed cutoff plus the semantic `content_digest`,
 - the half-open window `[window.start, evidence_cutoff_at)` (strictly
   advancing),
-- collection timestamps and per-provider outcomes,
+- truthful lifecycle timestamps and per-provider outcomes (exactly one
+  outcome per planned provider, ascending `provider_id`, including failed
+  and skipped outcomes),
 - mandatory producer provenance: the closed path/size/file-hash application
   build descriptor, the canonical redacted resolved Feed-config snapshot and
   hash, the Feed-schema descriptor, and a sorted canonical redacted closed
   non-secret runtime-contract snapshot plus hash for every enabled provider,
   with optional Git metadata,
-- `content_digest` covering the canonical projection with `content_digest`
-  and `run_id` omitted (non-circular).
+- `content_digest` — the canonical digest of the explicit semantic
+  projection, not a whole-envelope checksum (see below).
+
+## Semantic identity
+
+`content_digest` is the SHA-256 of the canonical serialization of an
+explicit allowlisted semantic projection:
+
+- `schema_version`, `window`, and `evidence_cutoff_at`;
+- semantic provider outcomes, ordered by `provider_id`, with the
+  execution-audit `retrieved_at` removed;
+- `producer`, `feed_config`, `feed_schema`, and `provider_contracts`;
+- normalized items (stable `(source.knowledge_available_at, id)` total
+  order, including merged `source_lineage` in the same contributing order);
+- the pipeline semantic result: `status` and structured `coverage_gap`
+  (free-form warning text is execution reporting and never promotes into
+  identity).
+
+`collection_started_at`, `collection_completed_at`, `generated_at`, every
+provider `retrieved_at`, `git`, `content_digest`, `run_id`, and any
+undeclared execution metadata are excluded. `run_id` continues to derive
+from the fixed cutoff plus the digest (`{evidence_cutoff_at}::{digest[:32]}`),
+so equal semantic evidence with different truthful execution timing keeps
+one identity.
+
+Identity is therefore a *semantic* identity, not a whole-file checksum.
+Consumers reconstruct the projection, recompute both values, and fail
+closed on any mismatch. Validation additionally attempts the former
+whole-envelope projection for an already-published schema-v1 artifact so
+pre-change `latest.json` and dated artifacts remain readable; newly produced
+Feeds always use the semantic projection.
 
 ## Cutoff / time model
 
-- One injected wall-clock `evidence_cutoff_at` is captured after acquiring
-  the exclusive collection lock and before any provider request.
+- The collection clock is injectable. The pipeline captures
+  `collection_started_at` at the actual collection phase entry, then one
+  injected wall-clock `evidence_cutoff_at` after collection starts and
+  before any provider request, all after acquiring the exclusive collection
+  lock (lock wait time never freezes a stale planning window).
+- `retrieved_at` is recorded when a provider response actually returns and
+  before normalization; failed or skipped work with no observed response
+  keeps `retrieved_at: null` — never a synthetic timestamp.
+- `collection_completed_at` is captured only after every provider outcome
+  reached a terminal or fenced state; `generated_at` is captured at the
+  final envelope-generation boundary before identity fields are attached.
+- The pipeline never derives audit timestamps by offsetting the cutoff,
+  copying another lifecycle timestamp, or otherwise synthesizing an
+  unobserved event.
 - The evidence window is `[window.start, evidence_cutoff_at)` and MUST
   strictly advance. A captured cutoff equal to or earlier than the latest
   valid cutoff fails `non_advancing_cutoff` with zero provider calls and
@@ -31,9 +74,10 @@
   `window.start = cutoff - 72h`. A present but unreadable/partial/schema-
   invalid/digest-invalid latest fails `invalid_latest_integrity`.
 - A gap > 72h uses the bounded bootstrap start and records the uncovered
-  interval as a warning; an exact 72h gap starts at the prior cutoff.
+  interval as a structured `coverage_gap` (plus a warning); an exact 72h gap
+  starts at the prior cutoff.
 - Collection timestamps satisfy `collection_started_at <= evidence_cutoff_at
-  <= request/retrieved_at <= collection_completed_at <= generated_at`.
+  <= each non-null retrieved_at <= collection_completed_at <= generated_at`.
 - The scheduled workflow starts near 08:20 Asia/Shanghai (00:20 UTC);
   `Asia/Shanghai` is a display/schedule zone, all persisted instants are
   RFC 3339 UTC.
@@ -74,8 +118,17 @@ observations not source-available at cutoff are rejected.
   file/staging-directory `fsync`, platform atomic no-replace dated rename,
   same-directory atomic latest replace, and parent-directory `fsync` after
   each rename.
-- Same run ID + digest is an idempotent no-op; an existing path with
-  incompatible content fails.
+- Every dated/latest byte sequence passed to publication is the shared
+  `canonical_bytes()` serialization of its validated Feed object; no
+  module-local JSON serializer settings are used for Feed artifacts.
+- A rerun of an existing dated path is idempotent when the stored artifact
+  validates as a canonical Feed and its semantic `run_id`/`content_digest`
+  match the candidate at the same cutoff — even when excluded audit bytes
+  differ. The first immutable dated artifact is retained as the audit record
+  for that semantic run, and any `latest.json` repair or replacement uses
+  those retained bytes, preserving byte equality between the dated and
+  latest views. Invalid existing content or a same-path semantic mismatch
+  fails closed without overwriting.
 - Rename success followed by parent-`fsync` failure returns
   `commit_durability_unknown`; recovery re-applies the maximum
   `(evidence_cutoff_at, content_digest)` tuple rule.

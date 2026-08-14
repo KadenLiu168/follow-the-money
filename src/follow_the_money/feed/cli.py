@@ -4,13 +4,23 @@ The Feed command:
 
 1. loads explicit config and output root (never machine-global state),
 2. acquires the exclusive output-root collection lock (production path),
-3. captures one fixed ``evidence_cutoff_at`` before any provider request,
+3. captures the real collection-start instant and one fixed
+   ``evidence_cutoff_at`` after collection starts and before any provider
+   request,
 4. plans the strictly advancing window from ``feeds/latest.json``,
 5. runs enabled providers with the durable rate-state debit/reconcile
    lifecycle, bounded HTTP clients, global/per-host concurrency limits,
    and the 300-second pre-commit deadline + 15-second reserve,
-6. normalizes/dedupes, validates the Feed schema/digest/identity,
-7. publishes dated (no-replace) then latest (atomic replace) — or dry-runs.
+6. captures ``retrieved_at`` when each provider response actually returns,
+   ``collection_completed_at`` after all provider work is terminal/fenced,
+   and ``generated_at`` when the envelope is finalized — no offset or copied
+   audit timestamps,
+7. normalizes/dedupes (stable ``(knowledge_available_at, id)`` total order),
+   validates the Feed schema/semantic-digest identity, and serializes
+   published bytes with the shared ``canonical_bytes()``,
+8. publishes dated (no-replace) then latest (atomic replace) — or dry-runs;
+   an existing dated artifact with the same semantic ``run_id``/
+   ``content_digest`` is an idempotent no-op that retains the stored bytes.
 
 Exit contract: 0 healthy/degraded success; 1 generation/publication failure;
 2 usage/config/startup-capability errors.
@@ -30,7 +40,7 @@ from threading import Event, Lock
 from typing import Any
 
 from ..boundary import application_build_fingerprint, build_fingerprint_to_dict
-from ..canonical import canonical_digest, canonical_sha256, load_canonical_json
+from ..canonical import canonical_bytes, canonical_digest, canonical_sha256, load_canonical_json
 from ..config import load_config
 from ..config.load import ConfigError
 from ..config.model import AppConfig
@@ -41,7 +51,14 @@ from ..providers.manifest import ManifestError
 from ..providers.rate import RateRegistry, RateStateError, eligibility_delay, refill_tokens
 from ..schema import SchemaError
 from .dedupe import deduplicate_items, deterministic_item_order
-from .plan import FeedPlanError, ProviderOutcome, assess_pipeline, plan_window
+from .plan import (
+    FeedPlanError,
+    ProviderOutcome,
+    assess_pipeline,
+    fmt_utc,
+    ordered_outcomes,
+    plan_window,
+)
 from .publish import PublishError, publish_feed
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -110,6 +127,23 @@ def run_feed(
     """
     from ..providers.adapters import build_registry
 
+    if now_fn is None and cutoff is not None:
+        # Fixture mode: an explicit cutoff anchors the run's collection clock
+        # at that instant. The first lifecycle observation (collection start)
+        # reads the anchored instant and every later observation advances
+        # with real elapsed time, so rate eligibility and lifecycle ordering
+        # behave like production. Production never fixes the cutoff and
+        # observes the real clock directly at each lifecycle event.
+        fixed_cutoff = cutoff
+        anchor: dict[str, float | None] = {"elapsed": None}
+
+        def fixture_now() -> datetime:
+            if anchor["elapsed"] is None:
+                anchor["elapsed"] = time.monotonic()
+                return fixed_cutoff
+            return fixed_cutoff + timedelta(seconds=time.monotonic() - anchor["elapsed"])
+
+        now_fn = fixture_now
     now_fn = now_fn or (lambda: datetime.now(UTC))
     monotonic = monotonic_now or time.monotonic
     sleep = sleep_fn or time.sleep
@@ -146,8 +180,11 @@ def run_feed(
         except CollectionLockError as exc:
             raise FeedExecutionError(str(exc)) from exc
 
-    # Capture the fixed cutoff only after the cooperating run owns the lock.
-    # This prevents lock wait time from freezing a stale planning window.
+    # Capture the real collection start and the fixed cutoff only after the
+    # cooperating run owns the lock. This prevents lock wait time from
+    # freezing a stale planning window; the cutoff is observed after
+    # collection starts and before any provider request.
+    started_at = now_fn()
     cutoff = cutoff or now_fn()
     if cutoff.tzinfo is None:
         if lock is not None:
@@ -207,7 +244,11 @@ def run_feed(
             except (OSError, RateStateError) as exc:
                 raise FeedExecutionError(str(exc)) from exc
 
-        outcomes: dict[str, ProviderOutcome] = {}
+        # One outcome per planned provider, keyed by stable provider identity
+        # before any worker starts; completion order is never serialized.
+        outcomes: dict[str, ProviderOutcome] = {
+            pid: ProviderOutcome(provider_id=pid) for pid in enabled_ids
+        }
         items: list[dict[str, Any]] = []
 
         global_sem = _Semaphore(cfg.feed.global_concurrency)
@@ -330,14 +371,12 @@ def run_feed(
                     scope_lock.release()
 
         def execute_one(pid: str) -> None:
+            outcome = outcomes[pid]
             if monotonic() - deadline_started > deadline_seconds:
-                outcome = ProviderOutcome(provider_id=pid, state="skipped")
+                outcome.state = "skipped"
                 outcome.error = "pre_commit_deadline_exceeded"
                 outcome.execution_failure = True
-                outcomes[pid] = outcome
                 return
-            outcome = ProviderOutcome(provider_id=pid)
-            outcomes[pid] = outcome
             for adapter in adapters_by_id[pid]:
                 execute_adapter(pid, adapter, outcome)
                 if outcome.state == "failed":
@@ -378,6 +417,10 @@ def run_feed(
         if deadline_failure is not None:
             raise FeedExecutionError(deadline_failure.error or "pre_commit_deadline_exceeded")
 
+        # Collection completed: every provider outcome reached a terminal or
+        # fenced state and aggregation is complete.
+        completed_at = now_fn()
+
         # Dedup + deterministic order.
         deduped, _dropped = deduplicate_items(items)
         ordered = deterministic_item_order(deduped)
@@ -388,16 +431,16 @@ def run_feed(
         if plan.gap_warning:
             warnings.append(f"coverage gap: {plan.gap_warning[0]} to {plan.gap_warning[1]}")
 
-        collected = now_fn()
         feed = _build_feed(
             cfg=cfg,
             plan=plan,
-            cutoff=cutoff,
-            collected_at=collected,
+            started_at=started_at,
+            completed_at=completed_at,
             outcomes=outcomes,
             items=ordered,
             status=status,
             warnings=warnings,
+            now_fn=now_fn,
         )
 
         # Validate before publication.
@@ -419,7 +462,11 @@ def run_feed(
         if dry_run:
             return FeedRunResult(status=status, exit_code=0, feed=feed, warnings=warnings)
 
-        feed_bytes = json.dumps(feed, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        # The shared canonical serializer owns every published Feed byte; no
+        # module-local JSON settings are used for Feed artifacts.
+        feed_bytes = canonical_bytes(feed)
+        if load_canonical_json(feed_bytes, where="Feed candidate") != feed:
+            raise FeedExecutionError("Feed candidate is not its canonical byte representation")
         try:
             publication = publish_feed(
                 output_root=root,
@@ -556,7 +603,7 @@ def _run_adapter(
             request_started = True
             raw = request_fn()
             outcome.fetched += 1
-            outcome.retrieved_at = now_fn().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+            outcome.retrieved_at = fmt_utc(now_fn())
             if deadline_expired():
                 reject_late_result(state)
                 return
@@ -596,6 +643,8 @@ def _run_adapter(
                 rate.reconcile(state, now=now_fn)
             return
         except FetchError as exc:
+            if exc.response_observed:
+                outcome.retrieved_at = fmt_utc(now_fn())
             mark_incomplete(str(exc))
             if deadline_expired():
                 outcome.execution_failure = True
@@ -856,23 +905,45 @@ def _feed_config_snapshot(cfg: AppConfig) -> dict[str, Any]:
 
 
 def _build_feed(
-    *, cfg, plan, cutoff, collected_at, outcomes, items, status, warnings
+    *,
+    cfg,
+    plan,
+    started_at,
+    completed_at,
+    outcomes,
+    items,
+    status,
+    warnings,
+    now_fn: Callable[[], datetime],
 ) -> dict[str, Any]:
+    """Assemble the Feed envelope from observed lifecycle instants.
+
+    ``started_at`` is the real collection-start observation, ``completed_at``
+    is captured after all provider work reached a terminal/fenced state, and
+    ``generated_at`` is captured here at the final envelope-generation
+    boundary before identity fields are attached. No offset or copied
+    timestamps are synthesized.
+    """
     build = application_build_fingerprint(REPO_ROOT, "0.1.0")
-    started_at = cutoff - timedelta(seconds=30)  # collection began before cutoff capture
-    completed = max(collected_at, cutoff)
     feed_config = _feed_config_snapshot(cfg)
     feed_schema = _schema_descriptor("feed.schema.json")
     provider_contracts = _provider_contract_snapshots(cfg)
+    generated_at = now_fn()
+    coverage_gap = None
+    if plan.gap_warning:
+        coverage_gap = {
+            "uncovered_start": plan.gap_warning[0],
+            "uncovered_end": plan.gap_warning[1],
+        }
     feed = {
         "schema_version": 1,
         "run_id": "",  # recomputed below
         "window": {"start": plan.window_start, "end": plan.evidence_cutoff_at},
-        "collection_started_at": started_at.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+        "collection_started_at": fmt_utc(started_at),
         "evidence_cutoff_at": plan.evidence_cutoff_at,
-        "collection_completed_at": completed.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
-        "generated_at": completed.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
-        "provider_outcomes": [o.to_dict() for o in outcomes.values()],
+        "collection_completed_at": fmt_utc(completed_at),
+        "generated_at": fmt_utc(generated_at),
+        "provider_outcomes": [o.to_dict() for o in ordered_outcomes(outcomes)],
         "producer": build_fingerprint_to_dict(build),
         "feed_config": feed_config,
         "feed_schema": feed_schema,
@@ -880,7 +951,11 @@ def _build_feed(
         "git": None,
         "content_digest": "0" * 64,
         "items": items,
-        "pipeline": {"status": status, "warnings": warnings, "coverage_gap": None},
+        "pipeline": {
+            "status": status,
+            "warnings": warnings,
+            "coverage_gap": coverage_gap,
+        },
     }
     digest, run_id = recompute_feed_identity(feed)
     feed["content_digest"] = digest

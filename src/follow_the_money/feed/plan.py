@@ -16,13 +16,16 @@ Design sections 2/4:
   accepted items or returns a manifest-permitted empty result. A deficient
   mandatory group marks the non-empty Feed ``degraded``; zero accepted items
   is failure.
+- Outcomes aggregate by stable ``provider_id`` key and serialize exactly one
+  entry per planned provider in ascending ``provider_id`` order, so worker
+  completion order never changes the Feed.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -46,7 +49,7 @@ def parse_utc(value: str) -> datetime:
 
 
 def fmt_utc(dt: datetime) -> str:
-    return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
 def plan_window(
@@ -136,6 +139,15 @@ class ProviderOutcome:
     def contributes_to_coverage(self, *, empty_valid_for_window: bool) -> bool:
         """Return whether this outcome satisfies one mandatory member slot."""
         return self.state == "healthy" or (self.state == "empty" and empty_valid_for_window)
+
+
+def ordered_outcomes(outcomes: Mapping[str, ProviderOutcome]) -> list[ProviderOutcome]:
+    """One outcome per planned provider, ascending ``provider_id``.
+
+    Workers only ever update their stable ``provider_id``-keyed outcome; this
+    serialization makes provider completion order irrelevant to the Feed.
+    """
+    return [outcomes[pid] for pid in sorted(outcomes)]
 
 
 def assess_pipeline(

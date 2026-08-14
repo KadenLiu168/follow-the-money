@@ -352,8 +352,10 @@ def test_each_core_adapter_emits_schema_valid_items():
             "items": items,
             "pipeline": {"status": "healthy", "warnings": []},
         }
+        from follow_the_money.feed.dedupe import deterministic_item_order
         from follow_the_money.feed.validate import recompute_feed_identity
 
+        feed["items"] = deterministic_item_order(items)
         digest, run_id = recompute_feed_identity(feed)
         feed["content_digest"] = digest
         feed["run_id"] = run_id

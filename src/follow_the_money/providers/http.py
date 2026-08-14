@@ -38,6 +38,9 @@ class FetchError(ValueError):
         self.status_code = status_code
         self.retry_after_seconds = retry_after_seconds
         self.retryable = retryable
+        # A concrete HTTP status proves the request returned a response even
+        # when the provider rejects that response as an error.
+        self.response_observed = status_code is not None
 
 
 @dataclass(frozen=True)
@@ -84,25 +87,31 @@ def bounded_fetch(
             f"fetch failed for {urlsplit(url).hostname}: {exc.__class__.__name__}",
             retryable=retryable,
         ) from exc
-    final_url = str(getattr(resp, "url", url) or url)
-    final_rules = redirect_rules if final_url != url else fetch_rules
-    _validate_fetch_url(final_url, final_rules, where="redirect_url")
-    status = int(resp.status_code)
-    if status < 200 or status >= 300:
-        retry_after = _parse_retry_after(resp.headers.get("retry-after"))
-        retryable = status in (408, 409, 429) or status >= 500
-        detail = f"HTTP {status} from {urlsplit(final_url).hostname}"
-        if retry_after is not None:
-            detail += f" (Retry-After: {retry_after}s)"
-        raise FetchError(
-            detail,
-            status_code=status,
-            retry_after_seconds=retry_after,
-            retryable=retryable,
-        )
-    body = resp.content
-    if len(body) > max_bytes:
-        raise FetchError(f"response exceeds {max_bytes} bytes")
+    try:
+        final_url = str(getattr(resp, "url", url) or url)
+        final_rules = redirect_rules if final_url != url else fetch_rules
+        _validate_fetch_url(final_url, final_rules, where="redirect_url")
+        status = int(resp.status_code)
+        if status < 200 or status >= 300:
+            retry_after = _parse_retry_after(resp.headers.get("retry-after"))
+            retryable = status in (408, 409, 429) or status >= 500
+            detail = f"HTTP {status} from {urlsplit(final_url).hostname}"
+            if retry_after is not None:
+                detail += f" (Retry-After: {retry_after}s)"
+            raise FetchError(
+                detail,
+                status_code=status,
+                retry_after_seconds=retry_after,
+                retryable=retryable,
+            )
+        body = resp.content
+        if len(body) > max_bytes:
+            raise FetchError(f"response exceeds {max_bytes} bytes")
+    except FetchError as exc:
+        # From this point onward ``client.get`` returned a concrete response;
+        # preserve that lifecycle fact even if admission later fails.
+        exc.response_observed = True
+        raise
     return FetchResult(
         url=str(resp.url),
         status=status,

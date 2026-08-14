@@ -6,10 +6,17 @@ from design sections 1/4:
 - Supported schema major (fail closed on unknown versions).
 - Strictly advancing half-open window ``window.start < evidence_cutoff_at``.
 - Wall-clock order ``collection_started_at <= evidence_cutoff_at <=
-  request/retrieved_at <= collection_completed_at <= generated_at``.
-- Canonical digest/run-ID recomputation: the digest covers the canonical
-  projection with ``content_digest`` and ``run_id`` omitted; ``run_id``
-  derives from the fixed cutoff plus the digest.
+  non-null request/retrieved_at <= collection_completed_at <= generated_at``;
+  work with no observed response keeps null ``retrieved_at``.
+- Stable serialization: provider outcomes in ascending ``provider_id``
+  (exactly one per provider) and items in the ``(knowledge_available_at,
+  id)`` total order.
+- Canonical digest/run-ID recomputation from an explicit allowlisted
+  semantic projection (``content_digest``/``run_id`` are derived, never
+  hashed); ``run_id`` derives from the fixed cutoff plus the digest.
+- Legacy read compatibility: an already-published schema-v1 artifact whose
+  identity validates only under the former whole-envelope projection remains
+  consumable; producers never write that legacy form after this change.
 - Raw numeric tokens bounded to 64 bytes / 24 significant digits / exponent
   in [-12, 12]; canonical persisted values are plain decimals with no
   exponent, no negative zero, at most 64 bytes/24 digits, magnitude <= 1e18.
@@ -25,11 +32,29 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
-from ..canonical import canonical_digest, canonical_text
+from ..canonical import canonical_digest
 from ..schema import SchemaError, validate_against
 
 FEED_SCHEMA = "feed.schema.json"
 SUPPORTED_FEED_MAJOR = 1
+
+#: Top-level semantic projection members. Execution-audit metadata
+#: (``collection_started_at``, ``collection_completed_at``, ``generated_at``,
+#: provider ``retrieved_at``, ``git``, ``content_digest``, ``run_id``) and any
+#: undeclared execution metadata stay outside the projection. A new semantic
+#: field must be deliberately added here and to the identity tests.
+SEMANTIC_PROJECTION_MEMBERS = (
+    "schema_version",
+    "window",
+    "evidence_cutoff_at",
+    "provider_outcomes",
+    "producer",
+    "feed_config",
+    "feed_schema",
+    "provider_contracts",
+    "items",
+    "pipeline",
+)
 
 _RAW_NUMERIC = re.compile(r"^[+-]?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$")
 _CANONICAL_NUMERIC = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
@@ -132,6 +157,26 @@ def validate_feed(feed: Mapping[str, Any]) -> None:
             if not (cutoff <= rts <= completed):
                 raise SchemaError("retrieved_at outside [cutoff, completed]")
 
+    # Stable serialization: new semantic-identity Feeds contain exactly one
+    # provider outcome per provider in ascending provider_id order. The former
+    # concurrent writer could persist valid legacy-v1 artifacts in worker
+    # completion order, so only an exact whole-envelope legacy identity keeps
+    # its narrow read-compatibility exemption.
+    if not _has_exact_legacy_identity(feed):
+        previous_id: str | None = None
+        for outcome in feed.get("provider_outcomes", []):
+            pid = outcome.get("provider_id")
+            if previous_id is not None and pid <= previous_id:
+                raise SchemaError("provider_outcomes not in ascending provider_id order")
+            previous_id = pid
+    previous_item_key: tuple[str, str] | None = None
+    for item in feed.get("items", []):
+        source = item.get("source", {})
+        item_key = (source.get("knowledge_available_at", ""), item["id"])
+        if previous_item_key is not None and item_key < previous_item_key:
+            raise SchemaError("items not in (source.knowledge_available_at, id) total order")
+        previous_item_key = item_key
+
     # Numeric guards across all payloads.
     _validate_numerics(feed.get("items", []))
 
@@ -172,14 +217,43 @@ def _validate_calendar_horizon(feed: Mapping[str, Any]) -> None:
         raise SchemaError("calendar_horizon_end before evidence_cutoff_at")
 
 
-def canonical_feed_projection(feed: Mapping[str, Any]) -> str:
-    """Canonical projection omitting ``content_digest`` and ``run_id``."""
-    proj = {k: v for k, v in feed.items() if k not in ("content_digest", "run_id")}
-    return canonical_text(proj)
+def semantic_feed_projection(feed: Mapping[str, Any]) -> dict[str, Any]:
+    """The explicit allowlisted semantic projection of a Feed.
+
+    Contains ``schema_version``, ``window``, ``evidence_cutoff_at``, ordered
+    semantic provider outcomes (every serialized outcome field except
+    ``retrieved_at``), ``producer``, ``feed_config``, ``feed_schema``,
+    ``provider_contracts``, normalized ``items``, and the pipeline semantic
+    result (``status`` plus structured ``coverage_gap``; free-form warnings
+    are execution reporting and never promote into identity). Execution-audit
+    timestamps, ``git``, ``content_digest``, ``run_id``, and undeclared
+    execution metadata are excluded.
+    """
+    projection: dict[str, Any] = {}
+    for member in SEMANTIC_PROJECTION_MEMBERS:
+        projection[member] = feed[member]
+    projection["provider_outcomes"] = [
+        {k: v for k, v in outcome.items() if k != "retrieved_at"}
+        for outcome in feed["provider_outcomes"]
+    ]
+    pipeline = feed["pipeline"]
+    semantic_pipeline: dict[str, Any] = {"status": pipeline["status"]}
+    if "coverage_gap" in pipeline:
+        semantic_pipeline["coverage_gap"] = pipeline["coverage_gap"]
+    projection["pipeline"] = semantic_pipeline
+    return projection
 
 
 def recompute_feed_identity(feed: Mapping[str, Any]) -> tuple[str, str]:
-    """Return ``(content_digest, run_id)`` recomputed from the projection."""
+    """Return ``(content_digest, run_id)`` recomputed from the semantic
+    projection. ``run_id`` derives from the fixed cutoff plus the digest."""
+    digest = canonical_digest(semantic_feed_projection(feed))
+    cutoff = feed["evidence_cutoff_at"]
+    run_id = f"{cutoff}::{digest[:32]}"
+    return digest, run_id
+
+
+def _recompute_legacy_identity(feed: Mapping[str, Any]) -> tuple[str, str]:
     digest = canonical_digest(
         {k: v for k, v in feed.items() if k not in ("content_digest", "run_id")}
     )
@@ -188,8 +262,20 @@ def recompute_feed_identity(feed: Mapping[str, Any]) -> tuple[str, str]:
     return digest, run_id
 
 
+def _has_exact_legacy_identity(feed: Mapping[str, Any]) -> bool:
+    if feed.get("schema_version") != SUPPORTED_FEED_MAJOR:
+        return False
+    digest, run_id = _recompute_legacy_identity(feed)
+    return feed.get("content_digest") == digest and feed.get("run_id") == run_id
+
+
 def assert_feed_identity(feed: Mapping[str, Any]) -> None:
+    """Fail closed unless the embedded identity matches the semantic
+    projection exactly, or — for an already-published supported-major
+    artifact — the former whole-envelope projection exactly."""
     digest, run_id = recompute_feed_identity(feed)
+    if _has_exact_legacy_identity(feed):
+        return
     if feed.get("content_digest") != digest:
         raise SchemaError("content_digest does not match canonical projection")
     if feed.get("run_id") != run_id:

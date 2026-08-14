@@ -207,7 +207,7 @@ def test_all_eight_payloads_pass_schema():
             },
         },
     ]
-    feed["items"] = items
+    feed["items"] = sorted(items, key=lambda i: (i["source"]["knowledge_available_at"], i["id"]))
     validate_feed(feed)
 
 

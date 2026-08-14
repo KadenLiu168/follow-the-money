@@ -2,6 +2,10 @@
 
 Design section 5:
 
+- One stable item total order, ``(source.knowledge_available_at, id)``,
+  governs grouping, comparison, survivor selection, dropped-ID production,
+  ``source_lineage`` merging, and final serialization, so input
+  permutations cannot change the semantic Feed.
 - Exact normalized-URL duplicates across sources retain one deterministic
   survivor plus every source-lineage record; they are not independent
   corroboration when they share an original publisher/wire story.
@@ -79,6 +83,18 @@ def stable_item_id(provider_id: str, record_identity: str) -> str:
     return f"item_{digest[:32]}"
 
 
+def item_total_order_key(item: Mapping[str, Any]) -> tuple[str, str]:
+    """The one stable Feed-item total order: ``(knowledge_available_at, id)``.
+
+    Every order-sensitive Feed step (URL grouping, same-source near-dedup
+    comparison, survivor selection, dropped-ID production, ``source_lineage``
+    merging, and final serialization) uses this key so input permutations
+    cannot change the semantic result.
+    """
+    source = item.get("source", {})
+    return (source.get("knowledge_available_at", ""), item["id"])
+
+
 def deduplicate_items(
     items: Sequence[Mapping[str, Any]],
     *,
@@ -91,12 +107,18 @@ def deduplicate_items(
       keeping the earliest knowledge item as survivor.
     - Independent cross-source reports are retained as separate evidence.
     Returns (items, dropped_ids).
+
+    The input is normalized to the stable ``(knowledge_available_at, id)``
+    total order before grouping, comparison, survivor selection, dropped-ID
+    production, and lineage merging, so input permutations cannot change the
+    result.
     """
     dropped: list[str] = []
     by_url: dict[str, list[Mapping[str, Any]]] = {}
     by_source: dict[str, list[Mapping[str, Any]]] = {}
 
-    for item in items:
+    ordered = sorted(items, key=item_total_order_key)
+    for item in ordered:
         url = item.get("source", {}).get("url", "")
         by_url.setdefault(url, []).append(item)
         provider = item.get("provider_id", "")
@@ -120,7 +142,7 @@ def deduplicate_items(
 
     final: list[Mapping[str, Any]] = []
     for provider, group in sorted(survivors_by_source.items()):
-        ordered = sorted(group, key=lambda i: i["source"].get("knowledge_available_at", ""))
+        ordered = sorted(group, key=item_total_order_key)
         kept: list[Mapping[str, Any]] = []
         for item in ordered:
             title = item.get("payload", {}).get("title", "")
@@ -140,8 +162,12 @@ def deduplicate_items(
 
 
 def _merge_lineage(group: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
-    """Merge a URL-duplicate group into one survivor with full lineage."""
-    ordered = sorted(group, key=lambda i: i["source"].get("knowledge_available_at", ""))
+    """Merge a URL-duplicate group into one survivor with full lineage.
+
+    The contributing-item order is the stable total order
+    ``(knowledge_available_at, id)``; the earliest item survives.
+    """
+    ordered = sorted(group, key=item_total_order_key)
     survivor = dict(ordered[0])
     lineage = []
     for item in ordered:
@@ -189,8 +215,5 @@ def deduplicate_observations(
 
 def deterministic_item_order(items: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     """Deterministic ordering independent of input permutation: by knowledge
-    time, then stable ID."""
-    return sorted(
-        items,
-        key=lambda i: (i["source"].get("knowledge_available_at", ""), i["id"]),
-    )
+    time, then stable ID (the shared Feed item total order)."""
+    return sorted(items, key=item_total_order_key)

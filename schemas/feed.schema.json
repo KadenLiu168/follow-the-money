@@ -23,7 +23,12 @@
   ],
   "properties": {
     "schema_version": { "const": 1 },
-    "run_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "run_id": {
+      "description": "Semantic run identifier: '{evidence_cutoff_at}::{first 32 hex of content_digest}'. Identifies the semantic evidence, not a specific execution.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
     "window": {
       "type": "object",
       "additionalProperties": false,
@@ -33,11 +38,28 @@
         "end": { "type": "string", "format": "date-time" }
       }
     },
-    "collection_started_at": { "type": "string", "format": "date-time" },
-    "evidence_cutoff_at": { "type": "string", "format": "date-time" },
-    "collection_completed_at": { "type": "string", "format": "date-time" },
-    "generated_at": { "type": "string", "format": "date-time" },
+    "collection_started_at": {
+      "description": "Execution audit metadata: observed at the actual collection phase entry. Excluded from content_digest.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "evidence_cutoff_at": {
+      "description": "The single fixed cutoff captured after collection starts and before any provider request; part of the semantic projection and of run_id.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "collection_completed_at": {
+      "description": "Execution audit metadata: observed after all provider work reached a terminal or fenced state. Excluded from content_digest.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "generated_at": {
+      "description": "Execution audit metadata: observed when the envelope is finalized, before identity fields are attached. Excluded from content_digest.",
+      "type": "string",
+      "format": "date-time"
+    },
     "provider_outcomes": {
+      "description": "Exactly one outcome per planned provider, in ascending provider_id order (healthy, empty, partial, failed, or skipped).",
       "type": "array",
       "items": { "$ref": "#/$defs/provider_outcome" }
     },
@@ -82,7 +104,11 @@
         "dirty": { "type": "boolean" }
       }
     },
-    "content_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "content_digest": {
+      "description": "Semantic identity digest: canonical SHA-256 of the allowlisted semantic projection (schema_version, window, evidence_cutoff_at, semantic provider outcomes without retrieved_at, producer, feed_config, feed_schema, provider_contracts, items, pipeline status/coverage_gap). Execution audit metadata is excluded; this is not a whole-file checksum.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "calendar_horizon_end": { "type": ["string", "null"], "format": "date-time" },
     "items": { "type": "array", "items": { "$ref": "#/$defs/feed_item" } },
     "pipeline": {
@@ -91,8 +117,13 @@
       "required": ["status", "warnings"],
       "properties": {
         "status": { "enum": ["healthy", "degraded", "failure"] },
-        "warnings": { "type": "array", "items": { "type": "string" } },
+        "warnings": {
+          "description": "Free-form execution reporting; excluded from content_digest.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "coverage_gap": {
+          "description": "Structured semantic coverage gap; part of the semantic projection when present.",
           "type": ["object", "null"],
           "additionalProperties": false,
           "required": ["uncovered_start", "uncovered_end"],
@@ -113,7 +144,10 @@
         "empty", "partial", "failed", "skipped", "accepted", "rejected"
       ],
       "properties": {
-        "provider_id": { "type": "string" },
+        "provider_id": {
+          "description": "Stable provider identity; outcomes serialize in ascending provider_id order.",
+          "type": "string"
+        },
         "state": { "enum": ["healthy", "empty", "partial", "failed", "skipped"] },
         "attempted": { "type": "integer", "minimum": 0 },
         "fetched": { "type": "integer", "minimum": 0 },
@@ -125,7 +159,11 @@
         "accepted": { "type": "integer", "minimum": 0 },
         "rejected": { "type": "integer", "minimum": 0 },
         "error": { "type": ["string", "null"] },
-        "retrieved_at": { "type": ["string", "null"], "format": "date-time" }
+        "retrieved_at": {
+          "description": "Execution audit metadata: observed instant when the provider response returned; null for failed/skipped work with no observed response. Excluded from content_digest.",
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
       }
     },
     "application_build": {
@@ -183,7 +221,23 @@
             "syndication_origin": { "type": ["string", "null"] }
           }
         },
-        "payload": { "$ref": "#/$defs/payloads" }
+        "payload": { "$ref": "#/$defs/payloads" },
+        "source_lineage": {
+          "description": "Collapsed duplicate records for one survivor, ordered by the stable (knowledge_available_at, id) total order; absent on independent items.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "provider_id", "source_id"],
+            "properties": {
+              "id": { "type": "string" },
+              "provider_id": { "type": "string" },
+              "source_id": { "type": "string" },
+              "original_publisher": { "type": ["string", "null"] },
+              "syndication_origin": { "type": ["string", "null"] }
+            }
+          }
+        }
       }
     },
     "payloads": {
