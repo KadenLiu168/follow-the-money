@@ -30,5 +30,10 @@ config/local.yaml
 # WorkBuddy local project data (not a temporary cache, but never committed)
 .workbuddy/
 
+# Local agent tooling
+.claude/
+.codex/
+.agents/
+
 # OS
 .DS_Store
