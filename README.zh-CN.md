@@ -35,6 +35,9 @@ feeds/           发布产物（daily/<date>/<run_id>.json、latest.json）
 tests/           pytest 测试套件（无需凭据）
 docs/            架构、契约、runbook
 .github/workflows/ 托管 CI 与定时 Feed 工作流模板
+
+配置 authority 与单一 resolved Provider contract 见
+[`docs/configuration.md`](docs/configuration.md)。
 ```
 
 ## 快速开始

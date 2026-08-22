@@ -28,7 +28,7 @@ from typing import Any
 from urllib.parse import quote, urlencode, urljoin
 from zoneinfo import ZoneInfo
 
-from ..config.model import FetchRule, SourceLinkRule
+from ..config.model import ProviderEntry
 from .base import Provider, ProviderRegistry
 from .http import (
     FetchError,
@@ -37,7 +37,7 @@ from .http import (
     stable_item_id,
     validate_provider_url,
 )
-from .manifest import load_manifest
+from .manifest import load_manifest, manifest_to_provider_entry
 from .urls import UrlValidationError
 
 
@@ -46,43 +46,25 @@ class BaseAdapter(Provider):
 
     provider_id: str
 
-    def __init__(self, manifest: Mapping[str, Any] | None = None) -> None:
-        self._manifest = manifest or load_manifest(self.provider_id)
-        self._rules = tuple(
-            SourceLinkRule(
-                host=r["host"].lower(),
-                allow_subdomains=bool(r.get("allow_subdomains", False)),
-                allowed_ports=tuple(int(p) for p in r.get("allowed_ports", [443])),
-                allowed_query_params=tuple(r.get("allowed_query_params", [])),
-                query_value_grammar=str(r.get("query_value_grammar", "any")),
-                drop_query_params=tuple(r.get("drop_query_params", [])),
-            )
-            for r in self._manifest.get("source_link_hosts", [])
-        )
-        self._fetch_rules = tuple(
-            FetchRule(
-                host=str(r["host"]).lower(),
-                allow_subdomains=bool(r.get("allow_subdomains", False)),
-                allowed_ports=tuple(int(p) for p in r.get("allowed_ports", [443])),
-            )
-            for r in self._manifest.get("fetch_hosts", [])
-        )
-        self._redirect_rules = tuple(
-            FetchRule(
-                host=str(r["host"]).lower(),
-                allow_subdomains=bool(r.get("allow_subdomains", False)),
-                allowed_ports=tuple(int(p) for p in r.get("allowed_ports", [443])),
-            )
-            for r in self._manifest.get("redirect_hosts", [])
-        )
+    def __init__(self, manifest: Mapping[str, Any] | ProviderEntry | None = None) -> None:
+        if isinstance(manifest, ProviderEntry):
+            self._contract = manifest
+            self._manifest = None
+        else:
+            raw_manifest = manifest or load_manifest(self.provider_id)
+            self._manifest = raw_manifest
+            self._contract = manifest_to_provider_entry(raw_manifest)
+        self._rules = self._contract.source_link_hosts
+        self._fetch_rules = self._contract.fetch_hosts
+        self._redirect_rules = self._contract.redirect_hosts
 
     def _fetch(self, client: Any, url: str, *, headers: Mapping[str, str] | None = None) -> Any:
         return bounded_fetch(
             client,
             url,
             headers=headers,
-            timeout=float(self._manifest.get("timeouts", {}).get("attempt_seconds", 20)),
-            max_bytes=int(self._manifest.get("response_limit_bytes", 10 * 1024 * 1024)),
+            timeout=float(self._contract.attempt_timeout_seconds),
+            max_bytes=int(self._contract.response_limit_bytes),
             fetch_rules=self._fetch_rules,
             redirect_rules=self._redirect_rules,
         )
@@ -127,7 +109,7 @@ class BaseAdapter(Provider):
         """Shared RSS/Atom normalize path for policy/news adapters."""
         parsed = safe_parse_rss(
             raw.body_bytes,
-            charset=str(self._manifest.get("charset", {}).get("allowed", ["utf-8"])[0]),
+            charset=self._contract.allowed_charset,
         )
         items: list[dict[str, Any]] = []
         for entry in parsed.entries[:max_items]:
@@ -170,7 +152,7 @@ class BaseAdapter(Provider):
     def _json_body(self, raw: Any) -> Any:
         """Return the decoded JSON body or raise a typed fetch error."""
         body = _response_bytes(raw)
-        charset = str(self._manifest.get("charset", {}).get("allowed", ["utf-8"])[0])
+        charset = self._contract.allowed_charset
         try:
             return json.loads(body.decode(charset))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -184,7 +166,7 @@ class BaseAdapter(Provider):
             data = None
         if isinstance(data, dict) and isinstance(data.get(key), list):
             return [entry for entry in data[key] if isinstance(entry, dict)]
-        charset = str(self._manifest.get("charset", {}).get("allowed", ["utf-8"])[0])
+        charset = self._contract.allowed_charset
         return _html_index_entries(raw, base_url=getattr(raw, "url", ""), charset=charset)
 
 
@@ -233,7 +215,9 @@ class SecEdgarAdapter(BaseAdapter):
     provider_id: str = "sec_edgar"
 
     def __init__(
-        self, manifest: Mapping[str, Any] | None = None, watched_ciks: Sequence[str] = ()
+        self,
+        manifest: Mapping[str, Any] | ProviderEntry | None = None,
+        watched_ciks: Sequence[str] = (),
     ) -> None:
         super().__init__(manifest)
         self._watched_ciks = tuple(str(c) for c in watched_ciks)
@@ -244,7 +228,7 @@ class SecEdgarAdapter(BaseAdapter):
         return self._fetch(
             client,
             url,
-            headers={"User-Agent": self._manifest.get("user_agent", "")},
+            headers={"User-Agent": self._contract.user_agent},
         )
 
     def normalize(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
@@ -620,7 +604,7 @@ class YahooMarketAdapter(BaseAdapter):
 
     def __init__(
         self,
-        manifest: Mapping[str, Any] | None = None,
+        manifest: Mapping[str, Any] | ProviderEntry | None = None,
         instrument: str = "^GSPC",
         role_id: str = "sp500",
         unit: str | None = None,
@@ -628,7 +612,7 @@ class YahooMarketAdapter(BaseAdapter):
         super().__init__(manifest)
         self._instrument = instrument
         self._role_id = role_id
-        self._unit = unit or self._manifest.get("units", {}).get("index", "index")
+        self._unit = unit or self._contract.units.get("index", "index")
 
     def fetch(self, window: Mapping[str, str], client: Any) -> Any:
         cutoff = _parse_timestamp(window["end"])
@@ -653,8 +637,7 @@ class YahooMarketAdapter(BaseAdapter):
         indicators = result.get("indicators") or {}
         quotes = (indicators.get("quote") or [None])[0] or {}
         closes = quotes.get("close") or []
-        adjustment = self._manifest.get("adjustment_policy", {})
-        if adjustment.get("splits_dividends_adjusted"):
+        if self._contract.adjustment_policy.get("splits_dividends_adjusted"):
             closes = ((indicators.get("adjclose") or [None])[0] or {}).get("adjclose") or closes
         if not timestamps or not closes:
             return []
@@ -676,7 +659,7 @@ class YahooMarketAdapter(BaseAdapter):
                 }
             )
         observations = _chronological_dedup(observations)
-        max_observations = int(self._manifest.get("limits", {}).get("max_observations", 260))
+        max_observations = self._contract.max_observations or 260
         observations = observations[-max_observations:]
         if not observations:
             return []
@@ -838,22 +821,43 @@ def _chronological_dedup(observations: Sequence[Mapping[str, Any]]) -> list[Mapp
     return cleaned
 
 
-def build_registry(manifest: Mapping[str, Any] | None = None) -> ProviderRegistry:
-    """Build the explicit provider registry from checked-in manifests.
+def build_registry(
+    providers: Mapping[str, ProviderEntry] | Sequence[ProviderEntry] | None = None,
+) -> ProviderRegistry:
+    """Build the explicit provider registry from resolved Provider entries.
 
     Returns every adapter required by the six mandatory v1 coverage rows,
     plus the verified-optional CFTC/CP and disabled-by-default extras. The
     registry itself never enables anything; enablement is configuration.
     """
+    resolved_runtime = providers is not None
+    if providers is None:
+        from .manifest import load_all_manifests
+
+        providers = {
+            pid: manifest_to_provider_entry(manifest)
+            for pid, manifest in load_all_manifests().items()
+            if pid != "akshare"
+        }
+    elif not isinstance(providers, Mapping):
+        providers = {provider.id: provider for provider in providers}
+    if resolved_runtime:
+        providers = {pid: provider for pid, provider in providers.items() if provider.enabled}
+
+    adapter_types: dict[str, type[Any]] = {
+        "federal_reserve": FedAdapter,
+        "bls": BlsAdapter,
+        "sec_edgar": SecEdgarAdapter,
+        "cftc": CftcAdapter,
+        "pboc": PbocAdapter,
+        "nbs": NbsAdapter,
+        "sse": SseAdapter,
+        "szse": SzseAdapter,
+        "yahoo_market": YahooMarketAdapter,
+    }
     adapters = {
-        "federal_reserve": FedAdapter(manifest),
-        "bls": BlsAdapter(manifest),
-        "sec_edgar": SecEdgarAdapter(manifest),
-        "cftc": CftcAdapter(manifest),
-        "pboc": PbocAdapter(manifest),
-        "nbs": NbsAdapter(manifest),
-        "sse": SseAdapter(manifest),
-        "szse": SzseAdapter(manifest),
-        "yahoo_market": YahooMarketAdapter(manifest),
+        provider_id: adapter_types[provider_id](provider)
+        for provider_id, provider in providers.items()
+        if provider_id in adapter_types
     }
     return ProviderRegistry(adapters)

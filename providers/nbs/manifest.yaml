@@ -5,6 +5,8 @@
 contract_version: 1
 provider_id: nbs
 name: 国家统计局
+source_family_id: nbs
+tier: "Tier 1"
 verification:
   verified: true
   verification_date: "2026-08-11"
@@ -15,6 +17,7 @@ verification:
     capability are verified for the mandatory future_calendar row.
 
 authentication: none
+protocol: https
 user_agent: "follow-the-money/0.1 (+https://github.com/KadenLiu168/follow-the-money)"
 
 charset:
@@ -23,16 +26,17 @@ charset:
   content_type_header: null
 
 fetch_hosts:
-  - { host: stats.gov.cn }
-  - { host: www.stats.gov.cn }
+  - { host: stats.gov.cn, allow_subdomains: false, allowed_ports: [443] }
+  - { host: www.stats.gov.cn, allow_subdomains: false, allowed_ports: [443] }
 redirect_hosts:
-  - { host: stats.gov.cn }
+  - { host: stats.gov.cn, allow_subdomains: false, allowed_ports: [443] }
 
 source_link_hosts:
   - host: stats.gov.cn
     allow_subdomains: true
     allowed_ports: [443]
     allowed_query_params: []
+    query_value_grammar: any
     drop_query_params: []
 
 rate_policy:
@@ -40,6 +44,9 @@ rate_policy:
   capacity: 20
   refill_period_seconds: 60
   minimum_interval_seconds: 1
+
+response_limit_bytes: 10485760
+attempt_timeout_seconds: 20
 
 time:
   knowledge_time: released_at

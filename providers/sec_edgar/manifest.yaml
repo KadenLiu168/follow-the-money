@@ -5,6 +5,8 @@
 contract_version: 1
 provider_id: sec_edgar
 name: SEC EDGAR
+source_family_id: sec
+tier: "Tier 1"
 verification:
   verified: true
   verification_date: "2026-08-11"
@@ -15,6 +17,7 @@ verification:
     The submissions endpoint and archive source-link rules are verified.
 
 authentication: none
+protocol: https
 user_agent: "follow-the-money/0.1 kaden@example.com"
 
 charset:
@@ -23,22 +26,24 @@ charset:
   content_type_header: null
 
 fetch_hosts:
-  - { host: www.sec.gov }
-  - { host: data.sec.gov }
+  - { host: www.sec.gov, allow_subdomains: false, allowed_ports: [443] }
+  - { host: data.sec.gov, allow_subdomains: false, allowed_ports: [443] }
 redirect_hosts:
-  - { host: www.sec.gov }
-  - { host: data.sec.gov }
+  - { host: www.sec.gov, allow_subdomains: false, allowed_ports: [443] }
+  - { host: data.sec.gov, allow_subdomains: false, allowed_ports: [443] }
 
 source_link_hosts:
   - host: sec.gov
     allow_subdomains: true
     allowed_ports: [443]
     allowed_query_params: []
+    query_value_grammar: any
     drop_query_params: []
   - host: www.sec.gov
     allow_subdomains: false
     allowed_ports: [443]
     allowed_query_params: []
+    query_value_grammar: any
     drop_query_params: []
 
 rate_policy:
@@ -46,6 +51,9 @@ rate_policy:
   capacity: 10
   refill_period_seconds: 60
   minimum_interval_seconds: 5
+
+response_limit_bytes: 10485760
+attempt_timeout_seconds: 20
 
 time:
   knowledge_time: acceptance_publication_instant

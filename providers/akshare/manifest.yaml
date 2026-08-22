@@ -5,6 +5,8 @@
 contract_version: 1
 provider_id: akshare
 name: AKShare (optional)
+source_family_id: sse
+tier: "Tier 2"
 verification:
   verified: false
   verification_date: null
@@ -15,6 +17,7 @@ verification:
     cannot count as coverage.
 
 authentication: none
+protocol: https
 user_agent: "follow-the-money/0.1 (+https://github.com/KadenLiu168/follow-the-money)"
 
 charset:
@@ -27,6 +30,8 @@ redirect_hosts: []
 source_link_hosts: []
 
 rate_policy: null
+response_limit_bytes: 10485760
+attempt_timeout_seconds: 20
 
 time:
   knowledge_time: as_of

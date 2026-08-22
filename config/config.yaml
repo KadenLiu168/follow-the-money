@@ -35,6 +35,7 @@ feed:
   max_url_characters: 2048
   max_observations_per_instrument: 260
   max_serialized_feed_bytes: 52428800         # 50 MiB
+  lock_timeout_seconds: 60
 
 # ---------------------------------------------------------------------------
 # Scoring (design sections 11-13). Weights are normative v1 values.
@@ -184,12 +185,12 @@ roles:
 # Sessions
 # ---------------------------------------------------------------------------
 sessions:
-  - { id: us_equities,  calendar: XNYS, session_class: exchange_traded, timezone: America/New_York, annualization_factor: "252" }
-  - { id: cn_equities,  calendar: XSHG, session_class: exchange_traded, timezone: Asia/Shanghai,     annualization_factor: "252" }
-  - { id: hk_equities,  calendar: XHKG, session_class: exchange_traded, timezone: Asia/Hong_Kong,     annualization_factor: "252" }
-  - { id: crypto_247,   calendar: XETR, session_class: continuous_247,  timezone: UTC,               annualization_factor: "365" }
-  - { id: commodity_245, calendar: NYMEX, session_class: continuous_245, timezone: UTC,               annualization_factor: "252" }
-  - { id: fx_245,       calendar: XNYS, session_class: continuous_245, timezone: UTC,               annualization_factor: "252" }
+  - { id: us_equities,  calendar: XNYS, session_class: exchange_traded, timezone: America/New_York, annualization_factor: "252", availability_lag_seconds: 300 }
+  - { id: cn_equities,  calendar: XSHG, session_class: exchange_traded, timezone: Asia/Shanghai,     annualization_factor: "252", availability_lag_seconds: 300 }
+  - { id: hk_equities,  calendar: XHKG, session_class: exchange_traded, timezone: Asia/Hong_Kong,     annualization_factor: "252", availability_lag_seconds: 300 }
+  - { id: crypto_247,   calendar: XETR, session_class: continuous_247,  timezone: UTC,               annualization_factor: "365", availability_lag_seconds: 300 }
+  - { id: commodity_245, calendar: NYMEX, session_class: continuous_245, timezone: UTC,               annualization_factor: "252", availability_lag_seconds: 300 }
+  - { id: fx_245,       calendar: XNYS, session_class: continuous_245, timezone: UTC,               annualization_factor: "252", availability_lag_seconds: 300 }
 
 # ---------------------------------------------------------------------------
 # Source families (corroboration counting) and entities (resolution registry).

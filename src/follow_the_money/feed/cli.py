@@ -29,6 +29,7 @@ Exit contract: 0 healthy/degraded success; 1 generation/publication failure;
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import time
 from collections.abc import Callable, Mapping
@@ -94,11 +95,21 @@ def _default_providers_path() -> Path:
     return REPO_ROOT / "config" / "providers.yaml"
 
 
+def _default_manifest_root() -> Path:
+    return REPO_ROOT / "providers"
+
+
 def _load_app_config(config_path: str | None) -> AppConfig:
     cfg = config_path or str(_default_config_path())
     providers = str(_default_providers_path())
     try:
-        return load_config(cfg, providers, require_verified_enabled=True)
+        return load_config(
+            cfg,
+            providers,
+            require_verified_enabled=True,
+            manifest_root=_default_manifest_root(),
+            strict=True,
+        )
     except ConfigError as exc:
         raise FeedInputError(str(exc)) from exc
 
@@ -217,6 +228,7 @@ def run_feed(
 
     try:
         # Registry: production uses the verified-enabled manifest registry.
+        registry: Any
         if providers_fn is not None:
             registry = providers_fn()
             adapters_by_id = {
@@ -225,7 +237,15 @@ def run_feed(
             }
         else:
             try:
-                adapters_by_id = _production_adapters(cfg, build_registry())
+                resolved_providers = {p.id: p for p in cfg.providers}
+                # Preserve the existing zero-argument test-factory seam while
+                # the production registry receives the resolved contracts.
+                registry_factory = build_registry
+                if inspect.signature(registry_factory).parameters:
+                    registry = registry_factory(resolved_providers)
+                else:
+                    registry = registry_factory()
+                adapters_by_id = _production_adapters(cfg, registry)
             except (KeyError, ManifestError, OSError, ValueError) as exc:
                 raise FeedInputError(str(exc)) from exc
 
@@ -509,13 +529,13 @@ def _production_adapters(cfg: AppConfig, registry: Any) -> dict[str, list[Any]]:
             continue
         if p.id == "yahoo_market":
             adapters[p.id] = [
-                YahooMarketAdapter(instrument=r.instrument, role_id=r.id, unit=r.unit)
+                YahooMarketAdapter(p, instrument=r.instrument, role_id=r.id, unit=r.unit)
                 for r in cfg.roles
             ]
         elif p.id == "sec_edgar":
             adapters[p.id] = [
                 SecEdgarAdapter(
-                    watched_ciks=tuple(company.cik for company in cfg.watched_companies)
+                    p, watched_ciks=tuple(company.cik for company in cfg.watched_companies)
                 )
             ]
         else:
@@ -746,7 +766,8 @@ _client_cache: dict[str, Any] = {}
 def _client_for(adapter: Any) -> Any:
     import httpx
 
-    return httpx.Client(timeout=20.0, follow_redirects=True)
+    timeout = getattr(getattr(adapter, "_contract", None), "attempt_timeout_seconds", 20)
+    return httpx.Client(timeout=float(timeout), follow_redirects=True)
 
 
 class _Semaphore:
@@ -816,9 +837,12 @@ def _provider_contract_snapshots(cfg: AppConfig) -> list[dict[str, Any]]:
             continue
         payload = {
             "provider_id": p.id,
-            "group": p.group,
+            "coverage_groups": list(p.coverage_groups),
             "source_family_id": p.source_family_id,
             "tier": p.tier,
+            "contract_version": p.contract_version,
+            "authentication": p.authentication,
+            "protocol": p.protocol,
             "fetch_hosts": [
                 {
                     "host": r.host,
@@ -860,9 +884,23 @@ def _provider_contract_snapshots(cfg: AppConfig) -> list[dict[str, Any]]:
             "pagination": p.pagination,
             "empty_valid_for_window": p.empty_valid_for_window,
             "response_limit_bytes": p.response_limit_bytes,
+            "attempt_timeout_seconds": p.attempt_timeout_seconds,
+            "request_limit_bytes": p.request_limit_bytes,
+            "max_observations": p.max_observations,
             "credentials_required": p.credentials_required,
             "verification_date": p.verification_date,
             "contract_url": p.contract_url,
+            "time_knowledge_time": p.time_knowledge_time,
+            "payload_types": list(p.payload_types),
+            "calendar_capability": p.calendar_capability,
+            "availability_lag_seconds": p.availability_lag_seconds,
+            "identity_stable_record_id": p.identity_stable_record_id,
+            "units": dict(sorted(p.units.items())),
+            "freshness_policy": p.freshness_policy,
+            "role_mappings": [dict(sorted(mapping.items())) for mapping in p.role_mappings],
+            "adjustment_policy": dict(sorted(p.adjustment_policy.items())),
+            "fixture_provenance_source": p.fixture_provenance_source,
+            "fixture_files": list(p.fixture_files),
         }
         snapshot = {"provider_id": p.id, "snapshot": payload, "hash": canonical_digest(payload)}
         snapshots.append(snapshot)
@@ -890,6 +928,7 @@ def _feed_config_snapshot(cfg: AppConfig) -> dict[str, Any]:
             "max_url_characters": cfg.feed.max_url_characters,
             "max_observations_per_instrument": cfg.feed.max_observations_per_instrument,
             "max_serialized_feed_bytes": cfg.feed.max_serialized_feed_bytes,
+            "lock_timeout_seconds": cfg.feed.lock_timeout_seconds,
         },
         "coverage": [
             {
@@ -897,6 +936,7 @@ def _feed_config_snapshot(cfg: AppConfig) -> dict[str, Any]:
                 "members": list(r.members),
                 "minimum": r.minimum,
                 "capability": r.capability,
+                "optional": r.optional,
             }
             for r in cfg.coverage.rows
         ],

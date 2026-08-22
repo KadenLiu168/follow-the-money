@@ -112,6 +112,29 @@ def test_unlisted_query_param_rejected():
         canonicalize_url("https://example.com/x?foo=bar", rules=_rules())
 
 
+def test_empty_query_allowlist_rejects_every_retained_parameter():
+    with pytest.raises(UrlValidationError, match="unlisted query"):
+        canonicalize_url("https://publisher.example.net/x?id=42", rules=_rules())
+
+
+def test_query_value_grammar_is_enforced():
+    with pytest.raises(UrlValidationError, match="query value grammar"):
+        canonicalize_url("https://example.com/x?id=not%20plain", rules=_rules())
+
+    numeric = [
+        SourceLinkRule(
+            host="numbers.example.com",
+            allowed_query_params=("value",),
+            query_value_grammar="numeric",
+        )
+    ]
+    assert canonicalize_url("https://numbers.example.com/x?value=-12.5", rules=numeric).endswith(
+        "?value=-12.5"
+    )
+    with pytest.raises(UrlValidationError, match="query value grammar"):
+        canonicalize_url("https://numbers.example.com/x?value=twelve", rules=numeric)
+
+
 def test_credential_named_query_rejected():
     for name in ("token", "api_key", "secret", "password"):
         with pytest.raises(UrlValidationError, match="credential-named"):

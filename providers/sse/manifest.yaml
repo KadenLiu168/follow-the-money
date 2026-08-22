@@ -5,6 +5,8 @@
 contract_version: 1
 provider_id: sse
 name: 上海证券交易所
+source_family_id: sse
+tier: "Tier 1"
 verification:
   verified: true
   verification_date: "2026-08-11"
@@ -14,6 +16,7 @@ verification:
     authentication; HTML index and source-link rules are verified.
 
 authentication: none
+protocol: https
 user_agent: "follow-the-money/0.1 (+https://github.com/KadenLiu168/follow-the-money)"
 
 charset:
@@ -22,16 +25,17 @@ charset:
   content_type_header: null
 
 fetch_hosts:
-  - { host: sse.com.cn }
-  - { host: www.sse.com.cn }
+  - { host: sse.com.cn, allow_subdomains: false, allowed_ports: [443] }
+  - { host: www.sse.com.cn, allow_subdomains: false, allowed_ports: [443] }
 redirect_hosts:
-  - { host: sse.com.cn }
+  - { host: sse.com.cn, allow_subdomains: false, allowed_ports: [443] }
 
 source_link_hosts:
   - host: sse.com.cn
     allow_subdomains: true
     allowed_ports: [443]
     allowed_query_params: []
+    query_value_grammar: any
     drop_query_params: []
 
 rate_policy:
@@ -39,6 +43,9 @@ rate_policy:
   capacity: 20
   refill_period_seconds: 60
   minimum_interval_seconds: 1
+
+response_limit_bytes: 10485760
+attempt_timeout_seconds: 20
 
 time:
   knowledge_time: published_at

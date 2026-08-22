@@ -81,3 +81,9 @@ is worse than no output.
 
 None. The Feed needs no credential, model, or network configuration beyond
 the configured providers.
+
+Configuration ownership is explicit: application values come from
+`config/config.yaml`, Provider contract facts come from the owning
+`providers/<provider_id>/manifest.yaml`, and enablement/coverage come from
+`config/providers.yaml`; the Feed resolves one Provider contract before
+runtime state or collection begins. See `docs/configuration.md`.

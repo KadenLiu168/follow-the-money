@@ -26,6 +26,8 @@ from ..config.model import SourceLinkRule
 
 _PERCENT_ESCAPE = re.compile(r"%[0-9A-Fa-f]{2}")
 _BARE_PERCENT = re.compile(r"%(?![0-9A-Fa-f]{2})")
+_PLAIN_QUERY_VALUE = re.compile(r"[A-Za-z0-9._~-]*")
+_NUMERIC_QUERY_VALUE = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?")
 _CREDENTIAL_QUERY_NAMES = {
     "token",
     "api_key",
@@ -98,17 +100,17 @@ def canonicalize_url(
     if "%" in host_raw:
         raise UrlValidationError(f"{where}: percent-encoding in authority rejected")
     host = _idna_normalize(host_raw).lower()
+    matched_rules = [rule for rule in rules if _host_matches(host, rule)]
+    if not matched_rules:
+        raise UrlValidationError(f"{where}: host {host!r} outside source_link_hosts rules")
 
     port = parts.port
     if port is not None:
         allowed_ports: set[int] = set()
-        for rule in rules:
+        for rule in matched_rules:
             allowed_ports.update(rule.allowed_ports)
         if port not in allowed_ports:
             raise UrlValidationError(f"{where}: undeclared port {port}")
-
-    if not any(_host_matches(host, rule) for rule in rules):
-        raise UrlValidationError(f"{where}: host {host!r} outside source_link_hosts rules")
 
     # Path percent-escape validation.
     path = parts.path or "/"
@@ -123,9 +125,12 @@ def canonicalize_url(
         except ValueError:
             raise UrlValidationError(f"{where}: malformed query")
         allowed_names: set[str] = set()
+        grammars_by_name: dict[str, set[str]] = {}
         drop_names: set[str] = set()
-        for rule in rules:
+        for rule in matched_rules:
             allowed_names.update(rule.allowed_query_params)
+            for name in rule.allowed_query_params:
+                grammars_by_name.setdefault(name, set()).add(rule.query_value_grammar)
             drop_names.update(rule.drop_query_params)
         for name, value in raw_pairs:
             if _BARE_PERCENT.search(name) or _BARE_PERCENT.search(value):
@@ -134,8 +139,17 @@ def canonicalize_url(
                 raise UrlValidationError(f"{where}: credential-named query parameter {name!r}")
             if name in drop_names:
                 continue
-            if name not in allowed_names and allowed_names:
+            if name not in allowed_names:
                 raise UrlValidationError(f"{where}: unlisted query parameter {name!r}")
+            grammars = grammars_by_name[name]
+            grammar_matches = "any" in grammars or (
+                "plain" in grammars and _PLAIN_QUERY_VALUE.fullmatch(value) is not None
+            )
+            grammar_matches = grammar_matches or (
+                "numeric" in grammars and _NUMERIC_QUERY_VALUE.fullmatch(value) is not None
+            )
+            if not grammar_matches:
+                raise UrlValidationError(f"{where}: query value grammar rejected {name!r}")
             query_pairs.append((name, value))
 
     # Build canonical URL: lowercase scheme/host, drop default port, drop

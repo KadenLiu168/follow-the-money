@@ -137,6 +137,24 @@ class ProviderEntry:
     verification_date: str | None = None
     contract_url: str | None = None
     notes: str | None = None
+    contract_version: int = 1
+    authentication: str = "none"
+    protocol: str = "https"
+    attempt_timeout_seconds: int = 20
+    request_limit_bytes: int | None = None
+    max_observations: int | None = None
+    time_knowledge_time: str | None = None
+    payload_types: tuple[str, ...] = ()
+    calendar_capability: str | None = None
+    availability_lag_seconds: int | None = None
+    identity_stable_record_id: str | None = None
+    units: Mapping[str, str] = field(default_factory=dict)
+    freshness_policy: str | None = None
+    role_mappings: tuple[Mapping[str, object], ...] = ()
+    adjustment_policy: Mapping[str, object] = field(default_factory=dict)
+    fixture_provenance_source: str | None = None
+    fixture_files: tuple[str, ...] = ()
+    coverage_groups: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

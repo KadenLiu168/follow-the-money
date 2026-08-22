@@ -6,6 +6,8 @@
 contract_version: 1
 provider_id: yahoo_market
 name: Yahoo Finance (compatible)
+source_family_id: yahoo
+tier: "Tier 2"
 verification:
   verified: true
   verification_date: "2026-08-11"
@@ -17,6 +19,7 @@ verification:
     explicit in this manifest; exact role verification is recorded per mapping.
 
 authentication: none
+protocol: https
 user_agent: "follow-the-money/0.1 (+https://github.com/KadenLiu168/follow-the-money)"
 
 charset:
@@ -25,17 +28,18 @@ charset:
   content_type_header: null
 
 fetch_hosts:
-  - { host: query1.finance.yahoo.com }
-  - { host: query2.finance.yahoo.com }
+  - { host: query1.finance.yahoo.com, allow_subdomains: false, allowed_ports: [443] }
+  - { host: query2.finance.yahoo.com, allow_subdomains: false, allowed_ports: [443] }
 redirect_hosts:
-  - { host: query1.finance.yahoo.com }
-  - { host: query2.finance.yahoo.com }
+  - { host: query1.finance.yahoo.com, allow_subdomains: false, allowed_ports: [443] }
+  - { host: query2.finance.yahoo.com, allow_subdomains: false, allowed_ports: [443] }
 
 source_link_hosts:
   - host: finance.yahoo.com
     allow_subdomains: false
     allowed_ports: [443]
     allowed_query_params: []
+    query_value_grammar: any
     drop_query_params: []
 
 rate_policy:
@@ -43,6 +47,11 @@ rate_policy:
   capacity: 30
   refill_period_seconds: 60
   minimum_interval_seconds: 1
+
+response_limit_bytes: 10485760
+attempt_timeout_seconds: 20
+limits:
+  max_observations: 260
 
 time:
   knowledge_time: observation_as_of_plus_availability_lag

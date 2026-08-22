@@ -39,6 +39,9 @@ feeds/            published artifacts (daily/<date>/<run_id>.json, latest.json)
 tests/            pytest suite (credential-free)
 docs/             architecture, contracts, runbooks
 .github/workflows/ hosted CI + scheduled Feed workflow template
+
+Configuration authority and the single resolved Provider contract are documented
+in [`docs/configuration.md`](docs/configuration.md).
 ```
 
 ## Quick start
