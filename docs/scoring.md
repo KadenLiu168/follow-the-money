@@ -11,8 +11,8 @@ Breadth, Repricing Magnitude, and Persistence.
 - The full denominator is preserved; an unknown component contributes zero.
 - Component coverage = sum of configured weights whose whole component is
   known, divided by the total significance weight.
-- At least 60% coverage is required for every normally selected full or
-  compact event; weights are never silently reallocated.
+- At least 60% coverage is required for every rankable event; weights are never
+  silently reallocated.
 - Fundamental Magnitude is known only when both `scope` and
   `fundamental_depth` are non-`unknown`; Persistence only when both
   `reversibility` and `structural_horizon` are non-`unknown`.
@@ -76,7 +76,7 @@ core PCE price index MoM `0.1`, US PPI final demand SA MoM `0.1`. Every
 other series identity/frequency/adjustment is `unknown` until a versioned
 scale is added.
 
-### Morning Relevance
+### Event Relevance
 
 Weights 40/25/20/15 over freshness, China/Hong Kong open relevance, US
 next-session relevance, and unresolved next-24-hour catalyst.
@@ -88,11 +88,11 @@ next-session relevance, and unresolved next-24-hour catalyst.
   unknown` to `100|50|0|0` (script-owned).
 - `catalyst_calendar_ids` non-empty maps to 100, empty to 0.
 
-### Brief Priority
+### Base Priority
 
-`0.70 * significance + 0.30 * morning_relevance`, before confidence/coverage
-gates and redundancy deductions. Gates compare unquantized Decimal values;
-serialized component/final scores use 2 decimal places.
+`0.70 * significance + 0.30 * event_relevance`, before confidence/coverage
+gates and redundancy deductions. The Decimal result is retained without
+introducing presentation tiers or format state.
 
 ## Decimal contract
 
@@ -104,23 +104,25 @@ stable-order sum/n; sample variance = sum((x-mean)^2)/(n-1); std and
 annualization use `Decimal.sqrt()`; z = (current-mean)/std; weighted scores
 multiply then sum in configuration order.
 
-## Selection pipeline
+## Deterministic ranking
 
-1. Compute base priority; remove unresolved/no-analysis/below-60%-coverage.
-2. Classify capability: High and packet-passed conflict-free Medium are
-   full-capable; High, packet-passed conflict-free Medium, and clearly
-   labelled Low are compact-capable; unresolved are ineligible.
-3. Stable-sort by base priority desc, `fully_known_at` desc, event ID asc.
-4. Within the frozen order, the first member of each script-derived
+1. Compute base priority; fail closed on confidence outside the closed
+   high/medium/low/unresolved set. Among valid inputs, reject only unresolved
+   confidence or below-60%-coverage inputs. Resolved high, medium, and low
+   confidence values are otherwise rankable.
+2. Stable-sort eligible Events by base priority desc, `fully_known_at` desc,
+   Event ID asc.
+3. Within the frozen order, the first member of each script-derived
    non-singleton story family is unpenalized; each later member receives 15
    points unless its unordered pair with the frozen first member carries
    validated `distinct_material_development`.
-5. `final_priority = max(0, base - penalty)`; discard below full (60) /
-   compact (40) thresholds; re-sort; take first 12; full format for the
-   first up to 3 selected full-capable events with final_priority >= 60.
-6. The target of 10 is informational only and never truncates an 11th/12th
-   qualifying event or fills a sparse result. Zero/one/two selected events
-   carry a visible sparse-result warning.
+4. `final_priority = max(0, base - penalty)`; the exact first-to-later
+   canonical pair exempts that later member. A pair between later members is
+   not transitive.
+5. Re-sort by final priority desc, `fully_known_at` desc, Event ID asc, and
+   return every eligible Event with base and final priorities plus deterministic
+   ineligibility reasons. Ranking has no thresholds, tiers, formats, count
+   limits, or sparse-output state.
 
 ## Market state
 

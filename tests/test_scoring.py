@@ -10,16 +10,13 @@ import pytest
 from follow_the_money.config import load_config
 from follow_the_money.scoring import (
     ScoringError,
-    brief_priority,
+    base_priority,
+    event_relevance,
     event_significance,
     freshness_score,
-    morning_relevance,
     significance_components,
 )
-from follow_the_money.selection import (
-    SelectionInput,
-    select_events,
-)
+from follow_the_money.selection import RankingInput, rank_events
 
 REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO_ROOT / "config" / "config.yaml"
@@ -154,7 +151,7 @@ def test_weights_sum_100():
 
 
 # ---------------------------------------------------------------------------
-# Morning relevance / freshness
+# Event relevance / freshness
 # ---------------------------------------------------------------------------
 
 
@@ -168,9 +165,9 @@ def test_freshness_bins():
     assert freshness_score(Decimal(49), scoring) == 0
 
 
-def test_morning_relevance_weights():
+def test_event_relevance_weights():
     scoring = _scoring()
-    mr = morning_relevance(
+    relevance = event_relevance(
         scoring=scoring,
         age_hours=Decimal(1),
         cn_hk_exposure="direct",
@@ -178,15 +175,15 @@ def test_morning_relevance_weights():
         catalyst_present=True,
     )
     # fresh 100*0.40 + 100*0.25 + 100*0.20 + 100*0.15 = 100
-    assert mr == 100
-    mr2 = morning_relevance(
+    assert relevance == 100
+    relevance2 = event_relevance(
         scoring=scoring,
         age_hours=Decimal(49),
         cn_hk_exposure="none",
         us_next_session_exposure="none",
         catalyst_present=False,
     )
-    assert mr2 == 0
+    assert relevance2 == 0
 
 
 def test_exposure_map():
@@ -197,15 +194,15 @@ def test_exposure_map():
     assert scoring.exposure_map["unknown"] == 0
 
 
-def test_brief_priority_formula():
+def test_base_priority_formula():
     scoring = _scoring()
-    priority = brief_priority(Decimal(80), Decimal(60), scoring)
+    priority = base_priority(Decimal(80), Decimal(60), scoring)
     # 0.70*80 + 0.30*60 = 74
     assert priority == Decimal(74)
 
 
 # ---------------------------------------------------------------------------
-# Selection pipeline
+# Ranking pipeline
 # ---------------------------------------------------------------------------
 
 
@@ -216,107 +213,62 @@ def _item(
     coverage: str = "1.0",
     family: str | None = None,
     coexistence_pairs: frozenset[tuple[str, str]] = frozenset(),
-    analysis: bool = True,
-    packet: bool = True,
-    conflict_free: bool = True,
-    breaking: bool = False,
     known: str = "2026-08-11T01:00:00Z",
-) -> SelectionInput:
-    return SelectionInput(
+) -> RankingInput:
+    return RankingInput(
         event_id=event_id,
         fully_known_at=known,
         base_priority=Decimal(base),
         confidence=confidence,
         component_coverage=Decimal(coverage),
-        analysis_present=analysis,
-        packet_passed=packet,
-        conflict_free=conflict_free,
-        breaking_label=breaking,
         story_family_id=family,
         coexistence_pairs=coexistence_pairs,
     )
 
 
-def test_selection_basic_high_priority():
+def test_ranking_returns_complete_ordered_eligible_set():
     scoring = _scoring()
-    result = select_events([_item("e1", "90"), _item("e2", "50"), _item("e3", "30")], scoring)
-    assert [s.event_id for s in result.selected] == ["e1", "e2"]
-    assert result.selected[0].format == "full"
-    assert result.selected[1].format == "compact"
+    result = rank_events([_item("e1", "90"), _item("e2", "50"), _item("e3", "30")], scoring)
+    assert [event.event_id for event in result.ranked] == ["e1", "e2", "e3"]
 
 
-def test_selection_below_thresholds_discarded():
+def test_ranking_does_not_apply_priority_thresholds():
     scoring = _scoring()
-    result = select_events([_item("e1", "35")], scoring)  # below compact 40
-    assert result.selected == []
+    result = rank_events([_item("e1", "35")], scoring)
+    assert [event.event_id for event in result.ranked] == ["e1"]
 
 
-def test_selection_full_threshold_60():
+def test_ranking_accepts_all_resolved_confidence_levels():
     scoring = _scoring()
-    result = select_events([_item("e1", "59"), _item("e2", "61")], scoring)
-    formats = {s.event_id: s.format for s in result.selected}
-    assert formats == {"e2": "full", "e1": "compact"}
+    result = rank_events(
+        [
+            _item("high", "80"),
+            _item("medium", "70", confidence="medium"),
+            _item("low", "60", confidence="low"),
+        ],
+        scoring,
+    )
+    assert [event.event_id for event in result.ranked] == ["high", "medium", "low"]
 
 
 def test_unresolved_ineligible():
     scoring = _scoring()
-    result = select_events([_item("e1", "90", confidence="unresolved")], scoring)
-    assert result.selected == []
+    result = rank_events([_item("e1", "90", confidence="unresolved")], scoring)
+    assert result.ranked == []
     assert result.ineligible_reasons["e1"] == "unresolved"
-
-
-def test_no_analysis_ineligible():
-    scoring = _scoring()
-    result = select_events([_item("e1", "90", analysis=False)], scoring)
-    assert result.selected == []
-    assert result.ineligible_reasons["e1"] == "no_analysis"
 
 
 def test_below_coverage_ineligible():
     scoring = _scoring()
-    result = select_events([_item("e1", "90", coverage="0.5")], scoring)
-    assert result.selected == []
+    result = rank_events([_item("e1", "90", coverage="0.5")], scoring)
+    assert result.ranked == []
     assert result.ineligible_reasons["e1"] == "below_coverage"
 
 
-def test_medium_packet_gate():
+def test_ranking_returns_more_than_historical_brief_limit():
     scoring = _scoring()
-    # packet-passed conflict-free Medium is full-capable.
-    r1 = select_events([_item("e1", "80", confidence="medium", packet=True)], scoring)
-    assert r1.selected[0].format == "full"
-    # packet-failed Medium is neither full nor compact-capable.
-    r2 = select_events([_item("e1", "80", confidence="medium", packet=False)], scoring)
-    assert r2.selected == []
-
-
-def test_low_breaking_compact_only():
-    scoring = _scoring()
-    r1 = select_events([_item("e1", "80", confidence="low", breaking=True)], scoring)
-    assert r1.selected[0].format == "compact"
-    assert r1.selected[0].breaking_unconfirmed
-    r2 = select_events([_item("e1", "80", confidence="low", breaking=False)], scoring)
-    assert r2.selected == []
-
-
-def test_hard_max_twelve():
-    scoring = _scoring()
-    items = [_item(f"e{i}", str(100 - i)) for i in range(15)]
-    result = select_events(items, scoring)
-    assert len(result.selected) == 12
-
-
-def test_target_ten_informational_only():
-    scoring = _scoring()
-    # 12 qualifying events retained despite target of 10.
-    items = [_item(f"e{i}", str(90 - i)) for i in range(12)]
-    result = select_events(items, scoring)
-    assert len(result.selected) == 12
-
-
-def test_fewer_than_three_sparse_warning():
-    scoring = _scoring()
-    result = select_events([_item("e1", "90"), _item("e2", "50")], scoring)
-    assert result.sparse_warning
+    result = rank_events([_item(f"e{i}", str(100 - i)) for i in range(15)], scoring)
+    assert len(result.ranked) == 15
 
 
 def test_stable_tie_break():
@@ -326,10 +278,10 @@ def test_stable_tie_break():
         _item("e2", "80", known="2026-08-11T02:00:00Z"),
     ]
     b = list(reversed(a))
-    ra = select_events(a, scoring)
-    rb = select_events(b, scoring)
-    assert [s.event_id for s in ra.selected] == ["e2", "e1"]
-    assert [s.event_id for s in rb.selected] == ["e2", "e1"]
+    ra = rank_events(a, scoring)
+    rb = rank_events(b, scoring)
+    assert [event.event_id for event in ra.ranked] == ["e2", "e1"]
+    assert [event.event_id for event in rb.ranked] == ["e2", "e1"]
 
 
 def test_story_family_penalty():
@@ -339,20 +291,18 @@ def test_story_family_penalty():
         _item("e2", "75", family="fam_x"),  # later member, no distinct pair
         _item("e3", "70", family="fam_y"),
     ]
-    result = select_events(items, scoring)
-    # e2 penalized 15 => 60 final, still passes full threshold.
-    by_id = {s.event_id: s for s in result.selected}
+    result = rank_events(items, scoring)
+    by_id = {event.event_id: event for event in result.ranked}
     assert by_id["e2"].final_priority == Decimal(60)
-    assert by_id["e2"].format == "full"
 
 
 def test_story_family_penalty_uses_configured_value():
     scoring = replace(_scoring(), family_penalty="20")
-    result = select_events(
+    result = rank_events(
         [_item("e1", "80", family="fam_x"), _item("e2", "75", family="fam_x")],
         scoring,
     )
-    by_id = {s.event_id: s for s in result.selected}
+    by_id = {event.event_id: event for event in result.ranked}
     assert by_id["e2"].final_priority == Decimal(55)
 
 
@@ -362,8 +312,8 @@ def test_distinct_first_member_exempt():
         _item("e1", "80", family="fam_x"),
         _item("e2", "75", family="fam_x", coexistence_pairs=frozenset({("e1", "e2")})),
     ]
-    result = select_events(items, scoring)
-    by_id = {s.event_id: s for s in result.selected}
+    result = rank_events(items, scoring)
+    by_id = {event.event_id: event for event in result.ranked}
     assert by_id["e2"].final_priority == Decimal(75)
 
 
@@ -376,8 +326,8 @@ def test_penalty_not_transitive():
         _item("B", "75", family="fam_z", coexistence_pairs=frozenset({("A", "B"), ("B", "C")})),
         _item("C", "70", family="fam_z", coexistence_pairs=frozenset({("A", "B"), ("B", "C")})),
     ]
-    result = select_events(items, scoring)
-    by_id = {s.event_id: s for s in result.selected}
+    result = rank_events(items, scoring)
+    by_id = {event.event_id: event for event in result.ranked}
     assert by_id["B"].final_priority == Decimal(75)
     assert by_id["C"].final_priority == Decimal(55)
 
@@ -385,7 +335,7 @@ def test_penalty_not_transitive():
 def test_later_to_later_pair_does_not_exempt_against_frozen_first():
     scoring = _scoring()
     pairs = frozenset({("B", "C")})
-    result = select_events(
+    result = rank_events(
         [
             _item("A", "80", family="fam_z", coexistence_pairs=pairs),
             _item("B", "75", family="fam_z", coexistence_pairs=pairs),
@@ -393,23 +343,14 @@ def test_later_to_later_pair_does_not_exempt_against_frozen_first():
         ],
         scoring,
     )
-    by_id = {s.event_id: s for s in result.selected}
+    by_id = {event.event_id: event for event in result.ranked}
     assert by_id["B"].final_priority == Decimal(60)
     assert by_id["C"].final_priority == Decimal(55)
-
-
-def test_family_penalty_can_cross_compact_threshold():
-    scoring = _scoring()
-    result = select_events(
-        [_item("A", "80", family="fam_z"), _item("B", "54", family="fam_z")],
-        scoring,
-    )
-    assert [s.event_id for s in result.selected] == ["A"]
 
 
 def test_priority_floor_zero():
     scoring = _scoring()
     items = [_item("e1", "10", family="fam_q"), _item("e2", "8", family="fam_q")]
-    result = select_events(items, scoring)
-    # e2: 8 - 15 = -7 => floored to 0; below compact 40 => discarded.
-    assert all(s.event_id != "e2" for s in result.selected)
+    result = rank_events(items, scoring)
+    by_id = {event.event_id: event for event in result.ranked}
+    assert by_id["e2"].final_priority == Decimal(0)

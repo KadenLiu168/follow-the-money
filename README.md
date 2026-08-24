@@ -3,7 +3,7 @@
 Evidence-grounded financial research Skill for AI Agents: a deterministic,
 credential-free evidence Feed from free China/US official and public sources,
 plus a retained deterministic engine (ledger, candidate events, market
-snapshot/state, watchlist, scoring/selection rules, safety audit) awaiting a
+snapshot/state, watchlist, scoring/ranking rules, safety audit) awaiting a
 future Agent delivery contract.
 
 The Agent understands, reasons, and expresses; `follow-the-money` supplies
@@ -74,5 +74,5 @@ deployment concerns, not claims made by this repository.
 
 - `docs/architecture.md` — retained deterministic engine and transitional state
 - `docs/feed-contract.md` — Feed schema, window/cutoff model, publication
-- `docs/scoring.md` — deterministic scoring and selection contract
+- `docs/scoring.md` — deterministic scoring and ranking contract
 - Runbooks: `docs/runbooks/`

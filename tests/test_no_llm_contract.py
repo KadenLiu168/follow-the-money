@@ -215,9 +215,9 @@ def test_retained_rules_deterministic_and_llm_free():
     from decimal import Decimal
 
     from follow_the_money.scoring import (
-        brief_priority,
+        base_priority,
+        event_relevance,
         event_significance,
-        morning_relevance,
         significance_components,
     )
 
@@ -239,21 +239,23 @@ def test_retained_rules_deterministic_and_llm_free():
     sig1, cov1 = event_significance(comps)
     sig2, cov2 = event_significance(comps)
     assert (sig1, cov1) == (sig2, cov2)
-    morning = morning_relevance(
+    relevance = event_relevance(
         scoring=cfg.scoring,
         age_hours=Decimal(5),
         cn_hk_exposure="direct",
         us_next_session_exposure="direct",
         catalyst_present=True,
     )
-    assert morning == morning_relevance(
+    assert relevance == event_relevance(
         scoring=cfg.scoring,
         age_hours=Decimal(5),
         cn_hk_exposure="direct",
         us_next_session_exposure="direct",
         catalyst_present=True,
     )
-    assert brief_priority(sig1, morning, cfg.scoring) == brief_priority(sig1, morning, cfg.scoring)
+    assert base_priority(sig1, relevance, cfg.scoring) == base_priority(
+        sig1, relevance, cfg.scoring
+    )
 
     # ClaimAuditor: deterministic, flags prohibited trading instructions.
     auditor = ClaimAuditor(cfg.safety_lexicon)

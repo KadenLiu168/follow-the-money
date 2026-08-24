@@ -4,7 +4,7 @@ description: |
   Evidence-grounded financial research Skill for AI Agents: deterministic,
   credential-free evidence Feed from free China/US official and public
   sources, plus a retained deterministic engine (ledger, canonical events,
-  market state, watchlist, scoring/selection rules, safety audit). Triggers
+  market state, watchlist, scoring/ranking rules, safety audit). Triggers
   on "/money", on a schedule, or when the user asks for a money/flow/macro
   research digest backed by primary sources.
 ---

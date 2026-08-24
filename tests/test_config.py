@@ -174,13 +174,8 @@ def test_shipped_defaults_load_structure_without_enablement():
     assert cfg.feed.per_host_concurrency == 2
     assert cfg.feed.http_attempt_timeout_seconds == 20
     assert cfg.feed.max_attempts == 3
-    assert cfg.scoring.full_priority_threshold == "60"
-    assert cfg.scoring.compact_priority_threshold == "40"
     assert cfg.scoring.family_penalty == "15"
     assert cfg.scoring.min_component_coverage == "60"
-    assert cfg.scoring.target_count == 10
-    assert cfg.scoring.hard_max_count == 12
-    assert cfg.scoring.max_full_events == 3
     assert cfg.scoring.anomaly_z_threshold == "2.0"
     assert cfg.market_state.z_supportive == "0.5"
     assert cfg.market_state.breadth_supportive == "0.20"
@@ -191,7 +186,7 @@ def test_shipped_defaults_load_structure_without_enablement():
     assert cfg.freshness_limit_minutes == 30
     assert cfg.normal_lag_hours == 2
     assert len(cfg.scoring.freshness_bins) == 4
-    assert cfg.scoring.morning_weights == (40, 25, 20, 15)
+    assert cfg.scoring.relevance_weights == (40, 25, 20, 15)
 
 
 def test_shipped_defaults_pass_strict_enablement_after_verification():

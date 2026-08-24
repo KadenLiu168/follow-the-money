@@ -25,7 +25,7 @@ providers/ (adapters, HTTP, rate, lock, manifest)
                        engine/title.py, events.py)
   -> market snapshot/state (market/, state.py)
   -> watchlist (watchlist.py)
-  -> scoring/selection rules (scoring.py, selection.py)  [no caller yet]
+  -> scoring/ranking rules (scoring.py, selection.py)  [no caller yet]
   -> ClaimAuditor safety audit (audit.py)                [no caller yet]
   -> canonical digests, schema validation, build fingerprint
      (canonical.py, schema.py, boundary.py)
@@ -36,7 +36,7 @@ the contract appropriate to its boundary. The Feed is the current serialized
 external contract: it is validated against `schemas/feed.schema.json` plus
 semantic, identity, and digest checks. Internal deterministic structures such
 as the ledger, candidate Components/grouping, market snapshot/state, watchlist, scoring
-intermediates, and selection inputs use typed Python interfaces, domain
+intermediates, and ranking inputs use typed Python interfaces, domain
 invariants/validation, and deterministic tests; they do not require a
 standalone JSON Schema each.
 
@@ -53,7 +53,7 @@ standalone JSON Schema each.
 | `market/` | Decimal formulas, surprise, confidence |
 | `ledger.py` | Frozen evidence ledger |
 | `state.py` / `watchlist.py` | Market state vector and 24-hour watchlist |
-| `scoring.py` / `selection.py` | Deterministic significance/priority/selection (library, no caller) |
+| `scoring.py` / `selection.py` | Deterministic significance/priority/ranking (library, no caller) |
 | `audit.py` | `ClaimAuditor` safety lexicon audit (library, no caller) |
 | `boundary.py` | Application build fingerprint (consumed by the Feed) |
 
@@ -70,7 +70,7 @@ schemas/tests. Recoverable only from git history.
   lexicon).
 - **Scripts own** every deterministic object: run identity, evidence cutoff,
   canonical Event IDs, ledger, market analytics, surprise, confidence,
-  significance, Morning Relevance, Brief Priority, selection, story-family
+  significance, Event Relevance, Base Priority, ranking, story-family
   penalties, market state, watchlist, and the Feed publication decision.
 - **URLs are credential-free** and validated against the owning provider's
   embedded contract before hashing, retention, or publication.

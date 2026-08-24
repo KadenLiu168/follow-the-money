@@ -1,20 +1,4 @@
-"""Deterministic final selection and story-family penalty.
-
-Design section 13:
-
-1. Compute base priority; remove unresolved/no-analysis/below-60%-coverage.
-2. Classify full/compact capability from confidence (High + packet-passed
-   conflict-free Medium are full-capable; Low is compact-capable only with
-   Breaking/Unconfirmed label; unresolved ineligible).
-3. Stable-sort by base priority desc, fully_known_at desc, event ID asc.
-4. Within the frozen order, the first member of each script-derived
-   non-singleton story family is unpenalized; each later member receives 15
-   points unless its unordered pair with the frozen first member carries
-   validated ``distinct_material_development``.
-5. final_priority = max(0, base - penalty); discard below full/compact
-   thresholds; re-sort; take first 12; full format for the first up to 3
-   selected full-capable events with final_priority >= 60.
-"""
+"""Deterministic ranking and story-family penalty."""
 
 from __future__ import annotations
 
@@ -26,79 +10,61 @@ from decimal import Decimal
 from .config.model import Scoring
 from .market.formulas import normative_decimal_context
 
+VALID_CONFIDENCE = frozenset({"high", "medium", "low", "unresolved"})
+
+
+class RankingError(ValueError):
+    """Ranking input violates the closed deterministic contract."""
+
 
 def _ts_sort_key(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
 @dataclass(frozen=True)
-class SelectionInput:
+class RankingInput:
     event_id: str
     fully_known_at: str
     base_priority: Decimal
     confidence: str  # high | medium | low | unresolved
     component_coverage: Decimal  # 0..1
-    analysis_present: bool = True
-    packet_passed: bool = True
-    conflict_free: bool = True
-    breaking_label: bool = False
     story_family_id: str | None = None
     coexistence_pairs: frozenset[tuple[str, str]] = frozenset()
 
 
 @dataclass(frozen=True)
-class SelectedEvent:
+class RankedEvent:
     event_id: str
-    final_priority: Decimal
     base_priority: Decimal
-    format: str  # full | compact
-    breaking_unconfirmed: bool = False
+    final_priority: Decimal
 
 
 @dataclass
-class SelectionResult:
-    selected: list[SelectedEvent]
+class RankingResult:
+    ranked: list[RankedEvent]
     ineligible_reasons: dict[str, str] = field(default_factory=dict)
-    sparse_warning: bool = False
 
 
-def _full_capable(item: SelectionInput, scoring: Scoring) -> bool:
-    if item.confidence == "high":
-        return True
-    return bool(item.confidence == "medium" and item.packet_passed and item.conflict_free)
-
-
-def _compact_capable(item: SelectionInput, scoring: Scoring) -> bool:
-    if item.confidence == "high":
-        return True
-    if item.confidence == "medium" and item.packet_passed and item.conflict_free:
-        return True
-    return bool(item.confidence == "low" and item.breaking_label)
-
-
-def _eligible(item: SelectionInput, scoring: Scoring) -> bool:
+def _eligible(item: RankingInput, scoring: Scoring) -> bool:
     if item.confidence == "unresolved":
-        return False
-    if not item.analysis_present:
         return False
     return not item.component_coverage < Decimal(scoring.min_component_coverage) / 100
 
 
-def select_events(
-    items: Sequence[SelectionInput],
+def rank_events(
+    items: Sequence[RankingInput],
     scoring: Scoring,
-) -> SelectionResult:
-    """The single normative selection pipeline."""
+) -> RankingResult:
+    """Rank all eligible inputs with deterministic family penalties."""
     ineligible: dict[str, str] = {}
-    eligible: list[SelectionInput] = []
+    eligible: list[RankingInput] = []
     for item in items:
+        if item.confidence not in VALID_CONFIDENCE:
+            raise RankingError(f"unsupported confidence: {item.confidence!r}")
         if not _eligible(item, scoring):
-            reason = (
-                "unresolved"
-                if item.confidence == "unresolved"
-                else ("no_analysis" if not item.analysis_present else "below_coverage")
+            ineligible[item.event_id] = (
+                "unresolved" if item.confidence == "unresolved" else "below_coverage"
             )
-            ineligible[item.event_id] = reason
             continue
         eligible.append(item)
 
@@ -106,12 +72,13 @@ def select_events(
     # event ID asc.
     base_order = sorted(
         eligible,
-        key=lambda i: (
-            -i.base_priority,
-            -_ts_sort_key(i.fully_known_at).timestamp(),
-            i.event_id,
+        key=lambda item: (
+            -item.base_priority,
+            -_ts_sort_key(item.fully_known_at).timestamp(),
+            item.event_id,
         ),
     )
+
     # Normalize the already validated incident-pair projections into one
     # immutable set. Resolver semantic errors must fail upstream.
     coexistence_pairs = frozenset(
@@ -130,71 +97,29 @@ def select_events(
         elif tuple(sorted((first_member[family], item.event_id))) not in coexistence_pairs:
             penalized.add(item.event_id)
 
-    final: list[SelectedEvent] = []
+    final: list[RankedEvent] = []
     for item in base_order:
         penalty = Decimal(scoring.family_penalty) if item.event_id in penalized else Decimal(0)
         with normative_decimal_context():
             final_priority = max(Decimal(0), item.base_priority - penalty)
-        full = _full_capable(item, scoring)
-        compact = _compact_capable(item, scoring)
-        if full and final_priority >= Decimal(scoring.full_priority_threshold):
-            final.append(
-                SelectedEvent(
-                    item.event_id,
-                    final_priority,
-                    item.base_priority,
-                    "full",
-                    breaking_unconfirmed=item.confidence == "low",
-                )
+        final.append(
+            RankedEvent(
+                event_id=item.event_id,
+                base_priority=item.base_priority,
+                final_priority=final_priority,
             )
-        elif compact and final_priority >= Decimal(scoring.compact_priority_threshold):
-            final.append(
-                SelectedEvent(
-                    item.event_id,
-                    final_priority,
-                    item.base_priority,
-                    "compact",
-                    breaking_unconfirmed=item.confidence == "low",
-                )
-            )
-        # else discarded (below thresholds)
+        )
 
-    # Final sort: final priority desc, fully_known_at desc, ID asc.
+    fully_known_by_id = {item.event_id: item.fully_known_at for item in eligible}
     final_order = sorted(
         final,
-        key=lambda s: (
-            -s.final_priority,
-            -_ts_sort_key(_fully_known_by_id(s.event_id, items)).timestamp(),
-            s.event_id,
+        key=lambda event: (
+            -event.final_priority,
+            -_ts_sort_key(fully_known_by_id[event.event_id]).timestamp(),
+            event.event_id,
         ),
     )
-
-    hard_max = scoring.hard_max_count
-    chosen = final_order[:hard_max]
-
-    # Full format: first up to max_full_events full-capable with priority >= 60.
-    full_count = 0
-    for i, sel in enumerate(chosen):
-        if sel.format == "full" and full_count < scoring.max_full_events:
-            full_count += 1
-        elif sel.format == "full":
-            # Full-capable outside the first three remains compact.
-            chosen[i] = SelectedEvent(
-                sel.event_id,
-                sel.final_priority,
-                sel.base_priority,
-                "compact",
-                breaking_unconfirmed=sel.breaking_unconfirmed,
-            )
-
-    sparse = len(chosen) < 3
-    return SelectionResult(
-        selected=list(chosen), ineligible_reasons=ineligible, sparse_warning=sparse
+    return RankingResult(
+        ranked=final_order,
+        ineligible_reasons=dict(sorted(ineligible.items())),
     )
-
-
-def _fully_known_by_id(event_id: str, items: Sequence[SelectionInput]) -> str:
-    for item in items:
-        if item.event_id == event_id:
-            return item.fully_known_at
-    return ""

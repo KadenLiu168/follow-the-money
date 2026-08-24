@@ -227,15 +227,10 @@ class Scoring:
     significance_weights: tuple[int, ...] = (30, 20, 20, 20, 10)
     freshness_bins: tuple[tuple[int, int], ...] = ((6, 100), (12, 75), (24, 50), (48, 25))
     freshness_older_score: int = 0
-    morning_weights: tuple[int, int, int, int] = (40, 25, 20, 15)
+    relevance_weights: tuple[int, int, int, int] = (40, 25, 20, 15)
     base_priority_weights: tuple[str, str] = ("0.70", "0.30")
     min_component_coverage: str = "60"
-    full_priority_threshold: str = "60"
-    compact_priority_threshold: str = "40"
     family_penalty: str = "15"
-    target_count: int = 10
-    hard_max_count: int = 12
-    max_full_events: int = 3
     anomaly_z_threshold: str = "2.0"
     scope_map: Mapping[str, int] = field(
         default_factory=lambda: {

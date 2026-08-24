@@ -68,5 +68,5 @@ self-hosted runner，配置持久化共享输出根与持久速率状态，并�
 
 - `docs/architecture.md` — 保留的确定性引擎与过渡状态
 - `docs/feed-contract.md` — Feed schema、窗口/截止模型、发布
-- `docs/scoring.md` — 确定性打分与选择契约
+- `docs/scoring.md` — 确定性打分与 ranking 契约
 - 操作手册：`docs/runbooks/`

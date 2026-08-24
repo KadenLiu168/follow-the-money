@@ -1,11 +1,11 @@
-"""Deterministic scoring (Event Significance, Morning Relevance, Brief Priority).
+"""Deterministic scoring (Event Significance, Event Relevance, Base Priority).
 
 Design sections 12/13:
 
 - All score components are on a closed 0..100 scale; weights 30/20/20/20/10.
 - Missing-data policy: full denominator preserved, unknown component
   contributes zero, component coverage = known weights / total; >= 60%
-  coverage required for every normally selected full/compact event.
+  coverage required for every normally rankable event.
 - Fundamental Magnitude known only when scope+fundamental_depth are
   non-unknown; Persistence only when reversibility+structural_horizon are
   non-unknown.
@@ -14,9 +14,9 @@ Design sections 12/13:
 - Systemic Breadth = affected_groups / 9 * 100; Repricing Magnitude uses the
   maximum observable absolute current-excluded reaction z among mapped-group
   proxies.
-- Morning Relevance: freshness ``evidence_cutoff_at - fully_known_at`` with
+- Event Relevance: freshness ``evidence_cutoff_at - fully_known_at`` with
   fixed bins; exposure maps 100/50/0/0; catalyst present/absent 100/0.
-- Brief Priority = 0.70 * significance + 0.30 * morning_relevance.
+- Base Priority = 0.70 * significance + 0.30 * event_relevance.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ class EventScores:
     components: Mapping[str, ComponentScore]
     significance: Decimal
     coverage: Decimal
-    morning_relevance: Decimal
+    event_relevance: Decimal
     base_priority: Decimal
 
     @property
@@ -107,7 +107,8 @@ def significance_components(
     if affected_groups is None or affected_groups < 0:
         out["systemic_breadth"] = ComponentScore(None, weights[2], False, "unclear_mappings")
     else:
-        breadth = Decimal(affected_groups) / 9 * 100
+        with normative_decimal_context():
+            breadth = Decimal(affected_groups) / 9 * 100
         out["systemic_breadth"] = ComponentScore(breadth, weights[2], True)
 
     # Repricing Magnitude: max observable absolute reaction z via bins.
@@ -171,7 +172,7 @@ def freshness_score(age_hours: Decimal, scoring: Scoring) -> Decimal:
     return Decimal(scoring.freshness_older_score)
 
 
-def morning_relevance(
+def event_relevance(
     *,
     scoring: Scoring,
     age_hours: Decimal,
@@ -179,12 +180,17 @@ def morning_relevance(
     us_next_session_exposure: str,
     catalyst_present: bool,
 ) -> Decimal:
-    """40/25/20/15 weighted Morning Relevance."""
-    w_fresh, w_cn, w_us, w_cat = scoring.morning_weights
+    """40/25/20/15 weighted Event Relevance."""
+    if (
+        cn_hk_exposure not in scoring.exposure_map
+        or us_next_session_exposure not in scoring.exposure_map
+    ):
+        raise ScoringError("missing categorical mapping for relevance exposure")
+    w_fresh, w_cn, w_us, w_cat = scoring.relevance_weights
     with normative_decimal_context():
         fresh = freshness_score(age_hours, scoring)
-        cn = Decimal(scoring.exposure_map.get(cn_hk_exposure, 0))
-        us = Decimal(scoring.exposure_map.get(us_next_session_exposure, 0))
+        cn = Decimal(scoring.exposure_map[cn_hk_exposure])
+        us = Decimal(scoring.exposure_map[us_next_session_exposure])
         cat = Decimal(
             scoring.catalyst_map["present"] if catalyst_present else scoring.catalyst_map["absent"]
         )
@@ -192,7 +198,7 @@ def morning_relevance(
     return total
 
 
-def brief_priority(significance: Decimal, morning: Decimal, scoring: Scoring) -> Decimal:
-    w_sig, w_morning = scoring.base_priority_weights
+def base_priority(significance: Decimal, relevance: Decimal, scoring: Scoring) -> Decimal:
+    w_sig, w_relevance = scoring.base_priority_weights
     with normative_decimal_context():
-        return significance * Decimal(w_sig) + morning * Decimal(w_morning)
+        return significance * Decimal(w_sig) + relevance * Decimal(w_relevance)

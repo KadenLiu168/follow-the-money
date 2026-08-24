@@ -71,7 +71,7 @@ def test_yaml_owned_values_reach_resolved_model(tmp_path: Path):
     data = _read_yaml(config_path)
     data["timezone"] = "UTC"
     data["feed"]["lock_timeout_seconds"] = 17
-    data["scoring"]["full_priority_threshold"] = "73"
+    data["scoring"]["relevance_weights"] = [45, 25, 15, 15]
     data["market_state"]["required_known_dimensions"] = 3
     data["calendar"]["max_items"] = 9
     data["safety_lexicon"]["zh_terms"] = ["仅测试词"]
@@ -82,7 +82,7 @@ def test_yaml_owned_values_reach_resolved_model(tmp_path: Path):
 
     assert cfg.timezone == "UTC"
     assert cfg.feed.lock_timeout_seconds == 17
-    assert cfg.scoring.full_priority_threshold == "73"
+    assert cfg.scoring.relevance_weights == (45, 25, 15, 15)
     assert cfg.market_state.required_known_dimensions == 3
     assert cfg.calendar.max_items == 9
     assert cfg.safety_lexicon.zh_terms == ("仅测试词",)
@@ -94,7 +94,7 @@ def test_yaml_owned_values_reach_resolved_model(tmp_path: Path):
     [
         ("top", "timezone"),
         ("feed", "lock_timeout_seconds"),
-        ("scoring", "full_priority_threshold"),
+        ("scoring", "relevance_weights"),
         ("market_state", "z_supportive"),
         ("calendar", "max_items"),
         ("safety_lexicon", "zh_terms"),

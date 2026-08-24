@@ -208,15 +208,10 @@ SCORING_KEYS = frozenset(
         "significance_weights",
         "freshness_bins",
         "freshness_older_score",
-        "morning_weights",
+        "relevance_weights",
         "base_priority_weights",
         "min_component_coverage",
-        "full_priority_threshold",
-        "compact_priority_threshold",
         "family_penalty",
-        "target_count",
-        "hard_max_count",
-        "max_full_events",
         "anomaly_z_threshold",
         "scope_map",
         "fundamental_depth_map",
@@ -572,9 +567,9 @@ def _parse_scoring(raw: Any, where: str, *, strict: bool = False) -> Scoring:
             tuple(int(v) for v in row) for row in field("freshness_bins", Scoring.freshness_bins)
         ),
     )
-    morning_weights = cast(
+    relevance_weights = cast(
         tuple[int, int, int, int],
-        tuple(int(v) for v in field("morning_weights", Scoring.morning_weights)),
+        tuple(int(v) for v in field("relevance_weights", Scoring.relevance_weights)),
     )
     base_priority_weights = cast(
         tuple[str, str],
@@ -584,15 +579,10 @@ def _parse_scoring(raw: Any, where: str, *, strict: bool = False) -> Scoring:
         significance_weights=weights,
         freshness_bins=freshness_bins,
         freshness_older_score=int(field("freshness_older_score", 0)),
-        morning_weights=morning_weights,
+        relevance_weights=relevance_weights,
         base_priority_weights=base_priority_weights,
         min_component_coverage=str(field("min_component_coverage", "60")),
-        full_priority_threshold=str(field("full_priority_threshold", "60")),
-        compact_priority_threshold=str(field("compact_priority_threshold", "40")),
         family_penalty=str(field("family_penalty", "15")),
-        target_count=int(field("target_count", 10)),
-        hard_max_count=int(field("hard_max_count", 12)),
-        max_full_events=int(field("max_full_events", 3)),
         anomaly_z_threshold=str(field("anomaly_z_threshold", "2.0")),
         scope_map={str(k): int(v) for k, v in field("scope_map", Scoring().scope_map).items()},
         fundamental_depth_map={
@@ -635,7 +625,7 @@ def _validate_scoring_domains(scoring: Scoring) -> None:
         actual = set(getattr(scoring, name))
         if actual != expected:
             raise ConfigError(f"scoring.{name}: keys must be exactly {sorted(expected)}")
-    if len(scoring.significance_weights) != 5 or len(scoring.morning_weights) != 4:
+    if len(scoring.significance_weights) != 5 or len(scoring.relevance_weights) != 4:
         raise ConfigError("scoring weight vectors have unsupported lengths")
     if len(scoring.base_priority_weights) != 2:
         raise ConfigError("scoring.base_priority_weights must contain two values")
