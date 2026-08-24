@@ -203,6 +203,64 @@ def test_fractional_systemic_breadth_is_ambient_context_independent():
     ]
 
 
+def test_significance_components_ignore_hostile_decimal_context():
+    scoring = _scoring()
+    original_context = repr(getcontext())
+    results = []
+
+    for precision, rounding in ((1, ROUND_UP), (80, ROUND_DOWN)):
+        with localcontext() as context:
+            context.prec = precision
+            context.rounding = rounding
+            components = _components(
+                scoring,
+                scope="sector",
+                fundamental_depth="headline",
+                reversibility="medium",
+                structural_horizon="months",
+                surprise_values=[Decimal("1.5")],
+                affected_groups=3,
+                observable_repricing_z=Decimal("-0.4999"),
+            )
+            significance, coverage = event_significance(components)
+            results.append(
+                (
+                    {name: component.value for name, component in components.items()},
+                    significance,
+                    coverage,
+                )
+            )
+
+    assert repr(getcontext()) == original_context
+    assert results == [
+        (
+            {
+                "fundamental_magnitude": Decimal("37.5"),
+                "surprise": Decimal(50),
+                "systemic_breadth": Decimal("33.333333333333333333333333333333333333333333333333"),
+                "repricing_magnitude": Decimal(0),
+                "persistence": Decimal("62.5"),
+            },
+            Decimal("34.166666666666666666666666666666666666666666666667"),
+            Decimal(1),
+        ),
+        (
+            {
+                "fundamental_magnitude": Decimal("37.5"),
+                "surprise": Decimal(50),
+                "systemic_breadth": Decimal("33.333333333333333333333333333333333333333333333333"),
+                "repricing_magnitude": Decimal(0),
+                "persistence": Decimal("62.5"),
+            },
+            Decimal("34.166666666666666666666666666666666666666666666667"),
+            Decimal(1),
+        ),
+    ]
+
+    boundary = _components(scoring, observable_repricing_z=Decimal("-0.5"))
+    assert boundary["repricing_magnitude"].value == Decimal(25)
+
+
 def test_frozen_base_priority_and_hostile_decimal_context():
     scoring = _scoring()
     old_context = getcontext().copy()

@@ -87,10 +87,11 @@ def significance_components(
     if scope == "unknown" or fundamental_depth == "unknown":
         out["fundamental_magnitude"] = ComponentScore(None, weights[0], False, "unknown_category")
     else:
-        fm = (
-            Decimal(scoring.scope_map[scope])
-            + Decimal(scoring.fundamental_depth_map[fundamental_depth])
-        ) / 2
+        with normative_decimal_context():
+            fm = (
+                Decimal(scoring.scope_map[scope])
+                + Decimal(scoring.fundamental_depth_map[fundamental_depth])
+            ) / 2
         out["fundamental_magnitude"] = ComponentScore(fm, weights[0], True)
 
     # Surprise: max |normalized surprise| among available values.
@@ -113,7 +114,9 @@ def significance_components(
 
     # Repricing Magnitude: max observable absolute reaction z via bins.
     if observable_repricing_z is not None:
-        score = _surprise_bin_score(abs(observable_repricing_z), scoring.surprise_bins)
+        with normative_decimal_context():
+            repricing_magnitude = abs(observable_repricing_z)
+        score = _surprise_bin_score(repricing_magnitude, scoring.surprise_bins)
         out["repricing_magnitude"] = ComponentScore(score, weights[3], True)
     else:
         out["repricing_magnitude"] = ComponentScore(None, weights[3], False, "no_observable_proxy")
@@ -127,10 +130,11 @@ def significance_components(
     if reversibility == "unknown" or structural_horizon == "unknown":
         out["persistence"] = ComponentScore(None, weights[4], False, "unknown_category")
     else:
-        p = (
-            Decimal(scoring.reversibility_map[reversibility])
-            + Decimal(scoring.structural_horizon_map[structural_horizon])
-        ) / 2
+        with normative_decimal_context():
+            p = (
+                Decimal(scoring.reversibility_map[reversibility])
+                + Decimal(scoring.structural_horizon_map[structural_horizon])
+            ) / 2
         out["persistence"] = ComponentScore(p, weights[4], True)
 
     return out

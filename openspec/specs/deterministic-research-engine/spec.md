@@ -262,6 +262,12 @@ caller or standalone external scoring schema.
 - **THEN** they use the same formulas, configured weights, categorical mappings, surprise bins, missing-data behavior, and operation order
 - **THEN** Systemic Breadth and downstream Event Significance produce the same result determined by the repository-owned normative Decimal context
 
+#### Scenario: Significance components ignore hostile ambient Decimal context
+- **WHEN** equivalent valid scoring vectors use `sector` scope, `headline` fundamental depth, `medium` reversibility, `months` structural horizon, three affected groups, a known surprise, and observable repricing z of `-0.4999`, and are evaluated under materially different ambient Decimal precision and rounding settings
+- **THEN** Fundamental Magnitude is exactly `37.5`, Persistence is exactly `62.5`, Systemic Breadth is exactly `33.333333333333333333333333333333333333333333333333`, and Repricing Magnitude is exactly `0` in every ambient context
+- **THEN** all five significance component values, downstream Event Significance, and component coverage are identical across those ambient contexts and are determined by the repository-owned normative Decimal context
+- **THEN** the absolute repricing magnitude `0.4999` remains below the configured `0.5` boundary without tolerance, quantization, or bin-policy changes
+
 #### Scenario: Brief-only configuration is supplied
 - **WHEN** closed configuration contains a removed full/compact threshold, Brief count limit, or the superseded relevance-weight key
 - **THEN** strict configuration loading rejects the unknown legacy key rather than accepting an alias or fallback
