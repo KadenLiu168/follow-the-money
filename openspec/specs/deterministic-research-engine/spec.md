@@ -232,16 +232,18 @@ configured 30/20/20/20/10 significance weights, missing-data policy, component
 coverage, freshness, China/Hong Kong exposure, US next-session exposure, catalyst
 inputs, configured 40/25/20/15 relevance weights, and configured 0.70/0.30 base-
 priority formula in versioned configuration. For equivalent semantic inputs and
-configuration, neutral scoring names SHALL produce exactly the same significance,
-coverage, relevance, and base-priority values as the superseded Morning Relevance
-and Brief Priority names, using the same bins, mappings, missing-data behavior,
-operation order, precision, and rounding. Financial arithmetic SHALL use the
-normative high-precision Decimal context; unknown components SHALL contribute zero
-without denominator renormalization, and rankable inputs SHALL require the
-configured minimum known-weight coverage. Scoring inputs SHALL remain caller-supplied
-typed Python values until a future Agent Contract defines how analysis reaches this
-boundary. Scoring SHALL remain a retained deterministic library with no production
-orchestration caller or standalone external scoring schema.
+configuration, neutral scoring names SHALL preserve the same scoring formulas,
+configured weights, categorical mappings, surprise bins, missing-data behavior, and
+operation order.
+Systemic Breadth SHALL remain `affected_groups / 9 * 100`. All normative financial
+arithmetic SHALL use the repository-owned high-precision Decimal context, and that
+context SHALL determine numerical results independently of ambient process Decimal
+precision or rounding. Unknown components SHALL contribute zero without denominator
+renormalization, and rankable inputs SHALL require the configured minimum known-
+weight coverage. Scoring inputs SHALL remain caller-supplied typed Python values
+until a future Agent Contract defines how analysis reaches this boundary. Scoring
+SHALL remain a retained deterministic library with no production orchestration
+caller or standalone external scoring schema.
 
 #### Scenario: One significance component is unknown
 - **WHEN** an input component lacks the evidence required by its closed mapping
@@ -256,8 +258,9 @@ orchestration caller or standalone external scoring schema.
 - **THEN** scoring fails closed rather than assigning a default score
 
 #### Scenario: Neutral scoring names receive an equivalent vector
-- **WHEN** neutral relevance and base-priority operations receive semantic inputs and configuration equivalent to a pre-change scoring vector
-- **THEN** significance, component coverage, relevance, and base priority are exactly equal to the pre-change Decimal results
+- **WHEN** equivalent semantic scoring inputs and configuration are evaluated through the neutral scoring contract under materially different ambient Decimal precision and rounding settings
+- **THEN** they use the same formulas, configured weights, categorical mappings, surprise bins, missing-data behavior, and operation order
+- **THEN** Systemic Breadth and downstream Event Significance produce the same result determined by the repository-owned normative Decimal context
 
 #### Scenario: Brief-only configuration is supplied
 - **WHEN** closed configuration contains a removed full/compact threshold, Brief count limit, or the superseded relevance-weight key

@@ -133,4 +133,4 @@ Risk Appetite requires 2/4 votes, Rates 1/3, Liquidity 1/2, Growth 1/2,
 Inflation 1/4. Regime is `unknown` unless Risk Appetite is known and >= 4/5
 dimensions are known; `risk_off` when RA=-1 and sum<=-2; `risk_on` when
 RA=+1 and sum>=2; otherwise `neutral`. The regime is informational and never
-changes scoring, confidence, or selection.
+changes scoring, confidence, or ranking.

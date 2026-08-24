@@ -6,7 +6,7 @@ import ast
 import inspect
 import shutil
 from dataclasses import fields
-from decimal import ROUND_DOWN, Decimal, getcontext
+from decimal import ROUND_DOWN, ROUND_UP, Decimal, getcontext, localcontext
 from pathlib import Path
 
 import pytest
@@ -167,6 +167,40 @@ def test_frozen_surprise_freshness_breadth_and_relevance_oracles():
         us_next_session_exposure="none",
         catalyst_present=False,
     ) == Decimal(0)
+
+
+def test_fractional_systemic_breadth_is_ambient_context_independent():
+    scoring = _scoring()
+    original_context = repr(getcontext())
+    results = []
+
+    for precision, rounding in ((6, ROUND_DOWN), (80, ROUND_UP)):
+        with localcontext() as context:
+            context.prec = precision
+            context.rounding = rounding
+            components = _components(scoring, affected_groups=3)
+            significance, coverage = event_significance(components)
+            results.append(
+                (
+                    components["systemic_breadth"].value,
+                    significance,
+                    coverage,
+                )
+            )
+
+    assert repr(getcontext()) == original_context
+    assert results == [
+        (
+            Decimal("33.333333333333333333333333333333333333333333333333"),
+            Decimal("81.666666666666666666666666666666666666666666666667"),
+            Decimal(1),
+        ),
+        (
+            Decimal("33.333333333333333333333333333333333333333333333333"),
+            Decimal("81.666666666666666666666666666666666666666666666667"),
+            Decimal(1),
+        ),
+    ]
 
 
 def test_frozen_base_priority_and_hostile_decimal_context():
