@@ -43,6 +43,10 @@ class EntityResolver:
                 key = _norm(name)
                 self._alias_index.setdefault(key, []).append(e)
 
+    def is_canonical_id(self, entity_id: str) -> bool:
+        """Return whether ``entity_id`` is an exact configured registry ID."""
+        return entity_id in self._entities
+
     def resolve(self, raw: str) -> Resolution:
         key = _norm(raw)
         if not key:

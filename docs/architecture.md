@@ -35,7 +35,7 @@ Every retained structure is reproducible from the same inputs and protected by
 the contract appropriate to its boundary. The Feed is the current serialized
 external contract: it is validated against `schemas/feed.schema.json` plus
 semantic, identity, and digest checks. Internal deterministic structures such
-as the ledger, candidate blocks, market snapshot/state, watchlist, scoring
+as the ledger, candidate Components/grouping, market snapshot/state, watchlist, scoring
 intermediates, and selection inputs use typed Python interfaces, domain
 invariants/validation, and deterministic tests; they do not require a
 standalone JSON Schema each.
@@ -48,7 +48,7 @@ standalone JSON Schema each.
 | `schemas/` | JSON Schema 2020-12 contracts (`feed.schema.json`) |
 | `providers/` | Contract manifests, adapters, HTTP/rate/lock discipline |
 | `feed/` | Feed planning, deduplication, validation, publication, minimal entry |
-| `engine/` | Feed health, entity resolution, candidate blocks, title similarity |
+| `engine/` | Feed health, entity resolution, candidate Components, title similarity |
 | `events.py` | Canonical Event/family ID derivation (pure, script-owned) |
 | `market/` | Decimal formulas, surprise, confidence |
 | `ledger.py` | Frozen evidence ledger |
