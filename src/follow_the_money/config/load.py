@@ -23,7 +23,12 @@ from typing import Any, cast
 import exchange_calendars as xcals
 import yaml
 
-from ..providers.manifest import ManifestError, load_manifest, manifest_to_provider_entry
+from ..providers.manifest import (
+    ManifestError,
+    load_manifest,
+    manifest_to_provider_entry,
+    validate_mapping_provenance,
+)
 from .model import (
     V1_ROLE_IDS,
     AppConfig,
@@ -452,7 +457,6 @@ def _parse_roles(raw: Any, where: str, *, strict: bool = False) -> tuple[MarketR
                         "provider_id",
                         "economic_identity",
                         "daily_close_semantics",
-                        "source_provenance",
                         "mapping_verified",
                         "availability_lag_seconds",
                         "session_id",
@@ -472,7 +476,6 @@ def _parse_roles(raw: Any, where: str, *, strict: bool = False) -> tuple[MarketR
                 "provider_id",
                 "economic_identity",
                 "daily_close_semantics",
-                "source_provenance",
                 "mapping_verified",
                 "availability_lag_seconds",
                 "session_id",
@@ -490,7 +493,6 @@ def _parse_roles(raw: Any, where: str, *, strict: bool = False) -> tuple[MarketR
             "provider_id",
             "economic_identity",
             "daily_close_semantics",
-            "source_provenance",
         ):
             if not str(item[field_name]).strip():
                 raise ConfigError(f"{where}.role.{item['id']}.{field_name} must be non-empty")
@@ -506,7 +508,6 @@ def _parse_roles(raw: Any, where: str, *, strict: bool = False) -> tuple[MarketR
                 provider_id=str(item["provider_id"]),
                 economic_identity=str(item["economic_identity"]),
                 daily_close_semantics=str(item["daily_close_semantics"]),
-                source_provenance=str(item["source_provenance"]),
                 mapping_verified=bool(item["mapping_verified"]),
                 availability_lag_seconds=availability_lag_seconds,
                 session_id=str(item["session_id"]),
@@ -678,6 +679,54 @@ def _validate_coverage(providers: tuple[ProviderEntry, ...], coverage: CoverageM
             )
 
 
+def _validate_market_coverage(
+    providers: tuple[ProviderEntry, ...], coverage: CoverageMatrix
+) -> None:
+    by_id = {provider.id: provider for provider in providers}
+    enabled_market_providers = {
+        provider.id for provider in providers if provider.enabled and provider.role_mappings
+    }
+    unsupported_claims = {
+        "china_hk_cross_asset_market",
+        "market_data_all_13_roles",
+        "cross_asset_market",
+    }
+    covered_market_providers: set[str] = set()
+    for row in coverage.rows:
+        if row.group in unsupported_claims or row.capability in unsupported_claims:
+            raise ConfigError(
+                f"coverage row {row.group}: unsupported market coverage claim {row.capability!r}"
+            )
+        market_members = enabled_market_providers.intersection(row.members)
+        declares_market_coverage = (
+            row.group == "verified_market_data" or row.capability == "verified_market_data"
+        )
+        if not market_members and not declares_market_coverage:
+            continue
+        if row.group != "verified_market_data" or row.capability != "verified_market_data":
+            raise ConfigError(
+                f"coverage row {row.group}: unsupported market coverage claim {row.capability!r}"
+            )
+        non_market_members = set(row.members) - enabled_market_providers
+        if non_market_members:
+            raise ConfigError(
+                f"coverage row {row.group}: non-market members cannot satisfy verified runnable "
+                f"coverage: {sorted(non_market_members)}"
+            )
+        covered_market_providers.update(market_members)
+        for member in market_members:
+            provider = by_id[member]
+            if not any(bool(mapping["mapping_verified"]) for mapping in provider.role_mappings):
+                raise ConfigError(
+                    f"coverage row {row.group}: member {member!r} has no verified runnable mappings"
+                )
+    missing = enabled_market_providers - covered_market_providers
+    if missing:
+        raise ConfigError(
+            f"enabled market Providers lack verified_market_data coverage: {sorted(missing)}"
+        )
+
+
 def _validate_rate_policies(providers: tuple[ProviderEntry, ...]) -> None:
     by_scope: dict[str, RatePolicy] = {}
     for p in providers:
@@ -688,6 +737,22 @@ def _validate_rate_policies(providers: tuple[ProviderEntry, ...]) -> None:
         if existing is not None and existing != rp:
             raise ConfigError(f"rate scope {rp.scope_id!r} declared inconsistently by {p.id!r}")
         by_scope[rp.scope_id] = rp
+
+
+def _validate_role_mapping_mirrors(provider: ProviderEntry, roles: tuple[MarketRole, ...]) -> None:
+    if not provider.role_mappings:
+        return
+    mapping_ids = [str(item["role_id"]) for item in provider.role_mappings]
+    if len(mapping_ids) != len(set(mapping_ids)):
+        raise ConfigError(f"{provider.id} role mappings contain duplicate role ids")
+    mappings = {str(item["role_id"]): item for item in provider.role_mappings}
+    if set(mappings) != {role.id for role in roles}:
+        raise ConfigError(f"{provider.id} role mapping set does not match canonical roles")
+    for role in roles:
+        mapping = mappings[role.id]
+        for field_name in ("instrument", "unit", "mapping_verified"):
+            if mapping.get(field_name) != getattr(role, field_name):
+                raise ConfigError(f"role mapping mirror mismatch for {role.id!r}: {field_name}")
 
 
 _REGISTRY_PROVIDER_KEYS = frozenset(
@@ -789,6 +854,13 @@ def _resolve_provider_entries(
             continue
         try:
             manifest = load_manifest(pid, manifest_root)
+            for mapping in manifest.get("role_mappings", []):
+                validate_mapping_provenance(
+                    manifest,
+                    mapping,
+                    manifest_root=manifest_root,
+                    provider_id=pid,
+                )
             entry = manifest_to_provider_entry(
                 manifest,
                 enabled=bool(policy["enabled"]),
@@ -799,6 +871,12 @@ def _resolve_provider_entries(
         _provider_mirror_matches(policy, entry, f"providers.{pid}")
         if require_verified_enabled and entry.enabled and not entry.verified:
             raise ConfigError(f"provider {pid!r} is enabled but unverified")
+        if (
+            entry.enabled
+            and entry.role_mappings
+            and not any(bool(mapping["mapping_verified"]) for mapping in entry.role_mappings)
+        ):
+            raise ConfigError(f"provider {pid!r} has zero verified runnable market mappings")
         entries.append(entry)
 
     if not entries and policies:
@@ -1272,19 +1350,11 @@ def load_config(
             if role.session_id not in session_ids:
                 raise ConfigError(f"role {role.id!r}: unknown session {role.session_id!r}")
         _validate_coverage(providers, coverage)
+        _validate_market_coverage(providers, coverage)
         _validate_rate_policies(providers)
         yahoo = next((p for p in providers if p.id == "yahoo_market"), None)
-        if yahoo is not None and yahoo.role_mappings:
-            mappings = {str(item["role_id"]): item for item in yahoo.role_mappings}
-            if set(mappings) != {role.id for role in roles}:
-                raise ConfigError("yahoo_market role mapping set does not match canonical roles")
-            for role in roles:
-                mapping = mappings[role.id]
-                for field_name in ("instrument", "unit", "mapping_verified"):
-                    if mapping.get(field_name) != getattr(role, field_name):
-                        raise ConfigError(
-                            f"role mapping mirror mismatch for {role.id!r}: {field_name}"
-                        )
+        if yahoo is not None:
+            _validate_role_mapping_mirrors(yahoo, roles)
 
     return AppConfig(
         schema_version=schema_version,

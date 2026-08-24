@@ -24,7 +24,7 @@ MANDATORY_ROWS = {
     "us_company_filings": ("sec_edgar",),
     "china_official_macro_policy": ("pboc", "nbs"),
     "china_exchange_evidence": ("sse", "szse"),
-    "china_hk_cross_asset_market": ("yahoo_market",),
+    "verified_market_data": ("yahoo_market",),
     "future_calendar": ("federal_reserve", "bls", "nbs"),
 }
 
@@ -43,7 +43,7 @@ def test_shipped_matrix_minima_match_design():
             "us_company_filings": 1,
             "china_official_macro_policy": 2,
             "china_exchange_evidence": 2,
-            "china_hk_cross_asset_market": 1,
+            "verified_market_data": 1,
             "future_calendar": 3,
         }[r.group]
         assert r.minimum == expected_min

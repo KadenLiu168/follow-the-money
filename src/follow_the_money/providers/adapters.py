@@ -11,7 +11,7 @@ The six mandatory v1 coverage-matrix rows are backed by these adapters:
 - ``us_company_filings``: sec_edgar (watched-company filing contract)
 - ``china_official_macro_policy``: pboc + nbs
 - ``china_exchange_evidence``: sse + szse
-- ``china_hk_cross_asset_market``: yahoo_market (13 dashboard roles)
+- ``verified_market_data``: yahoo_market (verified mappings only)
 - ``future_calendar``: federal_reserve + bls + nbs
 """
 
@@ -589,9 +589,9 @@ class SzseAdapter(BaseAdapter):
 class YahooMarketAdapter(BaseAdapter):
     """Yahoo-compatible market data for the 13 v1 dashboard roles.
 
-    ``fetch`` requests the chart API for one configured symbol with an
+    ``fetch`` requests the chart API for one verified configured symbol with an
     explicit cutoff-derived 90-calendar-day daily-history query; production
-    orchestration fans out over all 13 roles. ``normalize`` decodes the chart
+    orchestration fans out over verified mappings only. ``normalize`` decodes the chart
     JSON into strictly chronological bounded ``market_data`` observations.
     Daily timestamps are session labels, not completed closes, so
     observation-level eligibility (session close plus the role's configured

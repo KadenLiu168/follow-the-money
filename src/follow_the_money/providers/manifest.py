@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Mapping
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 import yaml
 
 from ..config.model import FetchRule, ProviderEntry, RatePolicy, SourceLinkRule
+from .urls import UrlValidationError, canonicalize_url
 
 MANIFEST_ROOT = Path(__file__).resolve().parents[3] / "providers"
 SUPPORTED_CONTRACT_VERSION = 1
+MAPPING_PROVENANCE_KINDS = frozenset({"repository_fixture", "authoritative_https"})
+_BARE_PERCENT = re.compile(r"%(?![0-9A-Fa-f]{2})")
 
 
 class ManifestError(ValueError):
@@ -193,6 +200,15 @@ def _validate_manifest(data: Mapping[str, Any], path: Path, provider_id: str) ->
         not verification["verification_date"] or not verification["contract_url"]
     ):
         raise ManifestError(f"manifest {path}: verified manifest needs verification evidence")
+    if verification["verified"]:
+        contract_url = verification["contract_url"]
+        if (
+            not isinstance(contract_url, str)
+            or _canonical_authoritative_url(contract_url) != contract_url
+        ):
+            raise ManifestError(
+                f"manifest {path}.verification.contract_url must be canonical HTTPS"
+            )
 
     charset = data["charset"]
     if not isinstance(charset, dict):
@@ -275,15 +291,239 @@ def _validate_manifest(data: Mapping[str, Any], path: Path, provider_id: str) ->
     for index, mapping in enumerate(data.get("role_mappings", [])):
         if not isinstance(mapping, dict):
             raise ManifestError(f"manifest {path}.role_mappings[{index}] must be a mapping")
-        _require(
-            mapping,
-            {"role_id", "instrument", "unit", "mapping_verified"},
-            f"manifest {path}.role_mappings[{index}]",
-        )
+        _validate_role_mapping_shape(mapping, f"manifest {path}.role_mappings[{index}]")
+
+
+def _validate_role_mapping_shape(mapping: Mapping[str, Any], where: str) -> None:
+    _require(mapping, {"role_id", "instrument", "unit", "mapping_verified"}, where)
+    _unknown(
+        mapping,
+        frozenset(
+            {
+                "role_id",
+                "instrument",
+                "unit",
+                "mapping_verified",
+                "reason",
+                "verification_provenance",
+            }
+        ),
+        where,
+    )
+    for field_name in ("role_id", "instrument", "unit"):
+        if not isinstance(mapping[field_name], str) or not mapping[field_name].strip():
+            raise ManifestError(f"{where}.{field_name} must be non-empty")
+    if not isinstance(mapping["mapping_verified"], bool):
+        raise ManifestError(f"{where}.mapping_verified must be boolean")
+
+    if mapping["mapping_verified"]:
+        if "reason" in mapping:
+            raise ManifestError(f"{where}: verification branches are exclusive")
+        provenance = mapping.get("verification_provenance")
+        if not isinstance(provenance, dict):
+            raise ManifestError(f"{where}.verification_provenance is required for verified mapping")
+        _require(provenance, {"kind", "reference"}, f"{where}.verification_provenance")
         _unknown(
-            mapping,
-            frozenset({"role_id", "instrument", "unit", "mapping_verified", "reason"}),
-            f"manifest {path}.role_mappings[{index}]",
+            provenance,
+            frozenset({"kind", "reference"}),
+            f"{where}.verification_provenance",
+        )
+        if provenance["kind"] not in MAPPING_PROVENANCE_KINDS:
+            raise ManifestError(
+                f"{where}.verification_provenance.kind is unsupported: {provenance['kind']!r}"
+            )
+        if not isinstance(provenance["reference"], str) or not provenance["reference"].strip():
+            raise ManifestError(f"{where}.verification_provenance.reference must be non-empty")
+    else:
+        if "verification_provenance" in mapping:
+            raise ManifestError(f"{where}: verification branches are exclusive")
+        reason = mapping.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ManifestError(f"{where}.reason must be non-empty for unverified mapping")
+
+
+def _source_link_rules(manifest: Mapping[str, Any]) -> tuple[SourceLinkRule, ...]:
+    return tuple(
+        SourceLinkRule(
+            host=str(rule["host"]).lower().rstrip("."),
+            allow_subdomains=bool(rule.get("allow_subdomains", False)),
+            allowed_ports=tuple(int(port) for port in rule.get("allowed_ports", [443])),
+            allowed_query_params=tuple(rule.get("allowed_query_params", [])),
+            query_value_grammar=str(rule.get("query_value_grammar", "any")),
+            drop_query_params=tuple(rule.get("drop_query_params", [])),
+        )
+        for rule in manifest["source_link_hosts"]
+    )
+
+
+def _rule_allows_authoritative_url(reference: str, manifest: Mapping[str, Any]) -> bool:
+    parts = urlsplit(reference)
+    try:
+        port = parts.port or 443
+    except ValueError:
+        return False
+    host = parts.hostname
+    if host is None:
+        return False
+    host = host.lower().rstrip(".")
+
+    authorities: list[tuple[str, bool, list[int]]] = []
+    for raw in (*manifest["fetch_hosts"], *manifest["redirect_hosts"]):
+        authorities.append(
+            (
+                str(raw["host"]).lower().rstrip("."),
+                bool(raw.get("allow_subdomains", False)),
+                list(raw.get("allowed_ports", [443])),
+            )
+        )
+    for raw in manifest["source_link_hosts"]:
+        authorities.append(
+            (
+                str(raw["host"]).lower().rstrip("."),
+                bool(raw.get("allow_subdomains", False)),
+                list(raw.get("allowed_ports", [443])),
+            )
+        )
+    contract = manifest["verification"].get("contract_url")
+    if isinstance(contract, str) and contract:
+        contract_parts = urlsplit(contract)
+        if contract_parts.hostname:
+            try:
+                contract_port = contract_parts.port or 443
+            except ValueError:
+                return False
+            authorities.append(
+                (contract_parts.hostname.lower().rstrip("."), False, [contract_port])
+            )
+
+    if not any(
+        (host == allowed_host or (allow_subdomains and host.endswith(f".{allowed_host}")))
+        and port in allowed_ports
+        for allowed_host, allow_subdomains, allowed_ports in authorities
+    ):
+        return False
+
+    if not parts.query:
+        return True
+    if isinstance(contract, str) and reference == contract:
+        return True
+
+    try:
+        return (
+            canonicalize_url(
+                reference,
+                rules=_source_link_rules(manifest),
+                where="authoritative HTTPS verification reference",
+            )
+            == reference
+        )
+    except UrlValidationError:
+        return False
+
+
+def _canonical_authoritative_url(reference: str) -> str | None:
+    try:
+        parts = urlsplit(reference)
+        port = parts.port
+    except ValueError:
+        return None
+    host = parts.hostname
+    if host is None or host != host.lower() or host.endswith("."):
+        return None
+    if _BARE_PERCENT.search(parts.path) or _BARE_PERCENT.search(parts.query):
+        return None
+    netloc = host if port in (None, 443) else f"{host}:{port}"
+    try:
+        pairs = parse_qsl(parts.query, keep_blank_values=True, strict_parsing=True)
+    except ValueError:
+        return None
+    query = urlencode(sorted(pairs), doseq=True)
+    return urlunsplit(("https", netloc, parts.path or "/", query, ""))
+
+
+def validate_mapping_provenance(
+    manifest: Mapping[str, Any],
+    mapping: Mapping[str, Any],
+    *,
+    manifest_root: Path,
+    provider_id: str,
+) -> None:
+    """Validate mapping evidence locally during strict Provider resolution."""
+    if not mapping["mapping_verified"]:
+        return
+    provenance = mapping["verification_provenance"]
+    kind = provenance["kind"]
+    reference = provenance["reference"]
+    if reference != reference.strip():
+        raise ManifestError(f"mapping verification reference must be canonical: {reference!r}")
+    if kind == "authoritative_https":
+        parts = urlsplit(reference)
+        if parts.scheme != "https" or parts.username is not None or parts.password is not None:
+            raise ManifestError(
+                f"authoritative HTTPS verification reference has invalid HTTPS URL: {reference!r}"
+            )
+        if parts.fragment:
+            raise ManifestError(
+                f"authoritative HTTPS verification reference must not contain a fragment: {reference!r}"
+            )
+        if _canonical_authoritative_url(reference) != reference:
+            raise ManifestError(
+                f"authoritative HTTPS verification reference must be canonical: {reference!r}"
+            )
+        if not _rule_allows_authoritative_url(reference, manifest):
+            raise ManifestError(
+                f"authoritative HTTPS verification reference violates Provider URL policy: {reference!r}"
+            )
+        if provider_id == "yahoo_market":
+            expected_path = f"/v8/finance/chart/{quote(str(mapping['instrument']), safe='')}"
+            if parts.path != expected_path:
+                raise ManifestError(
+                    "Yahoo authoritative HTTPS provenance must use the chart URL for "
+                    f"mapping instrument {mapping['instrument']!r}"
+                )
+        return
+
+    reference_path = Path(reference)
+    if reference_path.is_absolute() or ".." in reference_path.parts:
+        raise ManifestError(
+            f"repository fixture reference must be repository-relative and non-escaping: {reference!r}"
+        )
+    repository_root = manifest_root.resolve().parent
+    provider_root = (manifest_root / provider_id).resolve()
+    resolved = (repository_root / reference_path).resolve()
+    if not resolved.is_relative_to(repository_root):
+        raise ManifestError(f"repository fixture reference escapes repository root: {reference!r}")
+    if not resolved.is_relative_to(provider_root):
+        raise ManifestError(
+            f"repository fixture reference is outside owning Provider: {reference!r}"
+        )
+    if not resolved.exists():
+        raise ManifestError(f"repository fixture reference does not exist: {reference!r}")
+    if not resolved.is_file():
+        raise ManifestError(f"repository fixture reference is not a file: {reference!r}")
+
+    if provider_id != "yahoo_market":
+        return
+    try:
+        payload = json.loads(resolved.read_text(encoding="utf-8"))
+        results = payload["chart"]["result"]
+        if not isinstance(results, list) or len(results) != 1 or not isinstance(results[0], dict):
+            raise KeyError("chart.result")
+        symbol = results[0]["meta"]["symbol"]
+    except (
+        OSError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        IndexError,
+    ) as exc:
+        raise ManifestError(
+            f"Yahoo chart fixture does not expose one usable chart.result meta.symbol: {reference!r}"
+        ) from exc
+    if symbol != mapping["instrument"]:
+        raise ManifestError(
+            f"Yahoo chart fixture meta.symbol {symbol!r} does not match mapping instrument {mapping['instrument']!r}"
         )
 
 
@@ -316,6 +556,22 @@ def _manifest_rate(manifest: Mapping[str, Any]) -> RatePolicy | None:
         refill_period_seconds=int(rate["refill_period_seconds"]),
         minimum_interval_seconds=int(rate["minimum_interval_seconds"]),
         shared_host=rate.get("shared_host"),
+    )
+
+
+def _freeze_contract_value(value: object) -> object:
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {str(key): _freeze_contract_value(item) for key, item in value.items()}
+        )
+    if isinstance(value, list):
+        return tuple(_freeze_contract_value(item) for item in value)
+    return value
+
+
+def _freeze_contract_mapping(mapping: Mapping[str, object]) -> Mapping[str, object]:
+    return MappingProxyType(
+        {str(key): _freeze_contract_value(value) for key, value in mapping.items()}
     )
 
 
@@ -358,17 +614,7 @@ def manifest_to_provider_entry(
             )
             for f in manifest["redirect_hosts"]
         ),
-        source_link_hosts=tuple(
-            SourceLinkRule(
-                host=str(r["host"]).lower().rstrip("."),
-                allow_subdomains=bool(r.get("allow_subdomains", False)),
-                allowed_ports=tuple(int(p) for p in r.get("allowed_ports", [443])),
-                allowed_query_params=tuple(r.get("allowed_query_params", [])),
-                query_value_grammar=str(r.get("query_value_grammar", "any")),
-                drop_query_params=tuple(r.get("drop_query_params", [])),
-            )
-            for r in manifest["source_link_hosts"]
-        ),
+        source_link_hosts=_source_link_rules(manifest),
         rate_policy=_manifest_rate(manifest),
         allowed_charset=str(charset["allowed"][0]),
         allowed_bom=bool(charset["bom_allowed"]),
@@ -395,7 +641,7 @@ def manifest_to_provider_entry(
         identity_stable_record_id=str(manifest["identity"]["stable_record_id"]),
         units={str(k): str(v) for k, v in manifest["units"].items()},
         freshness_policy=str(manifest["freshness"]["policy"]),
-        role_mappings=tuple(dict(m) for m in manifest.get("role_mappings", [])),
+        role_mappings=tuple(_freeze_contract_mapping(m) for m in manifest.get("role_mappings", [])),
         adjustment_policy=dict(manifest.get("adjustment_policy", {})),
         fixture_provenance_source=str(manifest["fixture_provenance"]["source"]),
         fixture_files=tuple(str(f) for f in manifest["fixture_provenance"]["files"]),

@@ -397,11 +397,11 @@ def test_duplicate_role_ownership_rejected(tmp_path):
         _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
 
 
-def test_role_contract_requires_provenance_and_semantics(tmp_path):
+def test_role_contract_does_not_require_parallel_source_provenance(tmp_path):
     cfg = _minimal_config()
     del cfg["roles"][0]["source_provenance"]
-    with pytest.raises(ConfigError, match="source_provenance"):
-        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+    loaded = _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+    assert not hasattr(loaded.roles[0], "source_provenance")
 
 
 def test_role_contract_requires_non_negative_availability_lag(tmp_path):
@@ -423,8 +423,8 @@ def test_shipped_roles_expose_a_complete_verified_contract():
     assert all(role.provider_id == "yahoo_market" for role in cfg.roles)
     assert all(role.economic_identity for role in cfg.roles)
     assert all(role.daily_close_semantics for role in cfg.roles)
-    assert all(role.source_provenance for role in cfg.roles)
     assert {role.id for role in cfg.roles if not role.mapping_verified} == {
+        "csi300",
         "hsi",
         "vix",
         "us2y",
@@ -455,7 +455,6 @@ def test_shipped_role_contract_matches_yahoo_manifest_mappings():
             assert "unverified" not in role.daily_close_semantics.lower(), role.id
         else:
             assert str(mapping.get("reason", "")).strip(), f"{role.id} lacks an explicit reason"
-            assert role.source_provenance.strip()
 
 
 # ---------------------------------------------------------------------------

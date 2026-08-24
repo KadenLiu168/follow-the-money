@@ -518,8 +518,8 @@ def run_feed(
 def _production_adapters(cfg: AppConfig, registry: Any) -> dict[str, list[Any]]:
     """Build per-provider adapter lists for the production registry.
 
-    The Yahoo-compatible contract fans out over the 13 configured dashboard
-    roles; every other enabled provider contributes one adapter instance.
+    The Yahoo-compatible contract plans only verified configured role mappings;
+    every other enabled provider contributes one adapter instance.
     """
     from ..providers.adapters import SecEdgarAdapter, YahooMarketAdapter
 
@@ -528,10 +528,29 @@ def _production_adapters(cfg: AppConfig, registry: Any) -> dict[str, list[Any]]:
         if not p.enabled:
             continue
         if p.id == "yahoo_market":
-            adapters[p.id] = [
-                YahooMarketAdapter(p, instrument=r.instrument, role_id=r.id, unit=r.unit)
-                for r in cfg.roles
-            ]
+            mappings = {str(mapping["role_id"]): mapping for mapping in p.role_mappings}
+            planned: list[Any] = []
+            for role in cfg.roles:
+                mapping = mappings.get(role.id)
+                if mapping is None:
+                    raise FeedInputError(f"missing resolved Yahoo mapping for role {role.id!r}")
+                if (
+                    mapping.get("instrument") != role.instrument
+                    or mapping.get("unit") != role.unit
+                    or mapping.get("mapping_verified") != role.mapping_verified
+                ):
+                    raise FeedInputError(f"Yahoo mapping tuple mismatch for role {role.id!r}")
+                if not mapping["mapping_verified"]:
+                    continue
+                planned.append(
+                    YahooMarketAdapter(
+                        p,
+                        instrument=str(mapping["instrument"]),
+                        role_id=role.id,
+                        unit=str(mapping["unit"]),
+                    )
+                )
+            adapters[p.id] = planned
         elif p.id == "sec_edgar":
             adapters[p.id] = [
                 SecEdgarAdapter(
@@ -897,7 +916,13 @@ def _provider_contract_snapshots(cfg: AppConfig) -> list[dict[str, Any]]:
             "identity_stable_record_id": p.identity_stable_record_id,
             "units": dict(sorted(p.units.items())),
             "freshness_policy": p.freshness_policy,
-            "role_mappings": [dict(sorted(mapping.items())) for mapping in p.role_mappings],
+            "role_mappings": [
+                {
+                    key: dict(sorted(value.items())) if isinstance(value, Mapping) else value
+                    for key, value in sorted(mapping.items())
+                }
+                for mapping in p.role_mappings
+            ],
             "adjustment_policy": dict(sorted(p.adjustment_policy.items())),
             "fixture_provenance_source": p.fixture_provenance_source,
             "fixture_files": list(p.fixture_files),

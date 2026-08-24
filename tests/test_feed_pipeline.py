@@ -229,7 +229,7 @@ def test_non_permitted_empty_does_not_contribute_and_names_provider():
 
     assert status == "degraded"
     assert any("yahoo_market" in warning for warning in warnings)
-    assert any("china_hk_cross_asset_market" in warning for warning in warnings)
+    assert any("verified_market_data" in warning for warning in warnings)
 
 
 @pytest.mark.parametrize("state", ["partial", "failed", "skipped"])

@@ -411,6 +411,22 @@ def test_unverified_mapping_fails_closed_even_with_complete_observations(role_id
     assert metric.unknown_reason == "unverified_mapping"
 
 
+def test_unverified_mapping_guard_wins_over_matching_canonical_feed_item():
+    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS)
+    role = cfg.role("csi300")
+    feed = _feed(
+        "csi300",
+        [str(300 + i / 100) for i in range(22)],
+        unit=role.unit,
+        start=datetime(2026, 7, 1, tzinfo=UTC),
+    )
+
+    metric = build_market_snapshot(feed, cfg).metrics["csi300"]
+
+    assert metric.available is False
+    assert metric.unknown_reason == "unverified_mapping"
+
+
 def test_dashboard_projection_keeps_all_roles_in_configured_order_and_typed_units():
     cfg = _verified_config()
     start = datetime(2026, 7, 1, tzinfo=UTC)

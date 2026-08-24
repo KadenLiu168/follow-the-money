@@ -48,7 +48,6 @@ class MarketRole:
     provider_id: str
     economic_identity: str
     daily_close_semantics: str
-    source_provenance: str
     mapping_verified: bool
     availability_lag_seconds: int
     session_id: str

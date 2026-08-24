@@ -22,5 +22,5 @@ coverage:
   - { group: us_company_filings, members: [sec_edgar], minimum: 1, capability: watched_company_filings, optional: false }
   - { group: china_official_macro_policy, members: [pboc, nbs], minimum: 2, capability: official_evidence_and_calendar, optional: false }
   - { group: china_exchange_evidence, members: [sse, szse], minimum: 2, capability: notice_and_market, optional: false }
-  - { group: china_hk_cross_asset_market, members: [yahoo_market], minimum: 1, capability: market_data_all_13_roles, optional: false }
+  - { group: verified_market_data, members: [yahoo_market], minimum: 1, capability: verified_market_data, optional: false }
   - { group: future_calendar, members: [federal_reserve, bls, nbs], minimum: 3, capability: future_release_calendar, optional: false }

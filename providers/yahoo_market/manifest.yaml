@@ -13,10 +13,9 @@ verification:
   verification_date: "2026-08-11"
   contract_url: "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
   usage_note: >
-    Historical/quote market data for the 13 dashboard roles (S&P 500, CSI 300,
-    Hang Seng, VIX, US 2y/10y, China 10y, DXY, USD/CNH, copper, WTI, gold,
-    BTC). The v1 symbol/source mappings, units, and availability lag are
-    explicit in this manifest; exact role verification is recorded per mapping.
+    Historical/quote market data for the configured dashboard roles. The v1
+    symbol/source mappings, units, and availability lag are explicit in this
+    manifest; only mappings with evidence-backed verification are runnable.
 
 authentication: none
 protocol: https
@@ -71,8 +70,14 @@ freshness:
   policy: observation_available_before_cutoff
 
 role_mappings:
-  - { role_id: sp500, instrument: "^GSPC", unit: index, mapping_verified: true }
-  - { role_id: csi300, instrument: "000300.SS", unit: index, mapping_verified: true }
+  - role_id: sp500
+    instrument: "^GSPC"
+    unit: index
+    mapping_verified: true
+    verification_provenance:
+      kind: repository_fixture
+      reference: providers/yahoo_market/fixtures/chart.json
+  - { role_id: csi300, instrument: "000300.SS", unit: index, mapping_verified: false, reason: "missing checked-in evidence for the configured instrument" }
   - { role_id: hsi, instrument: "^HSI", unit: index, mapping_verified: false, reason: "no exact checked-in Yahoo fixture" }
   - { role_id: vix, instrument: "^VIX", unit: index, mapping_verified: false, reason: "checked-in body identifies the symbol but not the configured XNYS close contract" }
   - { role_id: us2y, instrument: "^IRX", unit: percent, mapping_verified: false, reason: "^IRX is 13-week, not 2-year" }
