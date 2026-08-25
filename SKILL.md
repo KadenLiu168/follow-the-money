@@ -51,7 +51,8 @@ retained family does not add or require a production caller.
 The host Agent is expected to:
 
 1. Collect the evidence Feed (below), then
-2. Perform the financial analysis and produce the research digest itself.
+2. Perform the financial analysis and produce the research digest itself,
+   grounding factual claims in the Feed's evidence and provenance.
 
 Do not invent future Agent objects, schemas, stages, ordering, or placeholder
 wiring in the meantime.
@@ -96,8 +97,8 @@ scripts/feed/follow-the-money-feed      # evidence-only Feed, deterministic,
 2. **Evidence**: read `feeds/latest.json` (or the dated
    `feeds/daily/<date>/<run_id>.json`). Every item carries source provenance;
    the window, cutoff, and run identity are authoritative.
-3. **Analysis**: the host Agent analyzes the evidence and writes the digest.
-   No other repository entry exists.
+3. **Analysis**: the host Agent analyzes the evidence and writes the digest,
+   citing the relevant Feed items. No other repository entry exists.
 
 This flow does not claim that the minimal Feed entry orchestrates the retained
 post-Feed libraries.
