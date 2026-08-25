@@ -1,30 +1,35 @@
-"""Deterministic claim auditor and fail-closed candidate gate.
-
-Design section 17:
-
-- Verify the complete claim inventory, exactly one rendered fragment per
-  filled claim slot, deterministic event-label template output and its
-  fact/evidence references, provider-bound URL presence against the saved
-  Feed's embedded contract snapshots, evidence/ledger references, numeric
-  provenance, price-in support, direct-flow support, and section structure.
-- Every claim-bearing output has one known ``claim_id``; no rendered
-  assertion may exist outside the inventory.
-- Prohibited trading-instruction lexicon (Chinese/English) with descriptive
-  false-positive exceptions.
-- Any violation blocks the candidate artifact; it is never silently edited
-  in place.
-"""
+"""Deterministic identity, evidence, ownership, and text-safety auditing."""
 
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any
 
 from .config.model import SafetyLexicon
 
 _ZERO_WIDTH = re.compile("[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]")
+
+
+@dataclass(frozen=True)
+class AuditClaim:
+    """The claim fields consumed by the structured audit rules."""
+
+    claim_id: str
+    text: str
+    requires_direct_evidence: bool
+    evidence_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "evidence_ids", tuple(self.evidence_ids))
+
+
+@dataclass(frozen=True)
+class AuditFlow:
+    """Confirmed-flow state and its optional owning Event identity."""
+
+    confirmed: bool
+    owning_event_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -50,68 +55,105 @@ class ClaimAuditor:
     def __init__(self, safety: SafetyLexicon | None = None) -> None:
         self.safety = safety or SafetyLexicon()
 
-    def audit(self, brief: Mapping[str, Any]) -> AuditResult:
+    def audit_text(self, text: str, *, claim_id: str | None = None) -> AuditResult:
         result = AuditResult(passed=True)
-        inventory = brief.get("claim_inventory", [])
-        claim_ids = [c["claim_id"] for c in inventory]
+        if self._contains_trading_instruction(text):
+            result.add(
+                AuditFinding(
+                    claim_id,
+                    "trading_instruction",
+                    "prohibited trading instruction detected",
+                )
+            )
+        return result
 
-        # Missing/duplicate/unknown claim slots.
-        if len(claim_ids) != len(set(claim_ids)):
-            result.add(AuditFinding(None, "duplicate_claim_id", "duplicate claim IDs in inventory"))
-        if not claim_ids:
+    def audit_claims(
+        self,
+        claims: Sequence[AuditClaim],
+        submitted_claim_ids: Sequence[str],
+        flows: Sequence[AuditFlow] = (),
+    ) -> AuditResult:
+        result = AuditResult(passed=True)
+        inventory = tuple(claims)
+        submitted = tuple(submitted_claim_ids)
+
+        if not inventory:
             result.add(AuditFinding(None, "empty_inventory", "claim inventory is empty"))
 
-        # Every rendered assertion must be inside the inventory.
-        rendered = self._collect_rendered_claims(brief)
-        for claim_id in rendered:
-            if claim_id not in claim_ids:
-                result.add(
-                    AuditFinding(
-                        claim_id, "outside_inventory", "rendered assertion outside inventory"
-                    )
-                )
-
-        # Per-claim checks. Script-owned dashboard claims are deterministic
-        # role templates whose provenance is tracked at the dashboard level,
-        # so they are not required to carry per-claim evidence refs; editor
-        # claims (including bottom-line points) are factual assertions and
-        # must reference supporting evidence.
+        valid_claims: list[AuditClaim] = []
         for claim in inventory:
-            text = claim.get("text", "")
-            if (
-                claim.get("is_factual")
-                and claim.get("class") != "dashboard"
-                and not claim.get("reference_evidence_ids")
-            ):
+            if not self._is_valid_identity(claim.claim_id):
                 result.add(
                     AuditFinding(
-                        claim["claim_id"], "missing_evidence", "factual claim lacks evidence refs"
+                        None,
+                        "invalid_claim_id",
+                        "claim identity must be a non-empty string",
                     )
                 )
-            if self._contains_trading_instruction(text):
+                continue
+            valid_claims.append(claim)
+
+        claim_ids = [claim.claim_id for claim in valid_claims]
+        if len(claim_ids) != len(set(claim_ids)):
+            result.add(AuditFinding(None, "duplicate_claim_id", "duplicate claim IDs in inventory"))
+
+        valid_submitted: list[str] = []
+        for claim_id in submitted:
+            if not self._is_valid_identity(claim_id):
                 result.add(
                     AuditFinding(
-                        claim["claim_id"],
-                        "trading_instruction",
-                        "prohibited trading instruction detected",
+                        None,
+                        "invalid_claim_id",
+                        "claim identity must be a non-empty string",
+                    )
+                )
+                continue
+            valid_submitted.append(claim_id)
+
+        inventory_ids = set(claim_ids)
+        for claim_id in sorted(valid_submitted):
+            if claim_id not in inventory_ids:
+                result.add(
+                    AuditFinding(
+                        claim_id,
+                        "outside_inventory",
+                        "rendered assertion outside inventory",
                     )
                 )
 
-        # Money-flow ownership: confirmed requires direct flow evidence.
-        for entry in brief.get("money_flow_section", []):
-            if entry.get("status") == "confirmed" and not entry.get("event_id"):
+        for claim in sorted(valid_claims, key=self._claim_sort_key):
+            if claim.requires_direct_evidence and not claim.evidence_ids:
+                result.add(
+                    AuditFinding(
+                        claim.claim_id,
+                        "missing_evidence",
+                        "factual claim lacks evidence refs",
+                    )
+                )
+            result.findings.extend(self.audit_text(claim.text, claim_id=claim.claim_id).findings)
+            if any(finding.severity == "critical" for finding in result.findings):
+                result.passed = False
+
+        for flow in flows:
+            if flow.confirmed and not flow.owning_event_id:
                 result.add(
                     AuditFinding(None, "flow_ownership", "confirmed flow lacks owning event")
                 )
 
         return result
 
-    def _collect_rendered_claims(self, brief: Mapping[str, Any]) -> list[str]:
-        """Extract claim IDs from rendered sections (dashboard/full/compact/
-        watchlist/bottom-line text fields). For this deterministic pass, the
-        claim inventory is the authority; rendering consistency is verified by
-        byte comparison elsewhere."""
-        return [c["claim_id"] for c in brief.get("claim_inventory", [])]
+    @staticmethod
+    def _is_valid_identity(identity: object) -> bool:
+        return isinstance(identity, str) and bool(identity.strip())
+
+    @staticmethod
+    def _claim_sort_key(claim: AuditClaim) -> tuple[str, str, str, str]:
+        return (
+            claim.claim_id,
+            repr(claim.text),
+            repr(claim.requires_direct_evidence),
+            repr(claim.evidence_ids),
+        )
 
     def _contains_trading_instruction(self, text: str) -> bool:
         if not text:

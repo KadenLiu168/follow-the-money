@@ -257,11 +257,10 @@ def test_retained_rules_deterministic_and_llm_free():
         sig1, relevance, cfg.scoring
     )
 
-    # ClaimAuditor: deterministic, flags prohibited trading instructions.
+    # ClaimAuditor: deterministic standalone text boundary flags prohibited
+    # trading instructions without a Brief-shaped input.
     auditor = ClaimAuditor(cfg.safety_lexicon)
-    result = auditor.audit({"claim_inventory": [{"claim_id": "c1", "text": "今天买入腾讯。"}]})
+    result = auditor.audit_text("今天买入腾讯。", claim_id="c1")
     assert not result.passed
     assert any(f.category == "trading_instruction" for f in result.findings)
-    assert auditor.audit(
-        {"claim_inventory": [{"claim_id": "c1", "text": "该政策旨在抑制过热。"}]}
-    ).passed  # descriptive exception
+    assert auditor.audit_text("该政策旨在抑制过热。", claim_id="c1").passed  # descriptive exception
