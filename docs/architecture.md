@@ -20,17 +20,27 @@ normalization, deduplication, validation, identity/digest construction, health
 assessment, and publication. The Feed remains evidence-only: the Host Agent
 owns financial interpretation and narrative.
 
-## Retained capabilities
+## Semantic capability surface
 
-The following are retained deterministic capabilities, not sequential
-production stages:
+ECO-33 defines one closed semantic catalog. These are capability families, not
+sequential production stages or API boundaries:
 
-- Evidence ledger and candidate/event utilities
-- Market snapshot/state and watchlist
-- Scoring/ranking rules
-- `ClaimAuditor` safety audit
+| Capability family | Execution status | Detailed contract |
+| --- | --- | --- |
+| Evidence Feed | `live-production` | `feed-evidence-pipeline` |
+| Evidence and Event Structuring | `retained-no-production-caller` | `deterministic-research-engine` |
+| Market Analytics and State | `retained-no-production-caller` | `deterministic-research-engine` |
+| Confidence and Watchlist | `retained-no-production-caller` | `deterministic-research-engine` |
+| Scoring and Ranking | `retained-no-production-caller` | `deterministic-research-engine` |
+| Deterministic Audit | `retained-no-production-caller` | `deterministic-research-engine` |
 
-Each retained library is typed, deterministic, reproducible, independently
+Capability ownership means repository/Skill ownership of accepted deterministic
+behavior and invariants. It does not allocate operational responsibility between
+the Skill and Host Agent. The status labels are descriptive architecture
+metadata only: they are not runtime state, serialized fields, configuration, a
+capability registry, or a promise that every named family is production-wired.
+
+The retained libraries are typed, deterministic, reproducible, independently
 tested, and reusable. A retained library may intentionally have no current
 production orchestration caller; no placeholder caller supplies synthetic
 inputs to make it appear live.
@@ -59,6 +69,14 @@ do not require a standalone JSON Schema each.
 | `audit.py` | Retained `ClaimAuditor` safety lexicon audit library |
 | `boundary.py` | Application build fingerprint (consumed by the Feed) |
 
+Provider adapters and manifests, HTTP clients, collection locks and rate-state
+machinery, configuration loaders, canonical serialization and digest helpers,
+publication filesystem mechanics, title-similarity primitives, internal helper
+functions, and individual Python structure layouts remain implementation
+machinery rather than stable Host-Agent capabilities. They may change without a
+semantic capability-surface change when the owning deterministic behavior and
+invariants remain intact.
+
 Removed with the LLM runtime: `llm.py`, `pipeline.py`, `brief_cli.py`,
 `analysis.py`, `editor.py`, `brief.py`, `render.py`,
 `engine/resolution.py`, `eval_*`, `bundle.py`, the public CLI, and their
@@ -82,11 +100,15 @@ schemas/tests. Recoverable only from git history.
   position-size/entry/exit/stop/target), in Chinese or English, with
   descriptive false-positive exceptions.
 
-## Future boundary
+## Deferred integration boundary
 
-The future Skill-Agent Contract remains undefined until the Pre-Agent Baseline
-Acceptance gate passes. This repository does not define future Agent objects,
-schemas, stages, call counts, ordering, adapters, or orchestration here.
+The semantic capability surface above is defined by ECO-33, but the concrete
+Skill-Agent integration remains deferred. ECO-34 owns responsibility, mutation,
+and trust decisions; ECO-35 owns grounding, validation ownership,
+unsupported-claim, retry, and rewrite decisions. Agent-facing objects and
+schemas, invocation protocols, adapters, orchestration topology, call counts,
+ordering, and runtime implementation remain deferred beyond ECO-33. This
+repository does not define them here.
 
 ## Non-goals
 

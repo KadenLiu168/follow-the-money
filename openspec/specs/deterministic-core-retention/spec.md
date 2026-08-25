@@ -77,10 +77,14 @@ API-key configuration, prompts, token/retry/reasoning controls, standalone publi
 CLI, resolver/analyst/editor/language-audit pass, production Brief pipeline,
 LLM-era Bundle or replay, or live model evaluation. They SHALL distinguish the one
 live Feed path from retained deterministic libraries that have no production
-orchestration caller, and SHALL leave the future Agent Contract undefined.
-Historical Changes under `openspec/changes/archive/` MAY preserve superseded
-requirements as historical evidence and SHALL NOT be rewritten merely to match the
-current architecture.
+orchestration caller. The living baseline MAY define an explicit semantic Skill
+capability surface grounded in accepted deterministic behavior, but SHALL leave
+Agent-facing objects and schemas, serialized Agent contracts, runtime invocation
+protocols, adapters, orchestration topology, and production wiring for retained
+libraries undefined until later Changes explicitly establish them. Historical
+Changes under `openspec/changes/archive/` MAY preserve superseded requirements as
+historical evidence and SHALL NOT be rewritten merely to match the current
+architecture.
 
 #### Scenario: Living source of truth is audited
 - **WHEN** a reviewer reads all current specs and active Changes after normalization
@@ -92,7 +96,7 @@ current architecture.
 
 #### Scenario: Future Agent workflow is searched
 - **WHEN** the normalized baseline is inspected for `ResearchContext`, `AgentAnalysis`, `BriefContext`, Agent schemas, or Agent orchestration
-- **THEN** those names appear only as explicitly deferred direction or non-goals and no current shape or runtime behavior is prescribed
+- **THEN** those names appear only as explicitly deferred direction or non-goals and no current shape or runtime behavior is prescribed, even though the semantic Skill capability surface is now defined
 
 ### Requirement: Baseline acceptance uses semantic trace evidence
 Pre-Agent Baseline Acceptance SHALL maintain a fresh requirement-to-disposition-to-evidence trace for every current Requirement in `deterministic-core-retention`, `feed-evidence-pipeline`, and `deterministic-research-engine`. Each trace entry SHALL identify the current implementation or negative invariant, production caller status where architecture claims depend on wiring, focused executable or static-audit evidence, and an acceptance result. Every removed or superseded Requirement carried by the historical baseline trace or a subsequent baseline-changing Change SHALL retain an explicit current historical disposition, and historical trace material SHALL count as current evidence only after reconciliation with the current living specs, implementation, tests, subsequent Changes, and caller graph.

@@ -3,9 +3,9 @@
 Evidence-grounded financial research Skill for AI Agents: a deterministic,
 credential-free evidence Feed from free China/US official and public sources,
 plus retained deterministic libraries (ledger, candidate events, market
-snapshot/state, watchlist, scoring/ranking rules, safety audit). The future
-Skill-Agent Contract remains undefined until the Pre-Agent Baseline Acceptance
-gate passes.
+snapshot/state, watchlist, scoring/ranking rules, safety audit). The semantic
+Skill capability surface is defined; its concrete Skill-Agent Contract remains
+deferred.
 
 The Agent understands, reasons, and expresses; `follow-the-money` supplies
 facts, rules, deterministic computation, and verifiability.
@@ -20,8 +20,28 @@ repository.
 
 The retained deterministic libraries are typed, reproducible, independently
 tested, and reusable, but they have no current production orchestration caller.
-The Host Agent owns reasoning and narrative after consuming the Feed; the
-future Skill-Agent Contract is not defined in the current baseline.
+The Host Agent owns reasoning and narrative after consuming the Feed; naming a
+retained capability does not add a production caller.
+
+## Semantic capability surface
+
+The closed semantic catalog has exactly six families:
+
+- Evidence Feed — `live-production`.
+- Evidence and Event Structuring — `retained-no-production-caller`.
+- Market Analytics and State — `retained-no-production-caller`.
+- Confidence and Watchlist — `retained-no-production-caller`.
+- Scoring and Ranking — `retained-no-production-caller`.
+- Deterministic Audit — `retained-no-production-caller`.
+
+These are descriptive architecture labels, not runtime state, configuration,
+serialized metadata, a capability registry, or workflow stages. The
+repository/Skill owns the accepted deterministic behavior and invariants;
+detailed behavior remains in the existing living specs. ECO-34 defers
+responsibility, mutation, and trust decisions; ECO-35 defers grounding,
+validation, unsupported-claim, retry, and rewrite decisions. Agent-facing
+schemas, invocation, orchestration, and runtime implementation remain deferred
+beyond ECO-33.
 
 ## Investment-assistance boundary
 

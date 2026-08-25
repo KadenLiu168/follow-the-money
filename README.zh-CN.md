@@ -2,8 +2,8 @@
 
 面向 AI Agent 的证据驱动金融研究 Skill：一个确定性、免凭据的纯证据 Feed，
 来自免费的中美官方与公开来源；同时保留确定性引擎（证据台账、候选事件、
-市场快照/状态、关注列表、打分/选择规则、安全审计）。未来的
-Skill-Agent Contract 要等 Pre-Agent Baseline Acceptance gate 通过后再定义。
+市场快照/状态、关注列表、打分/选择规则、安全审计）。语义层的 Skill
+capability surface 已定义；具体的 Skill-Agent Contract 仍然 deferred。
 
 Agent 负责理解、推理与表达；`follow-the-money` 提供事实、规则、确定性计算
 与可验证性。
@@ -15,8 +15,26 @@ Agent 负责理解、推理与表达；`follow-the-money` 提供事实、规则�
 规范摘要与契约快照。仓库中不存在任何凭据、模型或 LLM runtime。
 
 保留的确定性库是 typed、可复现、独立测试且可复用的，但当前没有 production
-orchestration caller。Host Agent 在消费 Feed 后负责推理与叙事；当前 baseline
-不定义未来的 Skill-Agent Contract。
+orchestration caller。Host Agent 在消费 Feed 后负责推理与叙事；命名 retained
+capability 不会增加 production caller。
+
+## 语义 capability surface
+
+当前 closed semantic catalog 恰好包含六个 family：
+
+- Evidence Feed — `live-production`。
+- Evidence and Event Structuring — `retained-no-production-caller`。
+- Market Analytics and State — `retained-no-production-caller`。
+- Confidence and Watchlist — `retained-no-production-caller`。
+- Scoring and Ranking — `retained-no-production-caller`。
+- Deterministic Audit — `retained-no-production-caller`。
+
+这些是描述 architecture 的标签，不是 runtime state、configuration、serialized
+metadata、capability registry 或 workflow stage。repository/Skill 只拥有这些
+family 已接受的 deterministic behavior 与 invariants；详细行为仍由现有 living
+specs 负责。ECO-34 deferred responsibility、mutation 与 trust；ECO-35 deferred
+grounding、validation、unsupported-claim、retry 与 rewrite。Agent-facing schema、
+invocation、orchestration 与 runtime implementation 仍 deferred beyond ECO-33。
 
 ## 投资协助边界
 
