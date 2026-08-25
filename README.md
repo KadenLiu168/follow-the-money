@@ -2,23 +2,26 @@
 
 Evidence-grounded financial research Skill for AI Agents: a deterministic,
 credential-free evidence Feed from free China/US official and public sources,
-plus a retained deterministic engine (ledger, candidate events, market
-snapshot/state, watchlist, scoring/ranking rules, safety audit) awaiting a
-future Agent delivery contract.
+plus retained deterministic libraries (ledger, candidate events, market
+snapshot/state, watchlist, scoring/ranking rules, safety audit). The future
+Skill-Agent Contract remains undefined until the Pre-Agent Baseline Acceptance
+gate passes.
 
 The Agent understands, reasons, and expresses; `follow-the-money` supplies
 facts, rules, deterministic computation, and verifiability.
 
 ## What this repository is
 
-A Python 3.12 package that collects and publishes a schema-validated,
-identity-bearing evidence-only Feed: run identity, one fixed evidence cutoff,
-per-item provider provenance, canonical digests, and contract snapshots. No
-credential, model, or LLM runtime exists anywhere in the repository.
+A Python 3.12 package whose live production path collects and publishes a
+schema-validated, identity-bearing evidence-only Feed: run identity, one fixed
+evidence cutoff, per-item provider provenance, canonical digests, and contract
+snapshots. No credential, model, or LLM runtime exists anywhere in the
+repository.
 
-The repository is in an intentional transitional state: the deterministic
-core is live and tested, while the structured Agent contract over the core
-(research/analysis/brief orchestration) is deferred to a future Change.
+The retained deterministic libraries are typed, reproducible, independently
+tested, and reusable, but they have no current production orchestration caller.
+The Host Agent owns reasoning and narrative after consuming the Feed; the
+future Skill-Agent Contract is not defined in the current baseline.
 
 ## Investment-assistance boundary
 
@@ -33,7 +36,7 @@ is investment advice.
 config/           closed versioned YAML configuration (v1 defaults, no secrets)
 providers/        provider contract manifests and fixture provenance
 schemas/          JSON Schema 2020-12 contracts (feed.schema.json)
-src/follow_the_money/  production package (deterministic engine)
+src/follow_the_money/  live Feed path plus retained deterministic libraries
 scripts/feed/     minimal internal Feed entry: follow-the-money-feed
 feeds/            published artifacts (daily/<date>/<run_id>.json, latest.json)
 tests/            pytest suite (credential-free)
@@ -72,7 +75,7 @@ deployment concerns, not claims made by this repository.
 
 ## Documentation
 
-- `docs/architecture.md` — retained deterministic engine and transitional state
+- `docs/architecture.md` — live Feed path, retained capabilities, future boundary
 - `docs/feed-contract.md` — Feed schema, window/cutoff model, publication
 - `docs/scoring.md` — deterministic scoring and ranking contract
 - Runbooks: `docs/runbooks/`

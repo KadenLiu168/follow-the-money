@@ -11,25 +11,27 @@ description: |
 
 # Follow the Money — Skill Orchestration Contract
 
-This Skill is the orchestration layer over the local repository. It delegates
-every network call and every deterministic step to the minimal internal Feed
-entry; the Skill runtime stays a thin coordinator and never re-implements
-pipeline logic.
+This Skill uses the local repository's minimal internal Feed entry. That entry
+owns network access and deterministic Feed collection and processing; the Skill
+runtime stays a thin coordinator and never re-implements Feed logic. Retained
+post-Feed libraries are not claimed as entry-orchestrated production stages.
 
-## Transitional state
+## Live / Retained / Future
 
-The repository is intentionally transitional: the deterministic core is live
-and tested, but the structured Agent delivery contract (research context,
-analysis and Brief schemas, validation) is **not yet built**. The host Agent
-is expected to:
+The live repository path is the evidence Feed. Retained post-Feed libraries are
+typed, deterministic, reproducible, independently tested, and reusable, but
+they intentionally have no current production orchestration caller. The future
+Skill-Agent Contract remains undefined until the Pre-Agent Baseline Acceptance
+gate passes.
+
+The host Agent is expected to:
 
 1. Collect the evidence Feed (below), then
 2. Perform the financial analysis and produce the research digest itself,
    grounding every factual claim in the Feed's evidence and provenance.
 
-The fixed Brief pipeline and its structured contracts are deferred to a
-future Change. Do not invent a substitute contract or a fake pipeline in the
-meantime.
+Do not invent future Agent objects, schemas, stages, ordering, or placeholder
+wiring in the meantime.
 
 ## Investment-assistance boundary
 
@@ -48,7 +50,7 @@ to any submitted text as a deterministic safety check.
   requests; it never claims coverage through collection completion or a
   nominal 08:30 value.
 
-## Pipeline
+## Live path
 
 ```text
 scripts/feed/follow-the-money-feed      # evidence-only Feed, deterministic,
@@ -73,6 +75,9 @@ scripts/feed/follow-the-money-feed      # evidence-only Feed, deterministic,
    the window, cutoff, and run identity are authoritative.
 3. **Analysis**: the host Agent analyzes the evidence and writes the digest,
    citing Feed items. No other repository entry exists.
+
+This flow does not claim that the minimal Feed entry orchestrates the retained
+post-Feed libraries.
 
 If a required step fails, surface the exact stderr and stop. Partial output
 is worse than no output.

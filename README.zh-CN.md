@@ -2,20 +2,21 @@
 
 面向 AI Agent 的证据驱动金融研究 Skill：一个确定性、免凭据的纯证据 Feed，
 来自免费的中美官方与公开来源；同时保留确定性引擎（证据台账、候选事件、
-市场快照/状态、关注列表、打分/选择规则、安全审计），等待未来的 Agent
-交付契约。
+市场快照/状态、关注列表、打分/选择规则、安全审计）。未来的
+Skill-Agent Contract 要等 Pre-Agent Baseline Acceptance gate 通过后再定义。
 
 Agent 负责理解、推理与表达；`follow-the-money` 提供事实、规则、确定性计算
 与可验证性。
 
 ## 这个仓库是什么
 
-一个 Python 3.12 包，采集并发布 schema 校验、携带身份的纯证据 Feed：运行
-身份、单一固定证据截止时间、逐条 provider 来源、规范摘要与契约快照。仓库
-中不存在任何凭据、模型或 LLM runtime。
+一个 Python 3.12 包，当前 live production path 负责采集并发布 schema 校验、
+携带身份的纯证据 Feed：运行身份、单一固定证据截止时间、逐条 provider 来源、
+规范摘要与契约快照。仓库中不存在任何凭据、模型或 LLM runtime。
 
-仓库处于刻意的过渡状态：确定性核心已上线并有测试，而基于核心的结构化
-Agent 契约（研究/分析/简报编排）留给未来的 Change。
+保留的确定性库是 typed、可复现、独立测试且可复用的，但当前没有 production
+orchestration caller。Host Agent 在消费 Feed 后负责推理与叙事；当前 baseline
+不定义未来的 Skill-Agent Contract。
 
 ## 投资协助边界
 
@@ -29,7 +30,7 @@ Agent 契约（研究/分析/简报编排）留给未来的 Change。
 config/          封闭的版本化 YAML 配置（v1 默认值，无任何密钥）
 providers/       provider 契约 manifest 与 fixture 来源记录
 schemas/         JSON Schema 2020-12 契约（feed.schema.json）
-src/follow_the_money/  生产代码包（确定性引擎）
+src/follow_the_money/  live Feed 路径与保留的确定性库
 scripts/feed/    最小内部 Feed 入口：follow-the-money-feed
 feeds/           发布产物（daily/<date>/<run_id>.json、latest.json）
 tests/           pytest 测试套件（无需凭据）
@@ -66,7 +67,7 @@ self-hosted runner，配置持久化共享输出根与持久速率状态，并�
 
 ## 文档
 
-- `docs/architecture.md` — 保留的确定性引擎与过渡状态
+- `docs/architecture.md` — live Feed 路径、保留能力与未来边界
 - `docs/feed-contract.md` — Feed schema、窗口/截止模型、发布
 - `docs/scoring.md` — 确定性打分与 ranking 契约
 - 操作手册：`docs/runbooks/`
