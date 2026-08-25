@@ -3,7 +3,8 @@
 面向 AI Agent 的证据驱动金融研究 Skill：一个确定性、免凭据的纯证据 Feed，
 来自免费的中美官方与公开来源；同时保留确定性引擎（证据台账、候选事件、
 市场快照/状态、关注列表、打分/选择规则、安全审计）。语义层的 Skill
-capability surface 已定义；具体的 Skill-Agent Contract 仍然 deferred。
+capability surface 与 responsibility boundary 已定义；具体的 Skill-Agent
+integration 仍然 deferred。
 
 Agent 负责理解、推理与表达；`follow-the-money` 提供事实、规则、确定性计算
 与可验证性。
@@ -31,10 +32,15 @@ capability 不会增加 production caller。
 
 这些是描述 architecture 的标签，不是 runtime state、configuration、serialized
 metadata、capability registry 或 workflow stage。repository/Skill 只拥有这些
-family 已接受的 deterministic behavior 与 invariants；详细行为仍由现有 living
-specs 负责。ECO-34 deferred responsibility、mutation 与 trust；ECO-35 deferred
-grounding、validation、unsupported-claim、retry 与 rewrite。Agent-facing schema、
-invocation、orchestration 与 runtime implementation 仍 deferred beyond ECO-33。
+family 已接受的 deterministic behavior、invariants 与 capability-local validation；
+详细行为仍由现有 living specs 负责。Host Agent 负责 research intent、
+interpretation、reasoning、hypotheses、conclusions、working analysis 与 narrative；
+deterministic engine 是 Skill 内部责任层，不是第三参与者或 Agent-callable endpoint。
+结果只在 governing spec 保证的范围内具有 authority；在该 governing capability
+之外由 consumer 派生的值归 consumer/Agent 所有，跨边界或 deterministic processing 不会提升 provenance、
+verification 或 authority。ECO-35 仍负责 grounding、final-output validation、
+unsupported-claim、acceptance、retry、rewrite 与 recovery policy。Agent-facing
+schema、invocation、orchestration 与 runtime implementation 仍 deferred。
 
 ## 投资协助边界
 

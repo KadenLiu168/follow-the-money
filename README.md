@@ -4,8 +4,8 @@ Evidence-grounded financial research Skill for AI Agents: a deterministic,
 credential-free evidence Feed from free China/US official and public sources,
 plus retained deterministic libraries (ledger, candidate events, market
 snapshot/state, watchlist, scoring/ranking rules, safety audit). The semantic
-Skill capability surface is defined; its concrete Skill-Agent Contract remains
-deferred.
+Skill capability surface and responsibility boundary are defined; concrete
+Skill-Agent integration remains deferred.
 
 The Agent understands, reasons, and expresses; `follow-the-money` supplies
 facts, rules, deterministic computation, and verifiability.
@@ -36,12 +36,18 @@ The closed semantic catalog has exactly six families:
 
 These are descriptive architecture labels, not runtime state, configuration,
 serialized metadata, a capability registry, or workflow stages. The
-repository/Skill owns the accepted deterministic behavior and invariants;
-detailed behavior remains in the existing living specs. ECO-34 defers
-responsibility, mutation, and trust decisions; ECO-35 defers grounding,
-validation, unsupported-claim, retry, and rewrite decisions. Agent-facing
-schemas, invocation, orchestration, and runtime implementation remain deferred
-beyond ECO-33.
+repository/Skill owns the accepted deterministic behavior, invariants, and
+capability-local validation; detailed behavior remains in the existing living
+specs. The Host Agent owns research intent, interpretation, reasoning,
+hypotheses, conclusions, working analysis, and narrative. The deterministic
+engine is an internal Skill layer, not a third participant or Agent-callable
+endpoint. A result is authoritative only within its governing spec; consumer
+derivation outside that governing capability remains consumer/Agent-owned, and
+boundary crossing or deterministic processing does not upgrade provenance,
+verification, or authority. ECO-35
+still owns grounding, final-output validation, unsupported-claim, acceptance,
+retry, rewrite, and recovery policy. Agent-facing schemas, invocation,
+orchestration, and runtime implementation remain deferred.
 
 ## Investment-assistance boundary
 

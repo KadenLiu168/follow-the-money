@@ -13,7 +13,10 @@ description: |
 
 This Skill uses the local repository's minimal internal Feed entry. That entry
 owns network access and deterministic Feed collection and processing; the Skill
-runtime stays a thin coordinator and never re-implements Feed logic. Retained
+does not re-implement Feed logic. Within the Skill boundary, the deterministic
+engine is an internal responsibility layer for accepted typed/domain invariants,
+transformations, calculations, canonicalization, ordering, and capability-local
+validation—not a third participant or an Agent-callable endpoint. Retained
 post-Feed libraries are not claimed as entry-orchestrated production stages.
 
 ## Semantic capability surface
@@ -34,12 +37,18 @@ repository/Skill owns the accepted deterministic behavior and invariants of
 these families; detailed behavior remains governed by the existing
 `feed-evidence-pipeline` and `deterministic-research-engine` living specs.
 
-The semantic surface does not allocate operational responsibility between the
-Skill and Host Agent. ECO-34 remains responsible for responsibility, mutation,
-and trust decisions; ECO-35 remains responsible for grounding, validation,
-unsupported-claim, retry, and rewrite decisions. Agent-facing schemas,
-invocation, orchestration, and runtime implementation remain deferred beyond
-ECO-33.
+The responsibility boundary is semantic. The Host Agent owns research intent,
+financial interpretation, reasoning and judgment, Agent hypotheses and
+conclusions, working analysis, and user-facing synthesis and narrative. The
+Skill owns the accepted deterministic semantics, invariants, and capability-local
+validation of these families. A Skill-produced result is authoritative only for
+the exact guarantees of its governing living spec; a consumer-modified,
+supplemented, interpreted, or derived value outside that governing capability is
+consumer-owned or Host-Agent-owned.
+Agent-originated assertions remain Agent-owned, and crossing the boundary or
+processing them deterministically does not upgrade their provenance,
+verification, or authority. Agent-facing schemas, invocation, orchestration,
+grounding/output policy, and runtime implementation remain deferred.
 
 ## Live / Retained / Deferred
 

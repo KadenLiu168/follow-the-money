@@ -35,15 +35,29 @@ sequential production stages or API boundaries:
 | Deterministic Audit | `retained-no-production-caller` | `deterministic-research-engine` |
 
 Capability ownership means repository/Skill ownership of accepted deterministic
-behavior and invariants. It does not allocate operational responsibility between
-the Skill and Host Agent. The status labels are descriptive architecture
-metadata only: they are not runtime state, serialized fields, configuration, a
-capability registry, or a promise that every named family is production-wired.
+behavior, invariants, and capability-local validation. The Host Agent owns
+research intent, financial interpretation, reasoning and judgment, Agent
+hypotheses and conclusions, working analysis, and user-facing synthesis and
+narrative. The deterministic engine is an internal Skill responsibility layer
+for executing those accepted typed/domain invariants, transformations,
+calculations, canonicalization, ordering, and validation; it is not a third
+participant, service, facade, endpoint, or direct Host-Agent contract. The
+status labels are descriptive architecture metadata only: they are not runtime
+state, serialized fields, configuration, a capability registry, or a promise
+that every named family is production-wired.
 
 The retained libraries are typed, deterministic, reproducible, independently
 tested, and reusable. A retained library may intentionally have no current
 production orchestration caller; no placeholder caller supplies synthetic
 inputs to make it appear live.
+
+A Skill-produced result is authoritative only for the exact guarantees of its
+governing living spec. A consumer-modified, supplemented, interpreted, or
+derived value outside that governing capability is consumer-owned or
+Host-Agent-owned, and Agent-originated assertions remain Agent-owned even when
+supplied to deterministic processing.
+Boundary crossing and deterministic transformation do not upgrade provenance,
+verification, or authority.
 
 The Feed is the current serialized external contract: it is validated against
 `schemas/feed.schema.json` plus semantic, identity, and digest checks. Internal
@@ -102,13 +116,13 @@ schemas/tests. Recoverable only from git history.
 
 ## Deferred integration boundary
 
-The semantic capability surface above is defined by ECO-33, but the concrete
-Skill-Agent integration remains deferred. ECO-34 owns responsibility, mutation,
-and trust decisions; ECO-35 owns grounding, validation ownership,
-unsupported-claim, retry, and rewrite decisions. Agent-facing objects and
-schemas, invocation protocols, adapters, orchestration topology, call counts,
-ordering, and runtime implementation remain deferred beyond ECO-33. This
-repository does not define them here.
+The semantic capability surface above and its responsibility boundary are
+defined. The concrete Skill-Agent integration remains deferred: no Agent-facing
+objects or schemas, invocation protocols, adapters, orchestration topology,
+call counts, ordering, or runtime implementation are defined here. ECO-35
+still owns grounding sufficiency, final-output validation ownership,
+unsupported-claim handling, acceptance/rejection, retry, rewrite, and recovery
+policy. This repository does not define those later contracts here.
 
 ## Non-goals
 
