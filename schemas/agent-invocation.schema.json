@@ -1,0 +1,345 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://follow-the-money/schemas/agent-invocation.schema.json",
+  "title": "Follow the Money Agent invocation contract",
+  "oneOf": [
+    { "$ref": "#/$defs/request_audit_text" },
+    { "$ref": "#/$defs/request_audit_claims" },
+    { "$ref": "#/$defs/success_audit_text" },
+    { "$ref": "#/$defs/success_audit_claims" },
+    { "$ref": "#/$defs/error_response" }
+  ],
+  "$defs": {
+    "identity": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "audit_text_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "claim_id": {
+          "$ref": "#/$defs/identity"
+        }
+      }
+    },
+    "audit_claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_id",
+        "text",
+        "requires_direct_evidence",
+        "evidence_ids"
+      ],
+      "properties": {
+        "claim_id": {
+          "$ref": "#/$defs/identity"
+        },
+        "text": {
+          "type": "string"
+        },
+        "requires_direct_evidence": {
+          "type": "boolean"
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identity"
+          }
+        }
+      }
+    },
+    "audit_flow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["confirmed", "owning_event_id"],
+      "properties": {
+        "confirmed": {
+          "type": "boolean"
+        },
+        "owning_event_id": {
+          "anyOf": [
+            { "$ref": "#/$defs/identity" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "audit_claims_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claims", "submitted_claim_ids"],
+      "properties": {
+        "claims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/audit_claim"
+          }
+        },
+        "submitted_claim_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identity"
+          }
+        },
+        "flows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/audit_flow"
+          }
+        }
+      }
+    },
+    "request_audit_text": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "operation", "input"],
+      "properties": {
+        "contract_version": {
+          "const": 1
+        },
+        "operation": {
+          "const": "audit.text"
+        },
+        "input": {
+          "$ref": "#/$defs/audit_text_input"
+        }
+      }
+    },
+    "request_audit_claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "operation", "input"],
+      "properties": {
+        "contract_version": {
+          "const": 1
+        },
+        "operation": {
+          "const": "audit.claims"
+        },
+        "input": {
+          "$ref": "#/$defs/audit_claims_input"
+        }
+      }
+    },
+    "audit_finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_id", "category", "detail", "severity"],
+      "properties": {
+        "claim_id": {
+          "anyOf": [
+            { "$ref": "#/$defs/identity" },
+            { "type": "null" }
+          ]
+        },
+        "category": {
+          "enum": [
+            "trading_instruction",
+            "empty_inventory",
+            "invalid_claim_id",
+            "duplicate_claim_id",
+            "outside_inventory",
+            "missing_evidence",
+            "flow_ownership"
+          ]
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "enum": ["critical", "warning"]
+        }
+      }
+    },
+    "audit_result": {
+      "oneOf": [
+        { "$ref": "#/$defs/pass_result" },
+        { "$ref": "#/$defs/fail_result" }
+      ]
+    },
+    "pass_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "findings"],
+      "properties": {
+        "passed": {
+          "const": true
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/audit_finding" },
+              {
+                "properties": {
+                  "severity": {
+                    "const": "warning"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "fail_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "findings"],
+      "properties": {
+        "passed": {
+          "const": false
+        },
+        "findings": {
+          "type": "array",
+          "minContains": 1,
+          "contains": {
+            "allOf": [
+              { "$ref": "#/$defs/audit_finding" },
+              {
+                "properties": {
+                  "severity": {
+                    "const": "critical"
+                  }
+                }
+              }
+            ]
+          },
+          "items": {
+            "$ref": "#/$defs/audit_finding"
+          }
+        }
+      }
+    },
+    "success_audit_text": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "operation", "result"],
+      "properties": {
+        "contract_version": {
+          "const": 1
+        },
+        "operation": {
+          "const": "audit.text"
+        },
+        "result": {
+          "$ref": "#/$defs/audit_result"
+        }
+      }
+    },
+    "success_audit_claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "operation", "result"],
+      "properties": {
+        "contract_version": {
+          "const": 1
+        },
+        "operation": {
+          "const": "audit.claims"
+        },
+        "result": {
+          "$ref": "#/$defs/audit_result"
+        }
+      }
+    },
+    "error_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "error"],
+      "properties": {
+        "contract_version": {
+          "const": 1
+        },
+        "error": {
+          "oneOf": [
+            { "$ref": "#/$defs/invalid_json_error" },
+            { "$ref": "#/$defs/unsupported_contract_version_error" },
+            { "$ref": "#/$defs/unsupported_operation_error" },
+            { "$ref": "#/$defs/invalid_request_error" },
+            { "$ref": "#/$defs/execution_failure_error" }
+          ]
+        }
+      }
+    },
+    "invalid_json_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "const": "invalid_json"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "unsupported_contract_version_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "const": "unsupported_contract_version"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "unsupported_operation_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "const": "unsupported_operation"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "invalid_request_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "const": "invalid_request"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "execution_failure_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "const": "execution_failure"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

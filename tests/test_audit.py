@@ -212,7 +212,7 @@ def test_structured_audit_is_stable_under_reordered_repeated_and_malformed_input
 # ---------------------------------------------------------------------------
 
 
-def test_audit_boundary_has_no_legacy_brief_or_serialized_audit_contract():
+def test_audit_boundary_has_no_legacy_brief_or_internal_serialized_audit_contract():
     audit_source = inspect.getsource(audit_module).lower()
     for removed_term in (
         "brief",
@@ -222,6 +222,7 @@ def test_audit_boundary_has_no_legacy_brief_or_serialized_audit_contract():
         "claim_inventory",
     ):
         assert removed_term not in audit_source
+    assert (REPO_ROOT / "schemas" / "agent-invocation.schema.json").exists()
     assert not list((REPO_ROOT / "schemas").glob("*audit*.json"))
     assert not list((REPO_ROOT / "schemas").glob("*claim*.json"))
 

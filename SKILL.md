@@ -56,9 +56,10 @@ accepted deterministic findings only within their governing specs. An evidence
 reference alone is not semantic support, and deterministic success does not
 prove entailment or complete answer validity. Known unsupported grounded
 assertions and unresolved applicable critical findings are not admissible
-unchanged. The contract adds no Agent-facing schema, invocation, orchestration,
-retry, rewrite loop, or runtime implementation; concrete Skill-Agent
-integration remains deferred.
+unchanged. The accepted private Agent invocation contract is defined in
+`schemas/agent-invocation.schema.json`; it adds no executable, adapter,
+orchestration, retry, rewrite loop, or runtime implementation. Concrete
+Skill-Agent integration remains deferred.
 
 ## Live / Retained / Deferred
 
@@ -75,6 +76,27 @@ The host Agent is expected to:
 
 Do not invent future Agent objects, schemas, stages, ordering, or placeholder
 wiring in the meantime.
+
+## Accepted invocation contract (contract-only)
+
+The private Host-Agent boundary is a one-shot local process contract: one UTF-8
+JSON request on stdin and one UTF-8 JSON response on stdout; diagnostics belong
+on stderr. Version 1 statically defines only `audit.text` and `audit.claims`.
+Successful responses carry the deterministic Audit result, including critical
+findings; typed invocation errors are a separate response shape and process
+failure. The contract provides no session, streaming, discovery, registry,
+remote transport, shared state, hidden capability chaining, Event operation,
+LLM runtime, or production caller.
+
+The Phase 5 activation plan is approval for later Changes only:
+
+- Evidence Feed remains live and unchanged.
+- Deterministic Audit targets ECO-50.
+- Evidence and Event Structuring targets ECO-51 after Audit.
+- Market Analytics and State, Confidence and Watchlist, and Scoring and Ranking
+  remain deferred.
+
+Audit and Event Structuring therefore remain `retained-no-production-caller`.
 
 ## Investment-assistance boundary
 

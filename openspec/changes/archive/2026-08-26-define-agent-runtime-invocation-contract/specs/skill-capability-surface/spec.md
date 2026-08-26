@@ -1,21 +1,4 @@
-# skill-capability-surface Specification
-
-## Purpose
-
-Define the closed semantic catalog of deterministic behavior that the Skill owns for future Host-Agent integration while preserving truthful live-versus-retained status and deferring every concrete Agent invocation contract.
-
-## Requirements
-
-### Requirement: Skill capability ownership is semantic and closed
-The Skill capability surface SHALL consist of exactly six semantic capability families: Evidence Feed; Evidence and Event Structuring; Market Analytics and State; Confidence and Watchlist; Scoring and Ranking; and Deterministic Audit. Capability ownership SHALL mean that the repository/Skill owns the accepted deterministic behavior and invariants of those families. It SHALL NOT allocate operational responsibility between the Skill and a future Host Agent, and the family names SHALL NOT prescribe API methods, transport operations, invocation granularity, or workflow stages.
-
-#### Scenario: Capability catalog is reviewed
-- **WHEN** a future integration identifies deterministic behavior it may conceptually rely on from this repository
-- **THEN** that behavior belongs to one of the six named semantic families and remains governed in detail by the accepted living capability from which it derives
-
-#### Scenario: Capability ownership is interpreted
-- **WHEN** a capability is identified as Skill-owned
-- **THEN** the identification establishes ownership of its deterministic behavior and invariants without deciding which future participant invokes it, supplies its inputs, mutates surrounding state, or validates downstream output
+## MODIFIED Requirements
 
 ### Requirement: Evidence Feed is the live capability
 The Evidence Feed capability SHALL cover evidence acquisition, normalization, provenance, deterministic aggregation, schema and semantic validation, Feed identity and digest, degradation and coverage outcomes, and durable publication as already governed by `feed-evidence-pipeline`. Its execution status SHALL be `live-production`. The Feed SHALL remain evidence-only, and `feed.schema.json` SHALL remain the only live production Feed contract. The separate accepted `agent-runtime-invocation-contract` SHALL NOT wrap or alter the Feed contract merely for architectural symmetry.
@@ -38,39 +21,6 @@ The Evidence and Event Structuring capability SHALL cover the accepted determini
 #### Scenario: Structuring caller status is inspected
 - **WHEN** the current production caller graph and Agent invocation schema are reviewed after ECO-49
 - **THEN** the structuring family has no production orchestration caller and no Event-specific transport or serialized Agent payload has been added
-
-### Requirement: Market Analytics and State is a retained capability
-The Market Analytics and State capability SHALL cover the accepted deterministic behavior for market snapshot construction, market formulas, breadth, normalized surprise, and Market State classification as governed by `deterministic-research-engine`. Its execution status SHALL be `retained-no-production-caller`, and the capability SHALL NOT be represented as part of the live Feed production pipeline.
-
-#### Scenario: Market capability is traced
-- **WHEN** the semantic family is compared with its accepted detailed contract
-- **THEN** its snapshot, formula, breadth, surprise, and state-classification behavior is fully grounded in `deterministic-research-engine`
-
-#### Scenario: Feed wiring is inspected
-- **WHEN** the live Feed import and caller graph is reviewed
-- **THEN** naming the market family in the Skill surface has not made it a Feed stage or supplied it with a production orchestration caller
-
-### Requirement: Confidence and Watchlist is a retained capability
-The Confidence and Watchlist capability SHALL cover the accepted deterministic evidence and Event confidence rules, unresolved outcomes, future-calendar watchlist construction, stable ordering, and bounded results as governed by `deterministic-research-engine`. Its execution status SHALL be `retained-no-production-caller`, and it SHALL NOT be packaged or described as a Brief-preparation stage.
-
-#### Scenario: Confidence and watchlist capability is traced
-- **WHEN** the semantic family is compared with its accepted detailed contract
-- **THEN** its confidence, unresolved-outcome, calendar-selection, ordering, and bounds behavior is fully grounded in `deterministic-research-engine`
-
-#### Scenario: Presentation workflow is searched
-- **WHEN** the capability surface is inspected for a Brief or equivalent presentation-preparation stage
-- **THEN** none is defined or implied and the family remains without a production orchestration caller
-
-### Requirement: Scoring and Ranking is a retained capability
-The Scoring and Ranking capability SHALL cover the accepted deterministic behavior for Event significance, Event relevance, base priority, component coverage, eligibility, ranking, story-family penalty, and coexistence as governed by `deterministic-research-engine`. Its execution status SHALL be `retained-no-production-caller`. Existing inputs SHALL remain caller-supplied typed Python values, and this capability SHALL NOT define how a future Host Agent serializes, transports, or supplies them.
-
-#### Scenario: Scoring and ranking capability is traced
-- **WHEN** the semantic family is compared with its accepted detailed contract
-- **THEN** its scoring, coverage, eligibility, ordering, family-penalty, and coexistence behavior is fully grounded in `deterministic-research-engine`
-
-#### Scenario: Future input transport is searched
-- **WHEN** the capability surface is inspected for an Agent-facing scoring, ranking, or Event input contract
-- **THEN** no serialized schema or transport rule exists and the retained typed Python inputs have not gained a production orchestration caller
 
 ### Requirement: Deterministic Audit is a retained capability
 The Deterministic Audit capability SHALL cover the accepted workflow-neutral text safety and structured deterministic claim checks governed by `deterministic-research-engine`. Its execution status SHALL remain `retained-no-production-caller` after ECO-49. The accepted `agent-runtime-invocation-contract` SHALL define the separate Agent-facing `audit.text` and `audit.claims` representation and approve ECO-50 to implement its first production caller, but ECO-49 SHALL NOT create that caller. This capability SHALL NOT decide when a Host Agent invokes auditing, what evidence grounding is sufficient, whether an unsupported Agent claim may be emitted, who owns final-output validation, or whether failed output is retried or rewritten; those semantic rules remain governed by `agent-grounding-validation-contract`.
@@ -97,17 +47,6 @@ The labels `live-production` and `retained-no-production-caller` SHALL describe 
 #### Scenario: Retained capability is named
 - **WHEN** Audit or Event Structuring is included in the Phase 5 activation plan
 - **THEN** its status remains `retained-no-production-caller` until ECO-50 or ECO-51 explicitly establishes its real production caller
-
-### Requirement: Internal infrastructure remains outside the capability surface
-Provider adapters and manifests, HTTP clients, collection locks, rate-state machinery, configuration loaders, canonical serialization and digest helpers, publication filesystem mechanics, title-similarity primitives, internal helper functions, and individual Python structure layouts SHALL remain implementation machinery rather than stable Host-Agent capabilities. Such machinery MAY change without changing the semantic capability surface when the accepted behavior and invariants of the owning capability remain unchanged.
-
-#### Scenario: Internal mechanism is reviewed
-- **WHEN** a repository mechanism implements part of a semantic capability but does not itself define the capability's accepted behavior
-- **THEN** it remains internal implementation machinery and is not promoted into the Host-Agent capability catalog
-
-#### Scenario: Internal implementation is refactored
-- **WHEN** a later Change replaces an internal mechanism while preserving the owning capability's accepted deterministic behavior and invariants
-- **THEN** the semantic Skill capability surface does not require a contract change solely because that mechanism changed
 
 ### Requirement: Concrete integration contracts remain deferred
 The semantic capability surface SHALL recognize `agent-runtime-invocation-contract` as the accepted owner of the private local one-shot JSON protocol, Agent-facing Audit representation, compatibility, error, authority-preservation, and Phase 5 activation semantics. The capability surface itself SHALL NOT define or implement `ResearchContext`, `AgentAnalysis`, `BriefContext`, an equivalent replacement object, a tool or service facade, MCP/RPC/HTTP contract, runtime adapter, orchestration topology, fixed Agent workflow, grounding policy, retry or rewrite policy, runtime capability registry, or Phase 5 production wiring. Responsibility and authority remain governed by `skill-agent-responsibility-boundary`; grounding and admissibility remain governed by `agent-grounding-validation-contract`. ECO-49 SHALL NOT add an embedded LLM runtime, model SDK or configuration, API-key configuration, a production caller, Feed-to-retained-library wiring, or placeholder wiring.

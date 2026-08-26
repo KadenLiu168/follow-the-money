@@ -13,7 +13,8 @@ Agent 负责理解、推理与表达；`follow-the-money` 提供事实、规则�
 
 一个 Python 3.12 包，当前 live production path 负责采集并发布 schema 校验、
 携带身份的纯证据 Feed：运行身份、单一固定证据截止时间、逐条 provider 来源、
-规范摘要与契约快照。仓库中不存在任何凭据、模型或 LLM runtime。
+规范摘要与契约快照。仓库中不存在任何凭据、模型或 LLM runtime。Agent
+invocation schema 目前只是 contract-only，尚无 executable 或 production caller。
 
 保留的确定性库是 typed、可复现、独立测试且可复用的，但当前没有 production
 orchestration caller。Host Agent 在消费 Feed 后负责推理与叙事；命名 retained
@@ -45,9 +46,24 @@ recovery。仅有 evidence reference 不代表 semantic support，deterministic
 success 也不代表 entailment 或 complete answer validity；Host Agent 负责
 semantic support assessment 与 narrative emission，deterministic finding 只在
 其 governing spec 范围内保留 Skill authority。已知缺少支持的 grounded
-assertion 与尚未解决且适用的 critical finding 不得 unchanged 输出。Agent-facing
-schema、invocation、orchestration、retry、rewrite loop 与 runtime implementation
-仍 deferred。
+assertion 与尚未解决且适用的 critical finding 不得 unchanged 输出。private
+one-shot Agent invocation contract 已在 `schemas/agent-invocation.schema.json`
+中接受，但没有 executable、orchestration、retry、rewrite loop 或 runtime
+implementation。
+
+## 已接受的 invocation contract 与 Phase 5 计划
+
+private Host-Agent boundary 从 stdin 接收一个 UTF-8 JSON request，并向 stdout
+返回一个 JSON response；diagnostics 只能写入 stderr。Version 1 只定义
+`audit.text` 与 `audit.claims`。成功 response 携带 deterministic Audit result，
+包括 critical finding；typed invocation error 与 capability result 分离。这里
+没有 session、streaming、discovery、registry、remote transport、shared state、
+automatic chaining、Event operation、LLM runtime 或 production caller。
+
+activation plan 只表示后续 Change 的批准：Feed 保持 live 且不变；Audit 指向
+ECO-50；Evidence and Event Structuring 在 Audit 之后指向 ECO-51；Market
+Analytics and State、Confidence and Watchlist、Scoring and Ranking 仍 deferred。
+Audit 与 Event Structuring 仍保持 `retained-no-production-caller`。
 
 ## 投资协助边界
 
@@ -60,7 +76,7 @@ schema、invocation、orchestration、retry、rewrite loop 与 runtime implement
 ```
 config/          封闭的版本化 YAML 配置（v1 默认值，无任何密钥）
 providers/       provider 契约 manifest 与 fixture 来源记录
-schemas/         JSON Schema 2020-12 契约（feed.schema.json）
+schemas/         JSON Schema 2020-12 契约（Feed 与 contract-only Agent invocation）
 src/follow_the_money/  live Feed 路径与保留的确定性库
 scripts/feed/    最小内部 Feed 入口：follow-the-money-feed
 feeds/           发布产物（daily/<date>/<run_id>.json、latest.json）

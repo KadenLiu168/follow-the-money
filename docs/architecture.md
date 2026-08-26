@@ -64,14 +64,31 @@ The Feed is the current serialized external contract: it is validated against
 structures such as the ledger, candidate Components/grouping, market
 snapshot/state, watchlist, scoring intermediates, and ranking inputs use typed
 Python interfaces, domain invariants/validation, and deterministic tests; they
-do not require a standalone JSON Schema each.
+do not require a standalone JSON Schema each. The private Agent invocation
+contract is separately accepted in `schemas/agent-invocation.schema.json`; it is
+contract-only and has no current production caller.
+
+## Phase 5 activation plan
+
+The activation decisions below approve later implementation Changes only. They
+do not change runtime status, create registry entries, or make a retained
+capability callable.
+
+| Capability family | Phase 5 plan | Current execution status |
+| --- | --- | --- |
+| Evidence Feed | Live and unchanged | `live-production` |
+| Deterministic Audit | ECO-50 | `retained-no-production-caller` |
+| Evidence and Event Structuring | ECO-51 after Audit | `retained-no-production-caller` |
+| Market Analytics and State | Deferred | `retained-no-production-caller` |
+| Confidence and Watchlist | Deferred | `retained-no-production-caller` |
+| Scoring and Ranking | Deferred | `retained-no-production-caller` |
 
 ## Modules
 
 | Module | Responsibility |
 | --- | --- |
 | `config/` | Closed versioned YAML configuration and strict validation (no credentials) |
-| `schemas/` | JSON Schema 2020-12 contracts (`feed.schema.json`) |
+| `schemas/` | JSON Schema 2020-12 contracts (Feed plus contract-only Agent invocation) |
 | `providers/` | Contract manifests, adapters, HTTP/rate/lock discipline |
 | `feed/` | Feed planning, deduplication, validation, publication, minimal entry |
 | `engine/` | Retained entity resolution, candidate Components, and title similarity |
@@ -129,14 +146,19 @@ deterministic spec. Known unsupported grounded assertions and unresolved
 applicable critical findings are not admissible unchanged; recovery only
 requires that a later candidate no longer carry the relevant violation.
 
-## Deferred integration boundary
+## Accepted invocation and deferred runtime boundary
 
-The concrete Skill-Agent integration remains deferred: no Agent-facing objects
-or schemas, invocation protocols, adapters, orchestration topology, call
-counts, ordering, retry or rewrite loop, or runtime implementation are defined
-here. The grounding and admissibility contract is semantic only and does not
-create a validator service, production caller, Feed-to-retained-library wiring,
-or a fixed Agent pipeline.
+The private Host-Agent invocation contract is a one-shot local process boundary:
+one UTF-8 JSON request on stdin, one JSON response on stdout, and diagnostics on
+stderr. Version 1 defines only `audit.text` and `audit.claims`; successful
+responses carry deterministic Audit results, including critical findings, while
+typed invocation errors are separate from capability results.
+
+The contract does not define or implement a session, streaming, discovery,
+registry, remote transport, shared state, automatic chaining, Event operation,
+adapter, orchestration, production caller, LLM runtime, or grounding-proof
+system. Audit and Event Structuring remain `retained-no-production-caller`;
+ECO-50 and ECO-51 own any later implementation respectively.
 
 ## Non-goals
 

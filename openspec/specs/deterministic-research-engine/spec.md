@@ -362,10 +362,12 @@ bottom-line, money-flow-section, or other presentation/workflow classifications.
 
 All violations SHALL be reported deterministically through the retained audit result
 and finding model, critical findings SHALL fail the submitted candidate, and the
-auditor SHALL NOT silently rewrite rejected text. The audit boundary SHALL remain an
-internal typed library contract with no external serialized schema, LLM/model/
-credential dependency, Feed or Agent orchestration caller, or implied future Agent
-Contract.
+auditor SHALL NOT silently rewrite rejected text. The Audit implementation boundary
+SHALL remain an internal typed library contract with no LLM/model/credential
+dependency, Feed caller, Agent orchestration caller, or requirement to serialize its
+Python structures directly. The separate `agent-runtime-invocation-contract` SHALL
+define a closed Agent-facing representation that a future ECO-50 adapter maps to and
+from these internal semantics; ECO-49 SHALL NOT add that adapter or production caller.
 
 #### Scenario: Trading instruction is submitted
 - **WHEN** standalone submitted text contains a configured Chinese trading instruction without a configured descriptive exception
@@ -424,5 +426,5 @@ Contract.
 - **THEN** the same deterministic text safety rule produces a critical `trading_instruction` finding for that claim
 
 #### Scenario: Auditor caller status is inspected
-- **WHEN** the audit module, schemas, and production entry paths are traced
-- **THEN** the boundary contains only audit-owned internal Python inputs, no external audit schema or removed/future workflow objects exist, and the retained auditor has no Feed or Agent orchestration caller
+- **WHEN** the Audit module, Agent invocation schema, and production entry paths are traced after ECO-49
+- **THEN** internal Python structures remain internal, the separate Agent-facing representation exists only as a contract, and the retained auditor has no Feed or Agent orchestration caller
