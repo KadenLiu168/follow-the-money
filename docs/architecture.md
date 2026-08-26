@@ -114,15 +114,29 @@ schemas/tests. Recoverable only from git history.
   position-size/entry/exit/stop/target), in Chinese or English, with
   descriptive false-positive exceptions.
 
+## Grounding and admissibility boundary
+
+The runtime-neutral `agent-grounding-validation-contract` defines semantic
+grounding, validation authority, constrained output admissibility,
+unsupported-assertion handling, and semantic recovery. A grounded factual
+assertion requires semantic support within the authority of valid Feed evidence
+and/or an unchanged or correctly characterized Skill-produced deterministic
+result; an evidence reference alone is not semantic support, and deterministic
+success does not establish entailment or complete answer validity. The Host
+Agent owns semantic support assessment and the operational decision to emit its
+narrative, while the Skill retains authority for findings within each governing
+deterministic spec. Known unsupported grounded assertions and unresolved
+applicable critical findings are not admissible unchanged; recovery only
+requires that a later candidate no longer carry the relevant violation.
+
 ## Deferred integration boundary
 
-The semantic capability surface above and its responsibility boundary are
-defined. The concrete Skill-Agent integration remains deferred: no Agent-facing
-objects or schemas, invocation protocols, adapters, orchestration topology,
-call counts, ordering, or runtime implementation are defined here. ECO-35
-still owns grounding sufficiency, final-output validation ownership,
-unsupported-claim handling, acceptance/rejection, retry, rewrite, and recovery
-policy. This repository does not define those later contracts here.
+The concrete Skill-Agent integration remains deferred: no Agent-facing objects
+or schemas, invocation protocols, adapters, orchestration topology, call
+counts, ordering, retry or rewrite loop, or runtime implementation are defined
+here. The grounding and admissibility contract is semantic only and does not
+create a validator service, production caller, Feed-to-retained-library wiring,
+or a fixed Agent pipeline.
 
 ## Non-goals
 

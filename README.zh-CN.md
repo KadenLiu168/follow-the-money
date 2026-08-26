@@ -38,9 +38,16 @@ interpretation、reasoning、hypotheses、conclusions、working analysis 与 nar
 deterministic engine 是 Skill 内部责任层，不是第三参与者或 Agent-callable endpoint。
 结果只在 governing spec 保证的范围内具有 authority；在该 governing capability
 之外由 consumer 派生的值归 consumer/Agent 所有，跨边界或 deterministic processing 不会提升 provenance、
-verification 或 authority。ECO-35 仍负责 grounding、final-output validation、
-unsupported-claim、acceptance、retry、rewrite 与 recovery policy。Agent-facing
-schema、invocation、orchestration 与 runtime implementation 仍 deferred。
+verification 或 authority。runtime-neutral 的
+`agent-grounding-validation-contract` 现在定义 semantic grounding、validation
+authority、受约束的 output admissibility、unsupported assertion 与 semantic
+recovery。仅有 evidence reference 不代表 semantic support，deterministic
+success 也不代表 entailment 或 complete answer validity；Host Agent 负责
+semantic support assessment 与 narrative emission，deterministic finding 只在
+其 governing spec 范围内保留 Skill authority。已知缺少支持的 grounded
+assertion 与尚未解决且适用的 critical finding 不得 unchanged 输出。Agent-facing
+schema、invocation、orchestration、retry、rewrite loop 与 runtime implementation
+仍 deferred。
 
 ## 投资协助边界
 

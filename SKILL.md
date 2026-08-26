@@ -47,8 +47,18 @@ supplemented, interpreted, or derived value outside that governing capability is
 consumer-owned or Host-Agent-owned.
 Agent-originated assertions remain Agent-owned, and crossing the boundary or
 processing them deterministically does not upgrade their provenance,
-verification, or authority. Agent-facing schemas, invocation, orchestration,
-grounding/output policy, and runtime implementation remain deferred.
+verification, or authority. The runtime-neutral
+`agent-grounding-validation-contract` defines semantic grounding, validation
+authority, constrained output admissibility, unsupported assertions, and
+semantic recovery. The Host Agent assesses semantic support and owns the
+operational emission decision; the Skill owns the correctness and meaning of
+accepted deterministic findings only within their governing specs. An evidence
+reference alone is not semantic support, and deterministic success does not
+prove entailment or complete answer validity. Known unsupported grounded
+assertions and unresolved applicable critical findings are not admissible
+unchanged. The contract adds no Agent-facing schema, invocation, orchestration,
+retry, rewrite loop, or runtime implementation; concrete Skill-Agent
+integration remains deferred.
 
 ## Live / Retained / Deferred
 

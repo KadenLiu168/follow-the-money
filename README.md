@@ -44,10 +44,17 @@ engine is an internal Skill layer, not a third participant or Agent-callable
 endpoint. A result is authoritative only within its governing spec; consumer
 derivation outside that governing capability remains consumer/Agent-owned, and
 boundary crossing or deterministic processing does not upgrade provenance,
-verification, or authority. ECO-35
-still owns grounding, final-output validation, unsupported-claim, acceptance,
-retry, rewrite, and recovery policy. Agent-facing schemas, invocation,
-orchestration, and runtime implementation remain deferred.
+verification, or authority. The runtime-neutral
+`agent-grounding-validation-contract` defines semantic grounding, validation
+authority, constrained output admissibility, unsupported assertions, and
+semantic recovery. Evidence-reference presence alone does not establish
+semantic support, deterministic success does not establish entailment or
+complete answer validity, and the Host Agent owns semantic support assessment
+and narrative emission while deterministic findings retain bounded Skill
+authority. Known unsupported grounded assertions and unresolved applicable
+critical findings are not admissible unchanged. Agent-facing schemas,
+invocation, orchestration, retry, rewrite loops, and runtime implementation
+remain deferred.
 
 ## Investment-assistance boundary
 
