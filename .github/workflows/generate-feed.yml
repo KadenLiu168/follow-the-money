@@ -6,7 +6,7 @@
 #      to "true" (absent or any non-"true" value prevents checkout, provider
 #      work, credential access, and output-root access entirely).
 #   2. Provision a DEDICATED self-hosted runner with the label
-#      `follow-the-money-feed` (hosted/ephemeral runners are rejected).
+#      `follow-the-money-feed` (GitHub-hosted and non-matching runners are excluded).
 #   3. Mount a persistent shared output root on that runner and point
 #      `FOLLOW_THE_MONEY_OUTPUT_ROOT` at it; it must contain the deployment
 #      persistence marker and durable rate-state paths.
@@ -15,8 +15,8 @@
 # The job performs one staged generation followed by schema validation,
 # stages ONLY the run-scoped dated/latest Feed paths, and exposes Git
 # publication failure. An ephemeral/fresh output root, missing persistence
-# marker, unavailable durable rate state, destructive checkout cleanup, or
-# a non-dedicated runner label fails the job before any provider request.
+# marker, or unavailable durable rate state fails before checkout. GitHub
+# scheduler eligibility separately requires every dedicated runner label.
 
 name: generate-feed
 
@@ -35,12 +35,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RUNNER_LABEL: ${{ runner.labels }}
   OUTPUT_ROOT: ${{ vars.FOLLOW_THE_MONEY_OUTPUT_ROOT }}
 
 jobs:
   generate:
     runs-on: [self-hosted, follow-the-money-feed]
+    # The scheduler requires every label above; no runtime label check is needed.
     # jobs.<job_id>.if does not support the env context; use vars directly.
     if: ${{ vars.FOLLOW_THE_MONEY_FEED == 'true' }}
     steps:
@@ -62,12 +62,6 @@ jobs:
             echo "Durable rate registry missing; refusing." >&2
             exit 1
           fi
-      - name: Fail on non-dedicated runner
-        run: |
-          case "$RUNNER_LABEL" in
-            *follow-the-money-feed*) ;;
-            *) echo "Non-dedicated runner label; refusing." >&2; exit 1 ;;
-          esac
       - uses: actions/checkout@v4
         with:
           clean: false  # do NOT destructively clean the persistent output root

@@ -50,8 +50,17 @@ def test_feed_workflow_opt_in_defaults_false():
 def test_feed_workflow_requires_dedicated_runner_label():
     data = _load("generate-feed.yml")
     job = data["jobs"]["generate"]
-    assert "self-hosted" in job["runs-on"]
-    assert "follow-the-money-feed" in job["runs-on"]
+    assert job["runs-on"] == ["self-hosted", "follow-the-money-feed"]
+
+
+def test_feed_workflow_uses_scheduler_as_single_runner_authority():
+    data = _load("generate-feed.yml")
+    job = data["jobs"]["generate"]
+    assert "RUNNER_LABEL" not in data.get("env", {})
+    runtime_steps = yaml.safe_dump(job["steps"])
+    assert "runner.labels" not in runtime_steps
+    assert "RUNNER_LABEL" not in runtime_steps
+    assert "non-dedicated runner" not in runtime_steps.lower()
 
 
 def test_feed_workflow_persistence_checks_before_provider_work():

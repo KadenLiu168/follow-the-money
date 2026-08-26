@@ -1,0 +1,13 @@
+name: invalid-workflow-level-runner-context
+
+on:
+  workflow_dispatch:
+
+env:
+  RUNNER_OS: ${{ runner.os }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "$RUNNER_OS"

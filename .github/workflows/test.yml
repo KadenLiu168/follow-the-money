@@ -13,6 +13,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate GitHub Actions semantics
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+        run: |
+          set -euo pipefail
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}" \
+            | tar -xz -C "$RUNNER_TEMP"
+          actionlint="$RUNNER_TEMP/actionlint"
+          "$actionlint" -config-file .github/actionlint.yaml
+          if "$actionlint" -config-file .github/actionlint.yaml \
+            tests/fixtures/workflows/invalid-workflow-level-runner-context.yml; then
+            echo "invalid workflow fixture unexpectedly passed" >&2
+            exit 1
+          fi
       - uses: astral-sh/setup-uv@v5
         with:
           version: "0.11.21"
