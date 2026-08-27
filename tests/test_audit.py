@@ -237,9 +237,12 @@ def test_normal_tests_and_production_entry_paths_do_not_retain_legacy_auditor_wi
 
     source_root = REPO_ROOT / "src" / "follow_the_money"
     for path in source_root.rglob("*.py"):
-        if path == source_root / "audit.py":
+        if path in (source_root / "audit.py", source_root / "agent_invocation.py"):
             continue
         assert "ClaimAuditor" not in path.read_text(), path
+
+    invocation_source = (source_root / "agent_invocation.py").read_text()
+    assert "ClaimAuditor" in invocation_source
 
 
 def test_audit_module_does_not_define_removed_or_future_workflow_objects():

@@ -13,8 +13,9 @@ invariants, fail-closed validation where applicable, and focused tests. They SHA
 be represented as current serialized external contracts unless a later Change
 explicitly establishes such a boundary. The living baseline SHALL identify the
 current caller status honestly: only modules imported by the minimal Feed path MAY be
-described as production-wired; post-Feed preparation, scoring, selection, and safety
-libraries SHALL be described as retained without a production orchestration caller.
+described as production-wired; post-Feed preparation, scoring, and selection libraries
+SHALL be described as retained without a production orchestration caller; Deterministic
+Audit SHALL have exactly the approved private Agent invocation caller after ECO-50.
 Candidate preparation SHALL end at transport-neutral Components and SHALL NOT define
 a Resolver or Agent request envelope, request-local aliases, or batching contract.
 
@@ -24,7 +25,7 @@ a Resolver or Agent request envelope, request-local aliases, or batching contrac
 
 #### Scenario: Production wiring is audited
 - **WHEN** imports and entry paths are traced from the minimal Feed entry
-- **THEN** no post-Feed research, scoring, selection, or safety module is claimed as a live production stage without an actual caller
+- **THEN** Deterministic Audit is claimed as live only through the approved invocation caller, and no post-Feed research, scoring, or selection module is claimed as live without an actual caller
 
 #### Scenario: Candidate output is inspected
 - **WHEN** candidate preparation groups seed facts
@@ -340,34 +341,12 @@ orchestration caller or standalone external ranking schema.
 - **WHEN** the repository exposes the typed deterministic ranking library after this change
 - **THEN** no Feed or other production entry path invokes it and no Agent-owned or serialized ranking contract is introduced
 
-### Requirement: Deterministic safety audit retained without orchestration
-The retained safety audit SHALL expose workflow-neutral internal Python boundaries for
-text safety auditing and structured claim auditing. Text safety auditing SHALL accept
-submitted text without requiring a claim inventory, presentation section, Brief,
-Editor, or Agent object, SHALL associate a claim identity with a finding only when one
-is supplied, and SHALL apply the existing configured Chinese and English prohibited
-trading-instruction terms and descriptive exceptions without changing their matching
-semantics.
+### Requirement: Deterministic safety audit with bounded invocation
+The retained safety audit SHALL expose workflow-neutral internal Python boundaries for text safety auditing and structured claim auditing. Text safety auditing SHALL accept submitted text without requiring a claim inventory, presentation section, Brief, Editor, or Agent object, SHALL associate a claim identity with a finding only when one is supplied, and SHALL apply the existing configured Chinese and English prohibited trading-instruction terms and descriptive exceptions without changing their matching semantics.
 
-Structured claim auditing SHALL accept only the information required by its retained
-rules: required claim identities, claim text, whether each claim requires direct
-evidence references, supplied evidence references, independently supplied
-submitted/rendered claim identities, and confirmed-flow ownership information. It
-SHALL reject an empty required inventory, duplicate identities, missing or invalid
-required identities, submitted/rendered identities outside the inventory,
-evidence-required claims without evidence references, and confirmed flows without an
-owning Event. Evidence policy SHALL be expressed as an explicit per-claim obligation
-and SHALL NOT depend on dashboard, Editor, Brief, full, compact, watchlist,
-bottom-line, money-flow-section, or other presentation/workflow classifications.
+Structured claim auditing SHALL accept only the information required by its retained rules: required claim identities, claim text, whether each claim requires direct evidence references, supplied evidence references, independently supplied submitted/rendered claim identities, and confirmed-flow ownership information. It SHALL reject an empty required inventory, duplicate identities, missing or invalid required identities, submitted/rendered identities outside the inventory, evidence-required claims without evidence references, and confirmed flows without an owning Event. Evidence policy SHALL be expressed as an explicit per-claim obligation and SHALL NOT depend on dashboard, Editor, Brief, full, compact, watchlist, bottom-line, money-flow-section, or other presentation/workflow classifications.
 
-All violations SHALL be reported deterministically through the retained audit result
-and finding model, critical findings SHALL fail the submitted candidate, and the
-auditor SHALL NOT silently rewrite rejected text. The Audit implementation boundary
-SHALL remain an internal typed library contract with no LLM/model/credential
-dependency, Feed caller, Agent orchestration caller, or requirement to serialize its
-Python structures directly. The separate `agent-runtime-invocation-contract` SHALL
-define a closed Agent-facing representation that a future ECO-50 adapter maps to and
-from these internal semantics; ECO-49 SHALL NOT add that adapter or production caller.
+All violations SHALL be reported deterministically through the existing audit result and finding model, critical findings SHALL fail the submitted candidate, and the auditor SHALL NOT silently rewrite rejected text. The Audit implementation boundary SHALL remain an internal typed library contract with no LLM/model/credential dependency, Feed caller, caller-controlled policy, or requirement to serialize its Python structures directly. The private `agent-runtime-invocation-contract` boundary SHALL be its only approved production caller, SHALL explicitly map accepted Agent-facing values to and from these internal semantics, and SHALL NOT alter finding content, severity, category, order, or pass state.
 
 #### Scenario: Trading instruction is submitted
 - **WHEN** standalone submitted text contains a configured Chinese trading instruction without a configured descriptive exception
@@ -386,8 +365,8 @@ from these internal semantics; ECO-49 SHALL NOT add that adapter or production c
 - **THEN** the resulting finding carries that identity without requiring any other claim, Brief, Editor, or Agent state
 
 #### Scenario: Text audit is repeated
-- **WHEN** the same text, optional identity, and `SafetyLexicon` are audited repeatedly
-- **THEN** the complete audit result is identical and no LLM, model, credential, network, or mutable workflow state is consulted
+- **WHEN** the same text, optional identity, and Skill-owned `SafetyLexicon` are audited repeatedly
+- **THEN** the complete audit result is identical and no LLM, model, credential, network, mutable workflow state, or caller-controlled policy is consulted
 
 #### Scenario: Structured inventory is empty
 - **WHEN** structured claim auditing receives an empty required claim inventory
@@ -426,5 +405,5 @@ from these internal semantics; ECO-49 SHALL NOT add that adapter or production c
 - **THEN** the same deterministic text safety rule produces a critical `trading_instruction` finding for that claim
 
 #### Scenario: Auditor caller status is inspected
-- **WHEN** the Audit module, Agent invocation schema, and production entry paths are traced after ECO-49
-- **THEN** internal Python structures remain internal, the separate Agent-facing representation exists only as a contract, and the retained auditor has no Feed or Agent orchestration caller
+- **WHEN** the Audit module, Agent invocation boundary, Feed, legacy workflow paths, and unrelated capability modules are traced after ECO-50
+- **THEN** internal Python structures remain internal, exactly the approved invocation adapter calls Audit, and Feed, Event, Market, Watchlist, Confidence, Scoring, Ranking, and legacy workflow modules do not call it

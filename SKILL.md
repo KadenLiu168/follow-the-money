@@ -11,13 +11,15 @@ description: |
 
 # Follow the Money — Skill Orchestration Contract
 
-This Skill uses the local repository's minimal internal Feed entry. That entry
-owns network access and deterministic Feed collection and processing; the Skill
-does not re-implement Feed logic. Within the Skill boundary, the deterministic
-engine is an internal responsibility layer for accepted typed/domain invariants,
-transformations, calculations, canonicalization, ordering, and capability-local
-validation—not a third participant or an Agent-callable endpoint. Retained
-post-Feed libraries are not claimed as entry-orchestrated production stages.
+This Skill uses the local repository's minimal internal Feed entry and its
+separate private on-demand Audit invocation boundary. The Feed entry owns
+network access and deterministic Feed collection and processing; the Audit
+boundary invokes only the accepted deterministic Audit operation. Within the
+Skill boundary, the deterministic engine is an internal responsibility layer for
+accepted typed/domain invariants, transformations, calculations, canonicalization,
+ordering, and capability-local validation—not a third participant or an
+Agent-callable endpoint. Other retained post-Feed libraries are not claimed as
+entry-orchestrated production stages.
 
 ## Semantic capability surface
 
@@ -29,7 +31,7 @@ families:
 - Market Analytics and State — `retained-no-production-caller`.
 - Confidence and Watchlist — `retained-no-production-caller`.
 - Scoring and Ranking — `retained-no-production-caller`.
-- Deterministic Audit — `retained-no-production-caller`.
+- Deterministic Audit — `live-production` (on demand).
 
 These labels describe architecture only. They are not runtime state, serialized
 metadata, configuration, a capability registry, or workflow stages. The
@@ -56,17 +58,18 @@ accepted deterministic findings only within their governing specs. An evidence
 reference alone is not semantic support, and deterministic success does not
 prove entailment or complete answer validity. Known unsupported grounded
 assertions and unresolved applicable critical findings are not admissible
-unchanged. The accepted private Agent invocation contract is defined in
-`schemas/agent-invocation.schema.json`; it adds no executable, adapter,
-orchestration, retry, rewrite loop, or runtime implementation. Concrete
-Skill-Agent integration remains deferred.
+unchanged. The implemented private Agent invocation contract is defined in
+`schemas/agent-invocation.schema.json`; it statically dispatches only
+`audit.text` and `audit.claims`. It adds no orchestration, retry, rewrite loop,
+or runtime registry. Integration beyond on-demand Audit remains deferred.
 
 ## Live / Retained / Deferred
 
-The live repository path is the evidence Feed. Retained post-Feed libraries are
-typed, deterministic, reproducible, independently tested, and reusable, but
-they intentionally have no current production orchestration caller. Naming a
-retained family does not add or require a production caller.
+The live repository capabilities are the evidence Feed and the independent,
+on-demand Deterministic Audit. The other post-Feed libraries are typed,
+deterministic, reproducible, independently tested, and reusable, but they
+intentionally have no current production orchestration caller. Naming a retained
+family does not add or require a production caller.
 
 The host Agent is expected to:
 
@@ -77,26 +80,28 @@ The host Agent is expected to:
 Do not invent future Agent objects, schemas, stages, ordering, or placeholder
 wiring in the meantime.
 
-## Accepted invocation contract (contract-only)
+## Implemented private invocation contract
 
 The private Host-Agent boundary is a one-shot local process contract: one UTF-8
 JSON request on stdin and one UTF-8 JSON response on stdout; diagnostics belong
 on stderr. Version 1 statically defines only `audit.text` and `audit.claims`.
 Successful responses carry the deterministic Audit result, including critical
 findings; typed invocation errors are a separate response shape and process
-failure. The contract provides no session, streaming, discovery, registry,
-remote transport, shared state, hidden capability chaining, Event operation,
-LLM runtime, or production caller.
+failure. The contract provides no session, streaming, discovery, registry, remote
+transport, shared state, hidden capability chaining, Event operation, LLM runtime,
+or caller for any capability other than on-demand Audit.
 
 The Phase 5 activation plan is approval for later Changes only:
 
 - Evidence Feed remains live and unchanged.
-- Deterministic Audit targets ECO-50.
+- Deterministic Audit is `live-production` through its implemented private
+  boundary and remains on demand.
 - Evidence and Event Structuring targets ECO-51 after Audit.
 - Market Analytics and State, Confidence and Watchlist, and Scoring and Ranking
   remain deferred.
 
-Audit and Event Structuring therefore remain `retained-no-production-caller`.
+Event Structuring, Market Analytics and State, Confidence and Watchlist, and
+Scoring and Ranking therefore remain `retained-no-production-caller`.
 
 ## Investment-assistance boundary
 
@@ -139,7 +144,8 @@ scripts/feed/follow-the-money-feed      # evidence-only Feed, deterministic,
    `feeds/daily/<date>/<run_id>.json`). Every item carries source provenance;
    the window, cutoff, and run identity are authoritative.
 3. **Analysis**: the host Agent analyzes the evidence and writes the digest,
-   citing the relevant Feed items. No other repository entry exists.
+   citing the relevant Feed items. The independent Audit boundary is available
+   only when the Host Agent explicitly addresses `audit.text` or `audit.claims`.
 
 This flow does not claim that the minimal Feed entry orchestrates the retained
 post-Feed libraries.

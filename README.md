@@ -4,9 +4,8 @@ Evidence-grounded financial research Skill for AI Agents: a deterministic,
 credential-free evidence Feed from free China/US official and public sources,
 plus retained deterministic libraries (ledger, candidate events, market
 snapshot/state, watchlist, scoring/ranking rules, safety audit). The semantic
-Skill capability surface, responsibility boundary, and private contract-only
-Agent invocation boundary are defined; concrete Skill-Agent runtime
-integration remains deferred.
+Skill capability surface, responsibility boundary, and private on-demand Audit
+invocation boundary are implemented; integration beyond Audit remains deferred.
 
 The Agent understands, reasons, and expresses; `follow-the-money` supplies
 facts, rules, deterministic computation, and verifiability.
@@ -17,13 +16,13 @@ A Python 3.12 package whose live production path collects and publishes a
 schema-validated, identity-bearing evidence-only Feed: run identity, one fixed
 evidence cutoff, per-item provider provenance, canonical digests, and contract
 snapshots. No credential, model, or LLM runtime exists anywhere in the
-repository. The accepted Agent invocation schema is contract-only and has no
-executable or production caller.
+repository. A separate private one-shot boundary provides on-demand deterministic
+Audit; the other retained libraries have no current production caller.
 
-The retained deterministic libraries are typed, reproducible, independently
-tested, and reusable, but they have no current production orchestration caller.
-The Host Agent owns reasoning and narrative after consuming the Feed; naming a
-retained capability does not add a production caller.
+The retained deterministic libraries other than Audit are typed, reproducible,
+independently tested, and reusable, but have no current production orchestration
+caller. The Host Agent owns reasoning and narrative after consuming the Feed;
+naming a retained capability does not add a production caller.
 
 ## Semantic capability surface
 
@@ -34,7 +33,7 @@ The closed semantic catalog has exactly six families:
 - Market Analytics and State — `retained-no-production-caller`.
 - Confidence and Watchlist — `retained-no-production-caller`.
 - Scoring and Ranking — `retained-no-production-caller`.
-- Deterministic Audit — `retained-no-production-caller`.
+- Deterministic Audit — `live-production` (on demand).
 
 These are descriptive architecture labels, not runtime state, configuration,
 serialized metadata, a capability registry, or workflow stages. The
@@ -55,9 +54,9 @@ complete answer validity, and the Host Agent owns semantic support assessment
 and narrative emission while deterministic findings retain bounded Skill
 authority. Known unsupported grounded assertions and unresolved applicable
 critical findings are not admissible unchanged. The private one-shot Agent
-invocation contract is accepted in `schemas/agent-invocation.schema.json`; it
-defines only `audit.text` and `audit.claims`, with no executable,
-orchestration, retry, rewrite loop, or runtime implementation.
+invocation contract is implemented through `schemas/agent-invocation.schema.json`;
+it defines only `audit.text` and `audit.claims`, with no orchestration, retry,
+rewrite loop, or runtime registry.
 
 ## Accepted invocation contract and Phase 5 plan
 
@@ -67,12 +66,12 @@ has only `audit.text` and `audit.claims`. A successful response carries the
 deterministic Audit result, including critical findings; typed invocation
 errors are separate from capability results. There is no session, streaming,
 discovery, registry, remote transport, shared state, automatic chaining, Event
-operation, LLM runtime, or production caller.
+operation, LLM runtime, or caller for any capability other than on-demand Audit.
 
-The activation plan is approval for later Changes only: Feed remains live and
-unchanged; Audit targets ECO-50; Evidence and Event Structuring targets ECO-51
-after Audit; Market Analytics and State, Confidence and Watchlist, and Scoring
-and Ranking remain deferred. Audit and Event Structuring remain
+The activation plan records the verified state: Feed remains live and unchanged;
+Audit is `live-production` through its implemented private boundary; Evidence
+and Event Structuring targets ECO-51 after Audit; Market Analytics and State,
+Confidence and Watchlist, and Scoring and Ranking remain deferred and
 `retained-no-production-caller`.
 
 ## Investment-assistance boundary
@@ -87,8 +86,8 @@ is investment advice.
 ```
 config/           closed versioned YAML configuration (v1 defaults, no secrets)
 providers/        provider contract manifests and fixture provenance
-schemas/          JSON Schema 2020-12 contracts (Feed plus contract-only Agent invocation)
-src/follow_the_money/  live Feed path plus retained deterministic libraries
+schemas/          JSON Schema 2020-12 contracts (Feed plus Agent invocation)
+src/follow_the_money/  live Feed/Audit paths plus retained deterministic libraries
 scripts/feed/     minimal internal Feed entry: follow-the-money-feed
 feeds/            published artifacts (daily/<date>/<run_id>.json, latest.json)
 tests/            pytest suite (credential-free)

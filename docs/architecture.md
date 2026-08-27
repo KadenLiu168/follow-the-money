@@ -3,7 +3,7 @@
 Follow the Money is a deterministic, credential-free evidence engine. The
 project owns no LLM capability: no SDK dependency, no prompt files, no
 model/API-key configuration, no LLM request code, and no live evaluation.
-The only live production path is:
+The live production capabilities are independent:
 
 ```text
 Evidence Providers
@@ -14,6 +14,9 @@ Host Agent reasoning and narrative
       ↓
 Grounded research output
 ```
+
+The Host Agent may also explicitly invoke the private on-demand Audit boundary;
+there is no Feed-to-Audit edge.
 
 The Feed entry owns configuration resolution, Provider planning and fetching,
 normalization, deduplication, validation, identity/digest construction, health
@@ -32,7 +35,7 @@ sequential production stages or API boundaries:
 | Market Analytics and State | `retained-no-production-caller` | `deterministic-research-engine` |
 | Confidence and Watchlist | `retained-no-production-caller` | `deterministic-research-engine` |
 | Scoring and Ranking | `retained-no-production-caller` | `deterministic-research-engine` |
-| Deterministic Audit | `retained-no-production-caller` | `deterministic-research-engine` |
+| Deterministic Audit | `live-production` (on demand) | `deterministic-research-engine` |
 
 Capability ownership means repository/Skill ownership of accepted deterministic
 behavior, invariants, and capability-local validation. The Host Agent owns
@@ -46,10 +49,10 @@ status labels are descriptive architecture metadata only: they are not runtime
 state, serialized fields, configuration, a capability registry, or a promise
 that every named family is production-wired.
 
-The retained libraries are typed, deterministic, reproducible, independently
-tested, and reusable. A retained library may intentionally have no current
-production orchestration caller; no placeholder caller supplies synthetic
-inputs to make it appear live.
+The retained libraries other than Deterministic Audit are typed, deterministic,
+reproducible, independently tested, and reusable. They may intentionally have no
+current production orchestration caller; no placeholder caller supplies synthetic
+inputs to make them appear live.
 
 A Skill-produced result is authoritative only for the exact guarantees of its
 governing living spec. A consumer-modified, supplemented, interpreted, or
@@ -65,19 +68,20 @@ structures such as the ledger, candidate Components/grouping, market
 snapshot/state, watchlist, scoring intermediates, and ranking inputs use typed
 Python interfaces, domain invariants/validation, and deterministic tests; they
 do not require a standalone JSON Schema each. The private Agent invocation
-contract is separately accepted in `schemas/agent-invocation.schema.json`; it is
-contract-only and has no current production caller.
+contract is separately accepted in `schemas/agent-invocation.schema.json` and is
+implemented as an on-demand Audit boundary. It is independent of the Feed and
+has no caller for deferred capabilities.
 
 ## Phase 5 activation plan
 
-The activation decisions below approve later implementation Changes only. They
-do not change runtime status, create registry entries, or make a retained
-capability callable.
+The activation decisions below describe the verified caller state and preserve
+the rule that an activation decision alone does not create runtime status,
+registry entries, or callability for a retained capability.
 
 | Capability family | Phase 5 plan | Current execution status |
 | --- | --- | --- |
 | Evidence Feed | Live and unchanged | `live-production` |
-| Deterministic Audit | ECO-50 | `retained-no-production-caller` |
+| Deterministic Audit | Implemented by ECO-50 | `live-production` (on demand) |
 | Evidence and Event Structuring | ECO-51 after Audit | `retained-no-production-caller` |
 | Market Analytics and State | Deferred | `retained-no-production-caller` |
 | Confidence and Watchlist | Deferred | `retained-no-production-caller` |
@@ -88,7 +92,7 @@ capability callable.
 | Module | Responsibility |
 | --- | --- |
 | `config/` | Closed versioned YAML configuration and strict validation (no credentials) |
-| `schemas/` | JSON Schema 2020-12 contracts (Feed plus contract-only Agent invocation) |
+| `schemas/` | JSON Schema 2020-12 contracts (Feed plus Agent invocation) |
 | `providers/` | Contract manifests, adapters, HTTP/rate/lock discipline |
 | `feed/` | Feed planning, deduplication, validation, publication, minimal entry |
 | `engine/` | Retained entity resolution, candidate Components, and title similarity |
@@ -98,6 +102,7 @@ capability callable.
 | `state.py` / `watchlist.py` | Market state vector and 24-hour watchlist |
 | `scoring.py` / `selection.py` | Retained deterministic significance/priority/ranking libraries |
 | `audit.py` | Retained `ClaimAuditor` safety lexicon audit library |
+| `agent_invocation.py` | Private one-shot Agent boundary for on-demand `audit.text` and `audit.claims` |
 | `boundary.py` | Application build fingerprint (consumed by the Feed) |
 
 Provider adapters and manifests, HTTP clients, collection locks and rate-state
@@ -122,6 +127,9 @@ schemas/tests. Recoverable only from git history.
 - **The live Feed entry owns** run identity, evidence cutoff, provider
   collection, evidence normalization, Feed validation, and the Feed publication
   decision. It does not invoke every retained deterministic library.
+- **The private Audit boundary owns** one-shot request classification, explicit
+  mapping, and invocation of Deterministic Audit only; it does not invoke Feed or
+  any deferred capability.
 - **Retained libraries own** their typed inputs, domain invariants, and
   deterministic calculations; their production orchestration caller status is
   explicit rather than inferred from implementation or test coverage.
@@ -146,7 +154,7 @@ deterministic spec. Known unsupported grounded assertions and unresolved
 applicable critical findings are not admissible unchanged; recovery only
 requires that a later candidate no longer carry the relevant violation.
 
-## Accepted invocation and deferred runtime boundary
+## Implemented invocation and deferred runtime boundary
 
 The private Host-Agent invocation contract is a one-shot local process boundary:
 one UTF-8 JSON request on stdin, one JSON response on stdout, and diagnostics on
@@ -156,9 +164,10 @@ typed invocation errors are separate from capability results.
 
 The contract does not define or implement a session, streaming, discovery,
 registry, remote transport, shared state, automatic chaining, Event operation,
-adapter, orchestration, production caller, LLM runtime, or grounding-proof
-system. Audit and Event Structuring remain `retained-no-production-caller`;
-ECO-50 and ECO-51 own any later implementation respectively.
+orchestration, LLM runtime, or grounding-proof system. Deterministic Audit is
+`live-production` only through this private on-demand boundary; Event Structuring,
+Market Analytics and State, Confidence and Watchlist, and Scoring and Ranking
+remain `retained-no-production-caller` for later Changes.
 
 ## Non-goals
 

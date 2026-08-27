@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the semantic responsibility, ownership, mutation, provenance, and authority boundary between the Skill and a Host Agent without selecting or implying a runtime integration mechanism.
+Define the semantic responsibility, ownership, mutation, provenance, and authority boundary between the Skill and a Host Agent while preserving the bounded Audit runtime integration.
 
 ## Requirements
 
@@ -18,15 +18,15 @@ The Host Agent SHALL own understanding user research intent, financial interpret
 - **THEN** it defines no Agent object, transport, invocation sequence, call count, control flow, or requirement to invoke a retained capability
 
 ### Requirement: Skill owns accepted deterministic capability semantics
-The Skill SHALL own the accepted semantics, deterministic behavior and invariants, and existing capability-local fail-closed validation of the six families governed by `skill-capability-surface`, with detailed domain guarantees remaining governed by their referenced living specs. The Skill SHALL correctly represent the Evidence Feed as `live-production` and each of the five post-Feed families as `retained-no-production-caller`. It SHALL NOT claim responsibility for financial interpretation, Agent reasoning, Agent narrative, Agent-generated assertions, or Agent runtime orchestration.
+The Skill SHALL own the accepted semantics, deterministic behavior and invariants, and existing capability-local fail-closed validation of the six families governed by `skill-capability-surface`, with detailed domain guarantees remaining governed by their referenced living specs. The Skill SHALL correctly represent Evidence Feed and, after ECO-50, Deterministic Audit as `live-production`; Evidence/Event Structuring, Market Analytics and State, Confidence and Watchlist, and Scoring and Ranking SHALL remain `retained-no-production-caller`. The Skill SHALL NOT claim responsibility for financial interpretation, Agent reasoning, Agent narrative, Agent-generated assertions, or Agent runtime orchestration beyond executing the explicitly addressed deterministic Audit operation.
 
 #### Scenario: Skill responsibility is traced
 - **WHEN** responsibility for a deterministic family is reviewed
 - **THEN** the Skill owns only the accepted deterministic semantics, invariants, and capability-local validation guaranteed by that family's governing living specs
 
 #### Scenario: Capability status is reviewed
-- **WHEN** the responsibility boundary is compared with the current production caller graph
-- **THEN** the Evidence Feed remains the only `live-production` family and no retained family is represented as Agent-callable or as having a production orchestration caller
+- **WHEN** the responsibility boundary is compared with the post-ECO-50 production caller graph
+- **THEN** Evidence Feed and on-demand Deterministic Audit are `live-production`, while the other four families remain unwired and no mandatory sequence exists between the two live capabilities
 
 ### Requirement: Deterministic engine is an internal Skill responsibility layer
 Within the Skill boundary, the deterministic engine SHALL be responsible only for executing and enforcing accepted typed and domain invariants, deterministic transformations, canonicalization, deterministic calculations, stable ordering, and existing capability-local validation. It SHALL NOT be represented as a third external participant, service, tool endpoint, facade, transport boundary, Agent runtime, or direct Host-Agent contract.
@@ -84,7 +84,7 @@ When an accepted deterministic capability consumes valid inputs and produces a r
 - **THEN** the provenance, identity, digest, verification, validation, and fail-closed guarantees governed by `feed-evidence-pipeline` remain authoritative and unchanged
 
 ### Requirement: Responsibility boundary remains separate from grounding and runtime policy
-This capability SHALL define responsibility, semantic ownership after mutation or derivation, and provenance and authority preservation only. It SHALL NOT itself define evidence-grounding sufficiency for Agent claims, final Agent-output validation ownership, unsupported-claim emission or handling, final-answer acceptance or rejection, retry, rewrite, or recovery policy; those semantic decisions SHALL be governed by `agent-grounding-validation-contract`. It SHALL NOT itself define Agent-facing DTOs or schemas, serialized Agent request or response contracts, facades, adapters, protocols, orchestration, invocation order or count, runtime implementation, shared mutable state, production wiring, or LLM/model capability. The separate `agent-runtime-invocation-contract` SHALL govern the accepted private invocation mechanics and serialized Audit representation without changing the ownership and authority rules in this capability.
+This capability SHALL define responsibility, semantic ownership after mutation or derivation, and provenance and authority preservation only. It SHALL NOT itself define evidence-grounding sufficiency for Agent claims, final Agent-output validation ownership, unsupported-claim emission or handling, final-answer acceptance or rejection, retry, rewrite, or recovery policy; those semantic decisions SHALL be governed by `agent-grounding-validation-contract`. It SHALL NOT itself define Agent-facing DTOs or schemas, serialized Agent request or response contracts, facades, adapters, protocols, orchestration, invocation order or count, runtime implementation, shared mutable state, production wiring, or LLM/model capability. The separate `agent-runtime-invocation-contract` SHALL govern and ECO-50 SHALL implement the accepted private Audit invocation mechanics and serialized representation without changing the ownership and authority rules in this capability.
 
 #### Scenario: ECO-35 policy is requested
 - **WHEN** a decision is sought about grounding sufficiency, final-output validation, unsupported claims, acceptance or rejection, retry, rewrite, or recovery
@@ -92,8 +92,8 @@ This capability SHALL define responsibility, semantic ownership after mutation o
 
 #### Scenario: Runtime integration is requested
 - **WHEN** invocation mechanics, an Agent-facing Audit data contract, orchestration topology, shared state contract, or runtime implementation is sought
-- **THEN** only invocation mechanics and serialization are governed by `agent-runtime-invocation-contract`, while orchestration, shared state, and production implementation remain undefined by this responsibility capability
+- **THEN** only the accepted Audit invocation mechanics, serialization, and runtime are governed by `agent-runtime-invocation-contract`, while orchestration, shared state, other capability integrations, and runtime policy remain undefined by this responsibility capability
 
 #### Scenario: Serialized contracts are inspected
-- **WHEN** the accepted responsibility boundary and `schemas/` are reviewed after ECO-49
-- **THEN** the separate Agent invocation schema preserves this capability's ownership and authority rules without promoting internal Python structures or changing the current production caller graph
+- **WHEN** the accepted responsibility boundary, `schemas/`, and caller graph are reviewed after ECO-50
+- **THEN** the separate Agent invocation boundary preserves this capability's ownership and authority rules, explicitly maps internal Audit structures, and adds no authority upgrade or caller beyond the approved Audit adapter
