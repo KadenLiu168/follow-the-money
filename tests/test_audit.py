@@ -244,6 +244,13 @@ def test_normal_tests_and_production_entry_paths_do_not_retain_legacy_auditor_wi
     invocation_source = (source_root / "agent_invocation.py").read_text()
     assert "ClaimAuditor" in invocation_source
 
+    event_callers = []
+    for source_path in source_root.rglob("*.py"):
+        source = source_path.read_text()
+        if "build_event(" in source and source_path.name != "events.py":
+            event_callers.append(source_path.relative_to(source_root))
+    assert event_callers == [Path("agent_invocation.py")]
+
 
 def test_audit_module_does_not_define_removed_or_future_workflow_objects():
     audit_source = inspect.getsource(audit_module)

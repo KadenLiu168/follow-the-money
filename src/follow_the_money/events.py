@@ -170,6 +170,10 @@ def build_event(
     # Economic effective/reference times from key facts.
     times = [f.effective_time for f in key_facts if f.effective_time is not None]
     precisions = {f.effective_precision for f in key_facts}
+    first_effective_fact = next(
+        (fact for fact in key_facts if fact.effective_time is not None),
+        None,
+    )
     common = None
     multiple = len(set(times)) > 1 or len(precisions) > 1
     if times and not multiple and len(precisions) == 1:
@@ -186,7 +190,9 @@ def build_event(
         "display_label": label,
         "economic_effective_time": {
             "value": times[0] if times else None,
-            "precision": next(iter(precisions)) if precisions else "instant",
+            "precision": first_effective_fact.effective_precision
+            if first_effective_fact is not None
+            else "instant",
         },
         "common_effective_time": common,
         "multiple_effective_times": multiple if times else False,

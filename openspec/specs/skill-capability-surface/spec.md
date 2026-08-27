@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the closed semantic catalog of deterministic behavior that the Skill owns for Host-Agent integration while preserving truthful live-versus-retained status and keeping integration bounded to the implemented Audit invocation contract.
+Define the closed semantic catalog of deterministic behavior that the Skill owns for Host-Agent integration while preserving truthful live-versus-retained status and keeping integration bounded to the implemented Audit and Event invocation contract.
 
 ## Requirements
 
@@ -28,16 +28,16 @@ The Evidence Feed capability SHALL cover evidence acquisition, normalization, pr
 - **WHEN** the capability surface and `schemas/` are reviewed after ECO-50
 - **THEN** `feed.schema.json` remains the unchanged Feed contract while the separate Agent invocation schema governs the implemented on-demand Audit boundary
 
-### Requirement: Evidence and Event Structuring is a retained capability
-The Evidence and Event Structuring capability SHALL cover the accepted deterministic behavior for immutable evidence ledgering, closed entity resolution, candidate Components and grouping, canonical Event construction, and story-family and coexistence identity utilities as governed by `deterministic-research-engine`. Its execution status SHALL be `retained-no-production-caller`. It SHALL remain transport-neutral and SHALL NOT define a Resolver transport, Agent request batch, external Event schema, Event-specific Agent operation, or production wiring. The Phase 5 activation plan SHALL approve a later ECO-51 Change to add only its justified Event operation contract and caller after ECO-50 proves the common invocation boundary.
+### Requirement: Evidence and Event Structuring is a live on-demand capability
+The Evidence and Event Structuring capability SHALL cover the accepted deterministic behavior for immutable evidence ledgering, closed entity resolution, candidate Components and grouping, canonical Event construction, and story-family and coexistence identity utilities as governed by `deterministic-research-engine`. After ECO-51, its execution status SHALL be `live-production` only for the bounded on-demand `event.structure` operation implemented through `agent-runtime-invocation-contract`. All other behavior in this family SHALL remain transport-neutral and SHALL NOT define a Resolver transport, Agent request batch, Ledger API, persistent state, automatic Feed wiring, or another production caller.
 
 #### Scenario: Structuring capability is traced
 - **WHEN** the semantic family is compared with its accepted detailed contract
-- **THEN** its ledger, entity, candidate, Event, family, and coexistence behavior is fully grounded in `deterministic-research-engine` without copying those algorithms into this capability
+- **THEN** its ledger, entity, candidate, Event, family, and coexistence behavior remains grounded in `deterministic-research-engine` without copying those algorithms into this capability
 
 #### Scenario: Structuring caller status is inspected
-- **WHEN** the current production caller graph and Agent invocation schema are reviewed after ECO-49
-- **THEN** the structuring family has no production orchestration caller and no Event-specific transport or serialized Agent payload has been added
+- **WHEN** the production caller graph and Agent invocation schema are reviewed after ECO-51
+- **THEN** exactly the approved `event.structure` adapter calls canonical Event construction, Evidence/Event Structuring is `live-production` on demand, and no Ledger operation, Feed-to-Event edge, or other family behavior is production-wired
 
 ### Requirement: Market Analytics and State is a retained capability
 The Market Analytics and State capability SHALL cover the accepted deterministic behavior for market snapshot construction, market formulas, breadth, normalized surprise, and Market State classification as governed by `deterministic-research-engine`. Its execution status SHALL be `retained-no-production-caller`, and the capability SHALL NOT be represented as part of the live Feed production pipeline.
@@ -88,19 +88,27 @@ The Deterministic Audit capability SHALL cover the accepted workflow-neutral tex
 - **THEN** the applicable semantic decisions are governed by `agent-grounding-validation-contract` and Audit invocation success does not establish semantic grounding or final-output admissibility
 
 ### Requirement: Execution status is descriptive architecture metadata only
-The labels `live-production` and `retained-no-production-caller` SHALL describe only the current verified caller state recorded by the architecture contract. They SHALL NOT become runtime state, serialized metadata, configuration fields, a capability enablement registry, or a promise that every named capability is production-wired. A Phase 5 `activate` decision SHALL NOT alter execution status before a dedicated implementation Change establishes a real production caller.
+The labels `live-production` and `retained-no-production-caller` SHALL describe only the current verified caller state recorded by the architecture contract. They SHALL NOT become runtime state, serialized metadata, configuration fields, a capability enablement registry, or a promise that every behavior in a named family is production-wired. A Phase 5 `activate` decision SHALL NOT alter execution status before a dedicated implementation Change establishes a real production caller.
 
 #### Scenario: Status labels are implemented
-- **WHEN** repository configuration, schemas, and runtime code are inspected after this Change
+- **WHEN** repository configuration, schemas, and runtime code are inspected after ECO-51
 - **THEN** neither status label nor the activation matrix exists as a runtime value, serialized field, configuration option, or dynamic registry entry
 
+#### Scenario: Event caller is verified
+- **WHEN** ECO-51 establishes and verifies the approved `event.structure` production caller
+- **THEN** Evidence/Event Structuring changes to `live-production` while Market, Confidence/Watchlist, and Scoring/Ranking remain `retained-no-production-caller`
+
+#### Scenario: Event family scope is interpreted
+- **WHEN** the Evidence/Event Structuring family is marked `live-production`
+- **THEN** the label describes the verified Event operation caller and does not imply that entity resolution, candidate grouping, Ledger state, or Feed-to-Event orchestration has become externally callable
+
 #### Scenario: Retained capability is named
-- **WHEN** ECO-50 establishes and verifies the approved private Audit production caller
-- **THEN** Deterministic Audit changes to `live-production` while Evidence/Event Structuring and every other deferred family remain `retained-no-production-caller`
+- **WHEN** a family without a verified production caller is named in the accepted semantic catalog after ECO-51
+- **THEN** it remains `retained-no-production-caller` and gains no runtime value, operation, or wiring from its catalog membership
 
 #### Scenario: Event Structuring remains only approved
-- **WHEN** Event Structuring is included in the Phase 5 activation plan but ECO-51 has not established its caller
-- **THEN** its status remains `retained-no-production-caller`
+- **WHEN** the Phase 5 activation decision is reviewed before ECO-51 Apply is verified
+- **THEN** Evidence/Event Structuring remains `retained-no-production-caller`; its status changes only with the implemented and tested `event.structure` caller
 
 ### Requirement: Internal infrastructure remains outside the capability surface
 Provider adapters and manifests, HTTP clients, collection locks, rate-state machinery, configuration loaders, canonical serialization and digest helpers, publication filesystem mechanics, title-similarity primitives, internal helper functions, and individual Python structure layouts SHALL remain implementation machinery rather than stable Host-Agent capabilities. Such machinery MAY change without changing the semantic capability surface when the accepted behavior and invariants of the owning capability remain unchanged.
@@ -114,12 +122,12 @@ Provider adapters and manifests, HTTP clients, collection locks, rate-state mach
 - **THEN** the semantic Skill capability surface does not require a contract change solely because that mechanism changed
 
 ### Requirement: Concrete integration remains bounded
-The semantic capability surface SHALL recognize `agent-runtime-invocation-contract` as the accepted owner of the implemented private local one-shot JSON protocol, Agent-facing Audit representation, compatibility, error, authority-preservation, and Phase 5 activation semantics. The capability surface itself SHALL NOT define `ResearchContext`, `AgentAnalysis`, `BriefContext`, an equivalent replacement object, a tool or service facade, MCP/RPC/HTTP contract, orchestration topology, fixed Agent workflow, grounding policy, retry or rewrite policy, runtime capability registry, or integration for any capability beyond the approved Audit boundary. Responsibility and authority remain governed by `skill-agent-responsibility-boundary`; grounding and admissibility remain governed by `agent-grounding-validation-contract`. ECO-50 SHALL NOT add an embedded LLM runtime, model SDK or configuration, API-key configuration, Feed-to-retained-library wiring, Event operation, unrelated retained-capability caller, or placeholder wiring.
+The semantic capability surface SHALL recognize `agent-runtime-invocation-contract` as the accepted owner of the implemented private local one-shot JSON protocol, the Agent-facing Audit and Event Structuring representations, compatibility, error, authority-preservation, and Phase 5 activation semantics. The capability surface itself SHALL NOT define `ResearchContext`, `AgentAnalysis`, `BriefContext`, an equivalent replacement object, a tool or service facade, MCP/RPC/HTTP contract, orchestration topology, fixed Agent workflow, grounding policy, retry or rewrite policy, runtime capability registry, or integration beyond the approved Audit and Event Structuring operations. Responsibility and authority remain governed by `skill-agent-responsibility-boundary`; grounding and admissibility remain governed by `agent-grounding-validation-contract`. ECO-51 SHALL NOT add an embedded LLM runtime, model SDK or configuration, API-key configuration, Feed-to-Event wiring, Ledger API, automatic Audit, or a caller for Market, Confidence/Watchlist, Scoring/Ranking, or any other retained behavior.
 
 #### Scenario: Agent integration surface is audited
 - **WHEN** the accepted Change, schemas, runtime entries, imports, and current-facing documentation are inspected
-- **THEN** one private executable and adapter implement only `audit.text` and `audit.claims`, while no Event operation, orchestration, registry, remote service, shared state, Feed wiring, or unrelated retained-capability caller has been introduced
+- **THEN** one private executable and adapter implement only `audit.text`, `audit.claims`, and `event.structure`, while no Ledger operation, orchestration, registry, remote service, shared state, Feed wiring, or unrelated retained-capability caller has been introduced
 
 #### Scenario: Later contract ownership is reviewed
 - **WHEN** invocation, responsibility, grounding, validation, unsupported-claim, or recovery decisions are sought
-- **THEN** invocation mechanics are governed by `agent-runtime-invocation-contract`, responsibility and authority by `skill-agent-responsibility-boundary`, grounding and admissibility by `agent-grounding-validation-contract`, and every integration beyond the approved Audit boundary remains deferred to later Changes
+- **THEN** invocation mechanics are governed by `agent-runtime-invocation-contract`, responsibility and authority by `skill-agent-responsibility-boundary`, grounding and admissibility by `agent-grounding-validation-contract`, and every integration beyond the approved Audit and Event Structuring operations remains deferred to later Changes

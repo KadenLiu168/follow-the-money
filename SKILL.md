@@ -12,9 +12,10 @@ description: |
 # Follow the Money — Skill Orchestration Contract
 
 This Skill uses the local repository's minimal internal Feed entry and its
-separate private on-demand Audit invocation boundary. The Feed entry owns
-network access and deterministic Feed collection and processing; the Audit
-boundary invokes only the accepted deterministic Audit operation. Within the
+separate private on-demand Audit and Event Structuring invocation boundary. The
+Feed entry owns network access and deterministic Feed collection and processing;
+the private boundary invokes only the explicitly addressed deterministic Audit
+or Event Structuring operation. Within the
 Skill boundary, the deterministic engine is an internal responsibility layer for
 accepted typed/domain invariants, transformations, calculations, canonicalization,
 ordering, and capability-local validation—not a third participant or an
@@ -27,7 +28,7 @@ The semantic Skill capability surface is now defined as a closed catalog of six
 families:
 
 - Evidence Feed — `live-production`.
-- Evidence and Event Structuring — `retained-no-production-caller`.
+- Evidence and Event Structuring — `live-production` (on demand).
 - Market Analytics and State — `retained-no-production-caller`.
 - Confidence and Watchlist — `retained-no-production-caller`.
 - Scoring and Ranking — `retained-no-production-caller`.
@@ -60,13 +61,14 @@ prove entailment or complete answer validity. Known unsupported grounded
 assertions and unresolved applicable critical findings are not admissible
 unchanged. The implemented private Agent invocation contract is defined in
 `schemas/agent-invocation.schema.json`; it statically dispatches only
-`audit.text` and `audit.claims`. It adds no orchestration, retry, rewrite loop,
-or runtime registry. Integration beyond on-demand Audit remains deferred.
+`audit.text`, `audit.claims`, and `event.structure`. It adds no orchestration,
+retry, rewrite loop, or runtime registry. Integration beyond on-demand Audit and
+Event Structuring remains deferred.
 
 ## Live / Retained / Deferred
 
 The live repository capabilities are the evidence Feed and the independent,
-on-demand Deterministic Audit. The other post-Feed libraries are typed,
+on-demand Deterministic Audit and Event Structuring. The other post-Feed libraries are typed,
 deterministic, reproducible, independently tested, and reusable, but they
 intentionally have no current production orchestration caller. Naming a retained
 family does not add or require a production caller.
@@ -84,24 +86,25 @@ wiring in the meantime.
 
 The private Host-Agent boundary is a one-shot local process contract: one UTF-8
 JSON request on stdin and one UTF-8 JSON response on stdout; diagnostics belong
-on stderr. Version 1 statically defines only `audit.text` and `audit.claims`.
-Successful responses carry the deterministic Audit result, including critical
-findings; typed invocation errors are a separate response shape and process
+on stderr. Version 1 statically defines `audit.text`, `audit.claims`, and
+`event.structure`. Successful responses carry the bounded deterministic Audit or
+Event result; typed invocation errors are a separate response shape and process
 failure. The contract provides no session, streaming, discovery, registry, remote
-transport, shared state, hidden capability chaining, Event operation, LLM runtime,
-or caller for any capability other than on-demand Audit.
+transport, shared state, hidden capability chaining, LLM runtime, or caller for
+any capability other than on-demand Audit and Event Structuring.
 
 The Phase 5 activation plan is approval for later Changes only:
 
 - Evidence Feed remains live and unchanged.
 - Deterministic Audit is `live-production` through its implemented private
   boundary and remains on demand.
-- Evidence and Event Structuring targets ECO-51 after Audit.
+- Evidence and Event Structuring is `live-production` through its implemented
+  `event.structure` operation and remains on demand.
 - Market Analytics and State, Confidence and Watchlist, and Scoring and Ranking
   remain deferred.
 
-Event Structuring, Market Analytics and State, Confidence and Watchlist, and
-Scoring and Ranking therefore remain `retained-no-production-caller`.
+Market Analytics and State, Confidence and Watchlist, and Scoring and Ranking
+remain `retained-no-production-caller`.
 
 ## Investment-assistance boundary
 
@@ -144,8 +147,9 @@ scripts/feed/follow-the-money-feed      # evidence-only Feed, deterministic,
    `feeds/daily/<date>/<run_id>.json`). Every item carries source provenance;
    the window, cutoff, and run identity are authoritative.
 3. **Analysis**: the host Agent analyzes the evidence and writes the digest,
-   citing the relevant Feed items. The independent Audit boundary is available
-   only when the Host Agent explicitly addresses `audit.text` or `audit.claims`.
+   citing the relevant Feed items. The private boundary is available only when
+   the Host Agent explicitly addresses `audit.text`, `audit.claims`, or
+   `event.structure`.
 
 This flow does not claim that the minimal Feed entry orchestrates the retained
 post-Feed libraries.

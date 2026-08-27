@@ -8,6 +8,12 @@ story-family derivation, display-label templates, and schema validation.
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from follow_the_money.events import (
@@ -220,6 +226,88 @@ def test_multi_fact_distinct_effective_times():
     assert event["multiple_effective_times"] is True
     assert event["common_effective_time"] is None
     assert event["economic_effective_time"]["value"] == T1
+
+
+def test_mixed_effective_precision_uses_one_first_canonical_fact():
+    ledger = Ledger()
+    first_candidate = _fact(
+        ledger,
+        predicate="annual_rate",
+        value="5",
+        effective_time="2026",
+        precision="year",
+    )
+    second_candidate = _fact(
+        ledger,
+        predicate="monthly_rate",
+        value="5.0",
+        effective_time="2026-08",
+        precision="month",
+        evidence="ev-2",
+    )
+    first = min((first_candidate, second_candidate), key=lambda fact: fact.fact_id)
+    event = build_event(
+        event_type="macro_release",
+        evidence_ids=["ev-1", "ev-2"],
+        entity_ids=["ent_fed"],
+        event_defining_fact_ids=[first_candidate.fact_id, second_candidate.fact_id],
+        ledger=ledger,
+        subject_zh="美联储",
+    )
+
+    assert first.effective_time == "2026-08"
+    assert first.effective_precision == "month"
+    assert event["economic_effective_time"] == {"value": "2026-08", "precision": "month"}
+
+
+def test_mixed_effective_precision_is_stable_across_hash_seeds():
+    script = """
+import json
+from follow_the_money.events import build_event
+from follow_the_money.ledger import Ledger, build_ledger_entry
+
+ledger = Ledger()
+for kwargs in (
+    {"predicate": "annual_rate", "value": "5", "effective_time": "2026", "effective_precision": "year", "evidence_id": "ev-1"},
+    {"predicate": "monthly_rate", "value": "5.0", "effective_time": "2026-08", "effective_precision": "month", "evidence_id": "ev-2"},
+):
+    ledger.add(build_ledger_entry(
+        entry_type="FACT",
+        origin_payload="macro_release",
+        subject="ent_fed",
+        unit="percent",
+        knowledge_available_at="2026-08-11T01:00:00Z",
+        **kwargs,
+    ))
+event = build_event(
+    event_type="macro_release",
+    evidence_ids=["ev-1", "ev-2"],
+    entity_ids=["ent_fed"],
+    event_defining_fact_ids=[entry.fact_id for entry in ledger.entries()],
+    ledger=ledger,
+    subject_zh="美联储",
+)
+print(json.dumps(event["economic_effective_time"], ensure_ascii=False, sort_keys=True))
+    """
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(
+        (str(Path(__file__).resolve().parents[1] / "src"), env.get("PYTHONPATH", ""))
+    )
+    outputs = []
+    for seed in ("1", "2", "3", "4", "5"):
+        process_env = {**env, "PYTHONHASHSEED": seed}
+        proc = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=Path(__file__).resolve().parents[1],
+            env=process_env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, proc.stderr
+        outputs.append(json.loads(proc.stdout))
+
+    assert outputs == [{"precision": "month", "value": "2026-08"}] * len(outputs)
 
 
 def test_single_fact_common_effective_time():

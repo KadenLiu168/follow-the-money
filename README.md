@@ -5,7 +5,8 @@ credential-free evidence Feed from free China/US official and public sources,
 plus retained deterministic libraries (ledger, candidate events, market
 snapshot/state, watchlist, scoring/ranking rules, safety audit). The semantic
 Skill capability surface, responsibility boundary, and private on-demand Audit
-invocation boundary are implemented; integration beyond Audit remains deferred.
+and Event Structuring invocation boundary are implemented; integration beyond
+Audit and Event Structuring remains deferred.
 
 The Agent understands, reasons, and expresses; `follow-the-money` supplies
 facts, rules, deterministic computation, and verifiability.
@@ -17,19 +18,21 @@ schema-validated, identity-bearing evidence-only Feed: run identity, one fixed
 evidence cutoff, per-item provider provenance, canonical digests, and contract
 snapshots. No credential, model, or LLM runtime exists anywhere in the
 repository. A separate private one-shot boundary provides on-demand deterministic
-Audit; the other retained libraries have no current production caller.
+Audit and Event Structuring; the other retained libraries have no current
+production caller.
 
-The retained deterministic libraries other than Audit are typed, reproducible,
-independently tested, and reusable, but have no current production orchestration
-caller. The Host Agent owns reasoning and narrative after consuming the Feed;
-naming a retained capability does not add a production caller.
+The retained deterministic libraries other than Audit and Event Structuring are
+typed, reproducible, independently tested, and reusable, but have no current
+production orchestration caller. The Host Agent owns reasoning and narrative
+after consuming the Feed; naming a retained capability does not add a
+production caller.
 
 ## Semantic capability surface
 
 The closed semantic catalog has exactly six families:
 
 - Evidence Feed — `live-production`.
-- Evidence and Event Structuring — `retained-no-production-caller`.
+- Evidence and Event Structuring — `live-production` (on demand).
 - Market Analytics and State — `retained-no-production-caller`.
 - Confidence and Watchlist — `retained-no-production-caller`.
 - Scoring and Ranking — `retained-no-production-caller`.
@@ -55,22 +58,24 @@ and narrative emission while deterministic findings retain bounded Skill
 authority. Known unsupported grounded assertions and unresolved applicable
 critical findings are not admissible unchanged. The private one-shot Agent
 invocation contract is implemented through `schemas/agent-invocation.schema.json`;
-it defines only `audit.text` and `audit.claims`, with no orchestration, retry,
-rewrite loop, or runtime registry.
+it defines only `audit.text`, `audit.claims`, and `event.structure`, with no
+orchestration, retry, rewrite loop, or runtime registry.
 
 ## Accepted invocation contract and Phase 5 plan
 
 The private Host-Agent boundary accepts one UTF-8 JSON request on stdin and
 returns one JSON response on stdout; diagnostics belong on stderr. Version 1
-has only `audit.text` and `audit.claims`. A successful response carries the
-deterministic Audit result, including critical findings; typed invocation
-errors are separate from capability results. There is no session, streaming,
-discovery, registry, remote transport, shared state, automatic chaining, Event
-operation, LLM runtime, or caller for any capability other than on-demand Audit.
+defines `audit.text`, `audit.claims`, and `event.structure`. A successful
+response carries the bounded deterministic Audit or Event result; typed
+invocation errors are separate from capability results. There is no session,
+streaming, discovery, registry, remote transport, shared state, automatic
+chaining, LLM runtime, or caller for any capability other than on-demand Audit
+and Event Structuring.
 
 The activation plan records the verified state: Feed remains live and unchanged;
 Audit is `live-production` through its implemented private boundary; Evidence
-and Event Structuring targets ECO-51 after Audit; Market Analytics and State,
+and Event Structuring is `live-production` through its implemented
+`event.structure` operation and remains on demand; Market Analytics and State,
 Confidence and Watchlist, and Scoring and Ranking remain deferred and
 `retained-no-production-caller`.
 

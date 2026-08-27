@@ -1,4 +1,4 @@
-"""ECO-50 — private one-shot Agent Audit invocation boundary."""
+"""ECO-51 — private one-shot Agent invocation boundary."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,67 @@ from follow_the_money.schema import validate_against
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = "agent-invocation.schema.json"
+
+
+def _event_input(
+    *,
+    event_type: str = "macro_release",
+    origin_payload: str = "macro_release",
+    evidence_id: str = "ev-1",
+    subject: str = "ent_fed",
+    subject_zh: str = "美联储",
+    predicate: str = "policy_rate",
+    effective_time: str | None = "2026-08-11T01:00:00Z",
+    effective_precision: str = "instant",
+    value: str | None = "5.0",
+    unit: str | None = "percent",
+    knowledge_available_at: str = "2026-08-11T01:00:00Z",
+) -> dict:
+    return {
+        "event_type": event_type,
+        "evidence_ids": [evidence_id],
+        "entity_ids": [subject],
+        "key_facts": [
+            {
+                "entry_type": "FACT",
+                "origin_payload": origin_payload,
+                "evidence_id": evidence_id,
+                "subject": subject,
+                "predicate": predicate,
+                "effective_time": effective_time,
+                "effective_precision": effective_precision,
+                "value": value,
+                "unit": unit,
+                "knowledge_available_at": knowledge_available_at,
+            }
+        ],
+        "subject_zh": subject_zh,
+    }
+
+
+EXPECTED_EVENT_RESULT = {
+    "event_id": "evt_794cc9b6674d8b29cd7cdcdbe5b08bfcbc5ff03a",
+    "event_type": "macro_release",
+    "evidence_ids": ["ev-1"],
+    "key_fact_ids": ["fact_61f788f2068268ab4bf7c2095d7d2a0b"],
+    "fully_known_at": "2026-08-11T01:00:00Z",
+    "story_family_id": "fam_single_evt_794cc9b6674d8b29cd7cdcdbe5b08bfcbc5ff03a",
+    "coexistence_pair_ids": [],
+    "display_label": "美联储发布宏观数据：5.0percent",
+    "economic_effective_time": {"value": "2026-08-11T01:00:00Z", "precision": "instant"},
+    "common_effective_time": {"value": "2026-08-11T01:00:00Z", "precision": "instant"},
+    "multiple_effective_times": False,
+    "key_fact_effective_times": [
+        {
+            "fact_id": "fact_61f788f2068268ab4bf7c2095d7d2a0b",
+            "value": "2026-08-11T01:00:00Z",
+            "precision": "instant",
+        }
+    ],
+    "key_fact_references": [
+        {"fact_id": "fact_61f788f2068268ab4bf7c2095d7d2a0b", "evidence_id": "ev-1"}
+    ],
+}
 
 
 def _run(raw: bytes | str | dict) -> tuple[subprocess.CompletedProcess[bytes], dict]:
@@ -189,6 +251,290 @@ def test_valid_domain_negative_claims_are_successful_invocations(input_value, ex
 
     assert proc.returncode == 0
     assert response["result"] == {"passed": False, "findings": [expected]}
+
+
+def test_process_event_structure_returns_exact_closed_event_projection():
+    proc, response = _run(_request("event.structure", _event_input()))
+
+    assert proc.returncode == 0
+    assert proc.stderr == b""
+    assert response == {
+        "contract_version": 1,
+        "operation": "event.structure",
+        "result": EXPECTED_EVENT_RESULT,
+    }
+
+
+def test_process_event_structure_supports_default_and_filing_labels():
+    default_input = _event_input(
+        event_type="default",
+        origin_payload="news",
+        evidence_id="ev-default",
+        subject="raw-subject",
+        subject_zh="主体",
+    )
+    filing_input = _event_input(
+        event_type="filing",
+        origin_payload="filing",
+        evidence_id="ev-filing",
+        subject="ent_company",
+        subject_zh="公司",
+        predicate="filed",
+        value="13F",
+        unit="form",
+    )
+    filing_input.update({"company": "Acme", "form": "13F"})
+    filing_fallback_input = {key: value for key, value in filing_input.items() if key != "company"}
+
+    for input_value, label in (
+        (default_input, "主体 policy_rate 5.0percent"),
+        (filing_input, "Acme提交13F申报"),
+        (filing_fallback_input, "公司提交13F申报"),
+    ):
+        proc, response = _run(_request("event.structure", input_value))
+        assert proc.returncode == 0
+        assert response["result"]["display_label"] == label
+        assert set(response["result"]) == {
+            "event_id",
+            "event_type",
+            "evidence_ids",
+            "key_fact_ids",
+            "fully_known_at",
+            "story_family_id",
+            "coexistence_pair_ids",
+            "display_label",
+            "economic_effective_time",
+            "common_effective_time",
+            "multiple_effective_times",
+            "key_fact_effective_times",
+            "key_fact_references",
+        }
+
+
+def test_process_event_structure_canonicalizes_family_pairs_and_input_order():
+    from follow_the_money.events import story_family_id
+
+    base = _event_input()
+    second_fact = {
+        **base["key_facts"][0],
+        "evidence_id": "ev-2",
+        "predicate": "rate_hike",
+        "value": "0.5",
+    }
+    base["evidence_ids"] = ["ev-1", "ev-2"]
+    base["entity_ids"] = ["ent_treasury", "ent_fed", "ent_fed"]
+    base["key_facts"] = [base["key_facts"][0], second_fact]
+    peer_a = "evt_" + "a" * 40
+    peer_b = "evt_" + "b" * 40
+    coexist = "evt_" + "c" * 40
+    base["story_family_peer_event_ids"] = [peer_b, peer_a, peer_a]
+    base["coexisting_event_ids"] = [coexist, peer_a, coexist]
+    permuted = deepcopy(base)
+    permuted["evidence_ids"].reverse()
+    permuted["entity_ids"] = ["ent_fed", "ent_treasury"]
+    permuted["key_facts"].reverse()
+    permuted["story_family_peer_event_ids"] = [peer_a, peer_b]
+    permuted["coexisting_event_ids"] = [peer_a, coexist]
+
+    first_proc, first = _run(_request("event.structure", base))
+    second_proc, second = _run(_request("event.structure", permuted))
+
+    assert first_proc.returncode == second_proc.returncode == 0
+    assert first_proc.stdout == second_proc.stdout
+    assert first == second
+    event_id = first["result"]["event_id"]
+    assert first["result"]["story_family_id"] == story_family_id([event_id, peer_a, peer_b])
+    assert first["result"]["coexistence_pair_ids"] == [
+        sorted([event_id, peer_a]),
+        sorted([event_id, coexist]),
+    ]
+
+
+def test_event_invalid_requests_fail_closed_before_execution():
+    missing_evidence = _event_input()
+    missing_evidence["key_facts"][0]["evidence_id"] = "ev-missing"
+    duplicate_fact = _event_input()
+    duplicate_fact["key_facts"] = [
+        duplicate_fact["key_facts"][0],
+        deepcopy(duplicate_fact["key_facts"][0]),
+    ]
+    duplicate_fact["key_facts"][1]["knowledge_available_at"] = "2026-08-11T02:00:00Z"
+    non_filing_display = _event_input()
+    non_filing_display["form"] = "13F"
+    filing_without_form = _event_input(event_type="filing", origin_payload="filing")
+    cases = (missing_evidence, duplicate_fact, non_filing_display, filing_without_form)
+
+    for input_value in cases:
+        proc, response = _run(_request("event.structure", input_value))
+        assert proc.returncode != 0
+        assert response == {
+            "contract_version": 1,
+            "error": {"code": "invalid_request", "message": "invalid request"},
+        }
+
+
+def test_invalid_event_never_constructs_ledger_or_event(monkeypatch, capsys):
+    import follow_the_money.agent_invocation as module
+
+    calls = []
+
+    class ExplodingLedger:
+        def __init__(self):
+            calls.append("ledger")
+
+    def exploding_event(**kwargs):
+        calls.append("event")
+        raise AssertionError("invalid input reached Event construction")
+
+    monkeypatch.setattr(module, "Ledger", ExplodingLedger, raising=False)
+    monkeypatch.setattr(module, "build_event", exploding_event, raising=False)
+    invalid = _event_input()
+    invalid["key_facts"][0]["evidence_id"] = "ev-missing"
+
+    code = _call_main(monkeypatch, _request("event.structure", invalid), module)
+    response = json.loads(capsys.readouterr().out)
+
+    assert code != 0
+    assert response["error"]["code"] == "invalid_request"
+    assert calls == []
+
+
+def test_invalid_event_prevalidates_every_fact_before_fact_construction(monkeypatch, capsys):
+    import follow_the_money.agent_invocation as module
+
+    invalid = _event_input()
+    invalid["key_facts"].append(
+        {**invalid["key_facts"][0], "evidence_id": "ev-missing", "predicate": "later_fact"}
+    )
+
+    def exploding_entry(**kwargs):
+        raise AssertionError("invalid input reached fact construction")
+
+    monkeypatch.setattr(module, "build_ledger_entry", exploding_entry)
+    code = _call_main(monkeypatch, _request("event.structure", invalid), module)
+    response = json.loads(capsys.readouterr().out)
+
+    assert code != 0
+    assert response["error"]["code"] == "invalid_request"
+
+
+def test_accepted_event_execution_failure_is_one_schema_valid_error(monkeypatch, capsys):
+    import follow_the_money.agent_invocation as module
+
+    def exploding_event(**kwargs):
+        raise RuntimeError("unexpected Event failure")
+
+    monkeypatch.setattr(module, "build_event", exploding_event, raising=False)
+    code = _call_main(monkeypatch, _request("event.structure", _event_input()), module)
+    captured = capsys.readouterr()
+
+    assert code != 0
+    assert captured.err == ""
+    assert "Traceback" not in captured.out
+    lines = captured.out.splitlines()
+    assert len(lines) == 1
+    response = json.loads(lines[0])
+    validate_against(SCHEMA, response)
+    assert response == {
+        "contract_version": 1,
+        "error": {"code": "execution_failure", "message": "execution failure"},
+    }
+
+
+def test_event_mapping_matches_direct_canonical_construction():
+    from follow_the_money.events import build_event
+    from follow_the_money.ledger import Ledger, build_ledger_entry
+
+    input_value = _event_input()
+    fact = input_value["key_facts"][0]
+    ledger = Ledger()
+    entry = ledger.add(build_ledger_entry(**fact))
+    direct = build_event(
+        event_type=input_value["event_type"],
+        evidence_ids=input_value["evidence_ids"],
+        entity_ids=input_value["entity_ids"],
+        event_defining_fact_ids=[entry.fact_id],
+        ledger=ledger,
+        subject_zh=input_value["subject_zh"],
+    )
+    expected = {key: value for key, value in direct.items() if key != "schema_version"}
+    expected["key_fact_references"] = [{"fact_id": entry.fact_id, "evidence_id": entry.evidence_id}]
+
+    proc, response = _run(_request("event.structure", input_value))
+
+    assert proc.returncode == 0
+    assert response["result"] == expected
+
+
+def test_one_event_request_calls_only_event_structuring_once(monkeypatch, capsys):
+    import follow_the_money.agent_invocation as module
+    from follow_the_money.events import build_event
+
+    calls = []
+    build = build_event
+
+    def recording_event(**kwargs):
+        calls.append(kwargs)
+        return build(**kwargs)
+
+    class ExplodingAuditor:
+        def __init__(self):
+            raise AssertionError("Audit was called for event.structure")
+
+    monkeypatch.setattr(module, "build_event", recording_event, raising=False)
+    monkeypatch.setattr(module, "ClaimAuditor", ExplodingAuditor)
+    code = _call_main(monkeypatch, _request("event.structure", _event_input()), module)
+    response = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert response["operation"] == "event.structure"
+    assert len(calls) == 1
+
+
+def test_event_has_one_private_canonical_caller_and_no_feed_edge():
+    source_root = REPO_ROOT / "src" / "follow_the_money"
+    callers = []
+    for source_path in source_root.rglob("*.py"):
+        source = source_path.read_text()
+        if "build_event(" in source and source_path.name != "events.py":
+            callers.append(source_path.relative_to(source_root))
+
+    assert callers == [Path("agent_invocation.py")]
+    invocation_source = (source_root / "agent_invocation.py").read_text()
+    assert "run_feed" not in invocation_source
+    assert "build_event(" in invocation_source
+
+
+def test_event_inputs_remain_agent_owned_without_authority_claims():
+    input_value = _event_input(
+        event_type="news",
+        origin_payload="news",
+        evidence_id="agent-evidence",
+        subject="agent-entity",
+        subject_zh="Agent 选择的主体",
+        predicate="agent_selected_fact",
+    )
+    input_value["story_family_peer_event_ids"] = ["evt_" + "a" * 40]
+    input_value["coexisting_event_ids"] = ["evt_" + "b" * 40]
+
+    proc, response = _run(_request("event.structure", input_value))
+
+    assert proc.returncode == 0
+    result = response["result"]
+    assert result["event_type"] == "news"
+    assert result["evidence_ids"] == ["agent-evidence"]
+    assert result["key_fact_references"][0]["evidence_id"] == "agent-evidence"
+    assert not {
+        "verified",
+        "grounded",
+        "factually_correct",
+        "entailed",
+        "answer_valid",
+        "admissible",
+        "classification",
+        "hypothesis",
+        "narrative",
+    } & (_keys(input_value) | _keys(response))
 
 
 @pytest.mark.parametrize(
@@ -458,12 +804,12 @@ def test_invocation_boundary_has_no_grounding_policy_or_runtime_orchestration():
         assert forbidden not in source
 
 
-def test_only_audit_is_live_and_no_event_operation_or_activation_registry_exists():
+def test_event_is_live_without_activation_registry_or_unrelated_callers():
     architecture = (REPO_ROOT / "docs" / "architecture.md").read_text()
     assert "| Evidence Feed | `live-production`" in architecture
     assert "| Deterministic Audit | Implemented by ECO-50 | `live-production`" in architecture
+    assert "| Evidence and Event Structuring | `live-production`" in architecture
     for family in (
-        "Evidence and Event Structuring",
         "Market Analytics and State",
         "Confidence and Watchlist",
         "Scoring and Ranking",
@@ -472,6 +818,7 @@ def test_only_audit_is_live_and_no_event_operation_or_activation_registry_exists
 
     source = inspect.getsource(__import__("follow_the_money.agent_invocation", fromlist=["main"]))
     assert "event.create" not in source
+    assert "event.structure" in source
     assert "live-production" not in source
     assert "retained-no-production-caller" not in source
     schema = json.loads((REPO_ROOT / "schemas" / SCHEMA).read_text(encoding="utf-8"))
@@ -479,4 +826,8 @@ def test_only_audit_is_live_and_no_event_operation_or_activation_registry_exists
     assert (
         schema["$defs"]["request_audit_claims"]["properties"]["operation"]["const"]
         == "audit.claims"
+    )
+    assert (
+        schema["$defs"]["request_event_structure"]["properties"]["operation"]["const"]
+        == "event.structure"
     )

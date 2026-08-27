@@ -1,21 +1,4 @@
-# skill-agent-responsibility-boundary Specification
-
-## Purpose
-
-Define the semantic responsibility, ownership, mutation, provenance, and authority boundary between the Skill and a Host Agent while preserving the bounded Audit and Event runtime integration.
-
-## Requirements
-
-### Requirement: Host Agent owns the non-deterministic research layer
-The Host Agent SHALL own understanding user research intent, financial interpretation, reasoning and judgment, Agent-generated hypotheses and conclusions, Agent working analysis, and user-facing synthesis and narrative. These responsibilities SHALL NOT imply an invocation order, call count, control flow, Agent data structure, transport mechanism, or obligation to invoke a retained capability that has no production orchestration caller.
-
-#### Scenario: Host Agent produces research interpretation
-- **WHEN** financial evidence or a Skill-produced deterministic result is interpreted, combined with judgment, or expressed as a user-facing conclusion
-- **THEN** the interpretation, judgment, conclusion, and narrative are Host-Agent-owned rather than Skill-produced deterministic results
-
-#### Scenario: Responsibility is reviewed for runtime implications
-- **WHEN** the Host Agent responsibility allocation is inspected
-- **THEN** it defines no Agent object, transport, invocation sequence, call count, control flow, or requirement to invoke a retained capability
+## MODIFIED Requirements
 
 ### Requirement: Skill owns accepted deterministic capability semantics
 The Skill SHALL own the accepted semantics, deterministic behavior and invariants, and existing capability-local fail-closed validation of the six families governed by `skill-capability-surface`, with detailed domain guarantees remaining governed by their referenced living specs. The Skill SHALL correctly represent Evidence Feed, Deterministic Audit, and after ECO-51 Evidence/Event Structuring as independently `live-production`; Market Analytics and State, Confidence and Watchlist, and Scoring and Ranking SHALL remain `retained-no-production-caller`. The Skill SHALL NOT claim responsibility for financial interpretation, Agent reasoning, Agent narrative, Agent-originated Event classifications, evidence/fact/entity selections, family/coexistence hypotheses, or Agent runtime orchestration beyond executing the explicitly addressed deterministic Audit or Event Structuring operation.
@@ -27,39 +10,6 @@ The Skill SHALL own the accepted semantics, deterministic behavior and invariant
 #### Scenario: Capability status is reviewed
 - **WHEN** the responsibility boundary is compared with the post-ECO-51 production caller graph
 - **THEN** Evidence Feed, on-demand Deterministic Audit, and on-demand Event Structuring are `live-production`, the other three families remain unwired, and no mandatory sequence exists among live capabilities
-
-### Requirement: Deterministic engine is an internal Skill responsibility layer
-Within the Skill boundary, the deterministic engine SHALL be responsible only for executing and enforcing accepted typed and domain invariants, deterministic transformations, canonicalization, deterministic calculations, stable ordering, and existing capability-local validation. It SHALL NOT be represented as a third external participant, service, tool endpoint, facade, transport boundary, Agent runtime, or direct Host-Agent contract.
-
-#### Scenario: Deterministic responsibility is allocated
-- **WHEN** an accepted deterministic capability is exercised
-- **THEN** its deterministic execution and enforcement are internal Skill responsibilities governed by the applicable living spec
-
-#### Scenario: External participants are identified
-- **WHEN** the Skill-Agent boundary is inspected for external actors or callable boundaries
-- **THEN** the deterministic engine is not a third external actor and no `Host Agent ↔ deterministic engine` service, endpoint, facade, or transport contract exists
-
-### Requirement: Skill-produced results have bounded semantic authority
-A value represented as a Skill-produced deterministic result SHALL be authoritative only for the exact semantics and invariants guaranteed by its governing living spec. Information crossing the Skill-Agent boundary SHALL NOT acquire guarantees beyond that governing contract solely because the Skill produced, exposed, or received it.
-
-#### Scenario: Deterministic result is consumed unchanged
-- **WHEN** a consumer relies on an unchanged Skill-produced deterministic result
-- **THEN** the result carries only the authority and guarantees established by its governing living spec
-
-#### Scenario: Boundary crossing is interpreted
-- **WHEN** information passes between the Skill and Host Agent
-- **THEN** the crossing alone does not increase that information's provenance, verification status, or authority
-
-### Requirement: Consumer mutation or derivation transfers semantic ownership
-If a consumer changes, supplements, interprets, or transforms a Skill-produced deterministic result outside the governing deterministic capability, the derived value SHALL become consumer-owned or Host-Agent-owned and SHALL NOT be represented as the unchanged original Skill-produced result. This ownership rule SHALL be semantic and SHALL NOT require Python-level immutability, immutable storage, a mutation API, a shared state model, or a particular data structure.
-
-#### Scenario: Consumer modifies a deterministic result
-- **WHEN** a consumer changes or supplements a Skill-produced deterministic result outside its governing capability
-- **THEN** the changed value is consumer-owned or Host-Agent-owned and is not represented as the unchanged original Skill-produced result
-
-#### Scenario: Ownership rule is implemented conceptually
-- **WHEN** the mutation and derivation rule is reviewed for implementation requirements
-- **THEN** it introduces no immutable-storage requirement, mutation API, shared workspace contract, session store, state store, or persistence protocol
 
 ### Requirement: Agent-owned information remains Agent-owned
 Host-Agent reasoning state, hypotheses, interpretations, conclusions, narratives, Event classifications, evidence/fact/entity selections, family/coexistence hypotheses, display inputs, and other Agent-originated assertions SHALL remain Agent-owned. Supplying such information to an accepted deterministic capability SHALL NOT by itself convert the originating assertion or classification into Skill-owned evidence, verified fact, semantic grounding, or a Skill-produced assertion.

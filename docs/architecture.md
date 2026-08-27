@@ -15,8 +15,9 @@ Host Agent reasoning and narrative
 Grounded research output
 ```
 
-The Host Agent may also explicitly invoke the private on-demand Audit boundary;
-there is no Feed-to-Audit edge.
+The Host Agent may also explicitly invoke the private on-demand Audit or Event
+Structuring boundary; there is no Feed-to-Audit, Feed-to-Event, or capability
+chaining edge.
 
 The Feed entry owns configuration resolution, Provider planning and fetching,
 normalization, deduplication, validation, identity/digest construction, health
@@ -31,7 +32,7 @@ sequential production stages or API boundaries:
 | Capability family | Execution status | Detailed contract |
 | --- | --- | --- |
 | Evidence Feed | `live-production` | `feed-evidence-pipeline` |
-| Evidence and Event Structuring | `retained-no-production-caller` | `deterministic-research-engine` |
+| Evidence and Event Structuring | `live-production` | `deterministic-research-engine` |
 | Market Analytics and State | `retained-no-production-caller` | `deterministic-research-engine` |
 | Confidence and Watchlist | `retained-no-production-caller` | `deterministic-research-engine` |
 | Scoring and Ranking | `retained-no-production-caller` | `deterministic-research-engine` |
@@ -49,10 +50,10 @@ status labels are descriptive architecture metadata only: they are not runtime
 state, serialized fields, configuration, a capability registry, or a promise
 that every named family is production-wired.
 
-The retained libraries other than Deterministic Audit are typed, deterministic,
-reproducible, independently tested, and reusable. They may intentionally have no
-current production orchestration caller; no placeholder caller supplies synthetic
-inputs to make them appear live.
+The retained libraries other than Deterministic Audit and on-demand Event
+Structuring are typed, deterministic, reproducible, independently tested, and
+reusable. They may intentionally have no current production orchestration caller;
+no placeholder caller supplies synthetic inputs to make them appear live.
 
 A Skill-produced result is authoritative only for the exact guarantees of its
 governing living spec. A consumer-modified, supplemented, interpreted, or
@@ -69,8 +70,8 @@ snapshot/state, watchlist, scoring intermediates, and ranking inputs use typed
 Python interfaces, domain invariants/validation, and deterministic tests; they
 do not require a standalone JSON Schema each. The private Agent invocation
 contract is separately accepted in `schemas/agent-invocation.schema.json` and is
-implemented as an on-demand Audit boundary. It is independent of the Feed and
-has no caller for deferred capabilities.
+implemented as an on-demand Audit and Event Structuring boundary. It is
+independent of the Feed and has no caller for deferred capabilities.
 
 ## Phase 5 activation plan
 
@@ -82,7 +83,7 @@ registry entries, or callability for a retained capability.
 | --- | --- | --- |
 | Evidence Feed | Live and unchanged | `live-production` |
 | Deterministic Audit | Implemented by ECO-50 | `live-production` (on demand) |
-| Evidence and Event Structuring | ECO-51 after Audit | `retained-no-production-caller` |
+| Evidence and Event Structuring | Implemented by ECO-51 | `live-production` (on demand) |
 | Market Analytics and State | Deferred | `retained-no-production-caller` |
 | Confidence and Watchlist | Deferred | `retained-no-production-caller` |
 | Scoring and Ranking | Deferred | `retained-no-production-caller` |
@@ -96,13 +97,13 @@ registry entries, or callability for a retained capability.
 | `providers/` | Contract manifests, adapters, HTTP/rate/lock discipline |
 | `feed/` | Feed planning, deduplication, validation, publication, minimal entry |
 | `engine/` | Retained entity resolution, candidate Components, and title similarity |
-| `events.py` | Retained pure canonical Event/family ID derivation |
+| `events.py` | Canonical Event/family ID derivation |
 | `market/` | Decimal formulas, surprise, confidence |
 | `ledger.py` | Frozen evidence ledger |
 | `state.py` / `watchlist.py` | Market state vector and 24-hour watchlist |
 | `scoring.py` / `selection.py` | Retained deterministic significance/priority/ranking libraries |
 | `audit.py` | Retained `ClaimAuditor` safety lexicon audit library |
-| `agent_invocation.py` | Private one-shot Agent boundary for on-demand `audit.text` and `audit.claims` |
+| `agent_invocation.py` | Private one-shot Agent boundary for on-demand `audit.text`, `audit.claims`, and `event.structure` |
 | `boundary.py` | Application build fingerprint (consumed by the Feed) |
 
 Provider adapters and manifests, HTTP clients, collection locks and rate-state
@@ -130,6 +131,10 @@ schemas/tests. Recoverable only from git history.
 - **The private Audit boundary owns** one-shot request classification, explicit
   mapping, and invocation of Deterministic Audit only; it does not invoke Feed or
   any deferred capability.
+- **The private Event Structuring boundary owns** one-shot request validation,
+  invocation-local key-fact construction, explicit mapping, and invocation of
+  canonical Event construction only; it does not invoke Feed, Audit, or any
+  deferred capability.
 - **Retained libraries own** their typed inputs, domain invariants, and
   deterministic calculations; their production orchestration caller status is
   explicit rather than inferred from implementation or test coverage.
@@ -158,16 +163,16 @@ requires that a later candidate no longer carry the relevant violation.
 
 The private Host-Agent invocation contract is a one-shot local process boundary:
 one UTF-8 JSON request on stdin, one JSON response on stdout, and diagnostics on
-stderr. Version 1 defines only `audit.text` and `audit.claims`; successful
-responses carry deterministic Audit results, including critical findings, while
+stderr. Version 1 defines `audit.text`, `audit.claims`, and `event.structure`;
+successful responses carry bounded deterministic Audit or Event results, while
 typed invocation errors are separate from capability results.
 
 The contract does not define or implement a session, streaming, discovery,
-registry, remote transport, shared state, automatic chaining, Event operation,
-orchestration, LLM runtime, or grounding-proof system. Deterministic Audit is
-`live-production` only through this private on-demand boundary; Event Structuring,
-Market Analytics and State, Confidence and Watchlist, and Scoring and Ranking
-remain `retained-no-production-caller` for later Changes.
+registry, remote transport, shared state, automatic chaining, orchestration, LLM
+runtime, or grounding-proof system. Deterministic Audit and Event Structuring are
+`live-production` only through this private on-demand boundary; Market Analytics
+and State, Confidence and Watchlist, and Scoring and Ranking remain
+`retained-no-production-caller`.
 
 ## Non-goals
 

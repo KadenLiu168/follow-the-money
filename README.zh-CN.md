@@ -3,8 +3,9 @@
 面向 AI Agent 的证据驱动金融研究 Skill：一个确定性、免凭据的纯证据 Feed，
 来自免费的中美官方与公开来源；同时保留确定性引擎（证据台账、候选事件、
 市场快照/状态、关注列表、打分/选择规则、安全审计）。语义层的 Skill
-capability surface、responsibility boundary 与 private on-demand Audit
-invocation boundary 已实现；Audit 之外的 Skill-Agent integration 仍 deferred。
+capability surface、responsibility boundary 与 private on-demand Audit 和 Event
+Structuring invocation boundary 已实现；Audit 与 Event Structuring 之外的
+Skill-Agent integration 仍 deferred。
 
 Agent 负责理解、推理与表达；`follow-the-money` 提供事实、规则、确定性计算
 与可验证性。
@@ -14,19 +15,19 @@ Agent 负责理解、推理与表达；`follow-the-money` 提供事实、规则�
 一个 Python 3.12 包，当前 live production path 负责采集并发布 schema 校验、
 携带身份的纯证据 Feed：运行身份、单一固定证据截止时间、逐条 provider 来源、
 规范摘要与契约快照。仓库中不存在任何凭据、模型或 LLM runtime。独立的 private
-one-shot boundary 提供 on-demand deterministic Audit；其他 retained library
-仍没有 production caller。
+one-shot boundary 提供 on-demand deterministic Audit 和 Event Structuring；其他
+retained library 仍没有 production caller。
 
-Audit 之外的保留确定性库是 typed、可复现、独立测试且可复用的，但当前没有
-production orchestration caller。Host Agent 在消费 Feed 后负责推理与叙事；命名
-retained capability 不会增加 production caller。
+Audit 与 Event Structuring 之外的保留确定性库是 typed、可复现、独立测试且可复用的，
+但当前没有 production orchestration caller。Host Agent 在消费 Feed 后负责推理与叙事；
+命名 retained capability 不会增加 production caller。
 
 ## 语义 capability surface
 
 当前 closed semantic catalog 恰好包含六个 family：
 
 - Evidence Feed — `live-production`。
-- Evidence and Event Structuring — `retained-no-production-caller`。
+- Evidence and Event Structuring — `live-production`（on demand）。
 - Market Analytics and State — `retained-no-production-caller`。
 - Confidence and Watchlist — `retained-no-production-caller`。
 - Scoring and Ranking — `retained-no-production-caller`。
@@ -48,23 +49,25 @@ success 也不代表 entailment 或 complete answer validity；Host Agent 负责
 semantic support assessment 与 narrative emission，deterministic finding 只在
 其 governing spec 范围内保留 Skill authority。已知缺少支持的 grounded
 assertion 与尚未解决且适用的 critical finding 不得 unchanged 输出。private
-one-shot Agent invocation boundary 已实现，仅提供 `audit.text` 与
-`audit.claims`，不包含 orchestration、retry、rewrite loop 或 runtime registry。
+one-shot Agent invocation boundary 已实现，仅提供 `audit.text`、`audit.claims`
+与 `event.structure`，不包含 orchestration、retry、rewrite loop 或 runtime
+registry。
 
 ## 已接受的 invocation contract 与 Phase 5 计划
 
 private Host-Agent boundary 从 stdin 接收一个 UTF-8 JSON request，并向 stdout
-返回一个 JSON response；diagnostics 只能写入 stderr。Version 1 只定义
-`audit.text` 与 `audit.claims`。成功 response 携带 deterministic Audit result，
-包括 critical finding；typed invocation error 与 capability result 分离。这里
-没有 session、streaming、discovery、registry、remote transport、shared state、
-automatic chaining、Event operation、LLM runtime，且除 on-demand Audit 外没有
-其他 capability caller。
+返回一个 JSON response；diagnostics 只能写入 stderr。Version 1 定义
+`audit.text`、`audit.claims` 与 `event.structure`。成功 response 携带 bounded
+deterministic Audit 或 Event result；typed invocation error 与 capability result
+分离。这里没有 session、streaming、discovery、registry、remote transport、
+shared state、automatic chaining、LLM runtime，且除 on-demand Audit 与 Event
+Structuring 外没有其他 capability caller。
 
 activation plan 记录已验证状态：Feed 保持 live 且不变；Audit 通过已实现的
-private boundary 处于 `live-production`；Evidence and Event Structuring 在 Audit
-之后指向 ECO-51；Market Analytics and State、Confidence and Watchlist、Scoring
-and Ranking 仍 deferred 且保持 `retained-no-production-caller`。
+private boundary 处于 `live-production`；Evidence and Event Structuring 通过已实现的
+`event.structure` operation 处于 `live-production` 且保持 on demand；Market
+Analytics and State、Confidence and Watchlist、Scoring and Ranking 仍 deferred
+且保持 `retained-no-production-caller`。
 
 ## 投资协助边界
 

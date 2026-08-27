@@ -5,8 +5,10 @@
   "oneOf": [
     { "$ref": "#/$defs/request_audit_text" },
     { "$ref": "#/$defs/request_audit_claims" },
+    { "$ref": "#/$defs/request_event_structure" },
     { "$ref": "#/$defs/success_audit_text" },
     { "$ref": "#/$defs/success_audit_claims" },
+    { "$ref": "#/$defs/success_event_structure" },
     { "$ref": "#/$defs/error_response" }
   ],
   "$defs": {
@@ -14,6 +16,22 @@
       "type": "string",
       "minLength": 1,
       "pattern": "\\S"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$"
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^evt_[0-9a-f]{40}$"
+    },
+    "fact_id": {
+      "type": "string",
+      "pattern": "^fact_[0-9a-f]{32}$"
+    },
+    "family_id": {
+      "type": "string",
+      "pattern": "^(fam_single_evt_[0-9a-f]{40}|fam_[0-9a-f]{40})$"
     },
     "audit_text_input": {
       "type": "object",
@@ -126,6 +144,227 @@
         },
         "input": {
           "$ref": "#/$defs/audit_claims_input"
+        }
+      }
+    },
+    "event_key_fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entry_type",
+        "origin_payload",
+        "evidence_id",
+        "subject",
+        "predicate",
+        "effective_time",
+        "effective_precision",
+        "value",
+        "unit",
+        "knowledge_available_at"
+      ],
+      "properties": {
+        "entry_type": {
+          "enum": ["FACT", "CLAIM"]
+        },
+        "origin_payload": {
+          "enum": ["news", "macro_release", "policy", "filing", "flow", "positioning"]
+        },
+        "evidence_id": {
+          "$ref": "#/$defs/identity"
+        },
+        "subject": {
+          "$ref": "#/$defs/identity"
+        },
+        "predicate": {
+          "$ref": "#/$defs/identity"
+        },
+        "effective_time": {
+          "type": ["string", "null"]
+        },
+        "effective_precision": {
+          "enum": ["instant", "date", "month", "year"]
+        },
+        "value": {
+          "type": ["string", "null"]
+        },
+        "unit": {
+          "type": ["string", "null"]
+        },
+        "knowledge_available_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "effective_precision": { "const": "instant" }
+            }
+          },
+          "then": {
+            "properties": {
+              "effective_time": {
+                "anyOf": [
+                  { "type": "null" },
+                  { "$ref": "#/$defs/timestamp" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "effective_precision": { "const": "date" }
+            }
+          },
+          "then": {
+            "properties": {
+              "effective_time": {
+                "anyOf": [
+                  { "type": "null" },
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "effective_precision": { "const": "month" }
+            }
+          },
+          "then": {
+            "properties": {
+              "effective_time": {
+                "anyOf": [
+                  { "type": "null" },
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-[0-9]{2}$"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "effective_precision": { "const": "year" }
+            }
+          },
+          "then": {
+            "properties": {
+              "effective_time": {
+                "anyOf": [
+                  { "type": "null" },
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}$"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "event_structure_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_type",
+        "evidence_ids",
+        "entity_ids",
+        "key_facts",
+        "subject_zh"
+      ],
+      "properties": {
+        "event_type": {
+          "$ref": "#/$defs/identity"
+        },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/identity"
+          }
+        },
+        "entity_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/identity"
+          }
+        },
+        "key_facts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/event_key_fact"
+          }
+        },
+        "subject_zh": {
+          "$ref": "#/$defs/identity"
+        },
+        "company": {
+          "$ref": "#/$defs/identity"
+        },
+        "form": {
+          "$ref": "#/$defs/identity"
+        },
+        "story_family_peer_event_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/event_id"
+          }
+        },
+        "coexisting_event_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/event_id"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "event_type": { "const": "filing" }
+            }
+          },
+          "then": {
+            "required": ["form"]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                { "required": ["company"] },
+                { "required": ["form"] }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "request_event_structure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "operation", "input"],
+      "properties": {
+        "contract_version": {
+          "const": 1
+        },
+        "operation": {
+          "const": "event.structure"
+        },
+        "input": {
+          "$ref": "#/$defs/event_structure_input"
         }
       }
     },
@@ -249,6 +488,152 @@
         },
         "result": {
           "$ref": "#/$defs/audit_result"
+        }
+      }
+    },
+    "event_time_projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "precision"],
+      "properties": {
+        "value": {
+          "type": ["string", "null"]
+        },
+        "precision": {
+          "enum": ["instant", "date", "month", "year"]
+        }
+      }
+    },
+    "event_key_fact_effective_time": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fact_id", "value", "precision"],
+      "properties": {
+        "fact_id": {
+          "$ref": "#/$defs/fact_id"
+        },
+        "value": {
+          "type": ["string", "null"]
+        },
+        "precision": {
+          "enum": ["instant", "date", "month", "year"]
+        }
+      }
+    },
+    "key_fact_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fact_id", "evidence_id"],
+      "properties": {
+        "fact_id": {
+          "$ref": "#/$defs/fact_id"
+        },
+        "evidence_id": {
+          "$ref": "#/$defs/identity"
+        }
+      }
+    },
+    "event_structure_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_id",
+        "event_type",
+        "evidence_ids",
+        "key_fact_ids",
+        "fully_known_at",
+        "story_family_id",
+        "coexistence_pair_ids",
+        "display_label",
+        "economic_effective_time",
+        "common_effective_time",
+        "multiple_effective_times",
+        "key_fact_effective_times",
+        "key_fact_references"
+      ],
+      "properties": {
+        "event_id": {
+          "$ref": "#/$defs/event_id"
+        },
+        "event_type": {
+          "$ref": "#/$defs/identity"
+        },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/identity"
+          }
+        },
+        "key_fact_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/fact_id"
+          }
+        },
+        "fully_known_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "story_family_id": {
+          "$ref": "#/$defs/family_id"
+        },
+        "coexistence_pair_ids": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/$defs/event_id"
+            }
+          }
+        },
+        "display_label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "economic_effective_time": {
+          "$ref": "#/$defs/event_time_projection"
+        },
+        "common_effective_time": {
+          "anyOf": [
+            { "$ref": "#/$defs/event_time_projection" },
+            { "type": "null" }
+          ]
+        },
+        "multiple_effective_times": {
+          "type": "boolean"
+        },
+        "key_fact_effective_times": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/event_key_fact_effective_time"
+          }
+        },
+        "key_fact_references": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/key_fact_reference"
+          }
+        }
+      }
+    },
+    "success_event_structure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "operation", "result"],
+      "properties": {
+        "contract_version": {
+          "const": 1
+        },
+        "operation": {
+          "const": "event.structure"
+        },
+        "result": {
+          "$ref": "#/$defs/event_structure_result"
         }
       }
     },
