@@ -67,8 +67,7 @@ def _map_result(result: AuditResult) -> dict[str, Any]:
         }
         for finding in result.findings
     ]
-    passed = result.passed and all(finding["severity"] != "critical" for finding in findings)
-    return {"passed": passed, "findings": findings}
+    return {"passed": result.passed, "findings": findings}
 
 
 def _success(operation: str, result: AuditResult) -> dict[str, Any]:

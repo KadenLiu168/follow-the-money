@@ -300,13 +300,27 @@ def test_unexpected_supported_execution_is_one_schema_valid_error(monkeypatch, c
     assert "result" not in response
 
 
-def test_result_mapping_preserves_fields_order_and_critical_status(monkeypatch, capsys):
+def test_result_mapping_preserves_fields_order_and_pass_state(monkeypatch, capsys):
     import follow_the_money.agent_invocation as module
     from follow_the_money.audit import AuditFinding, AuditResult
 
     findings = [
         AuditFinding("c1", "missing_evidence", "warning detail", "warning"),
         AuditFinding("c2", "trading_instruction", "critical detail", "critical"),
+    ]
+    expected_findings = [
+        {
+            "claim_id": "c1",
+            "category": "missing_evidence",
+            "detail": "warning detail",
+            "severity": "warning",
+        },
+        {
+            "claim_id": "c2",
+            "category": "trading_instruction",
+            "detail": "critical detail",
+            "severity": "critical",
+        },
     ]
 
     class SyntheticAuditor:
@@ -318,24 +332,46 @@ def test_result_mapping_preserves_fields_order_and_critical_status(monkeypatch, 
     response = json.loads(capsys.readouterr().out)
 
     assert code == 0
-    assert response["result"] == {
-        "passed": False,
-        "findings": [
-            {
-                "claim_id": "c1",
-                "category": "missing_evidence",
-                "detail": "warning detail",
-                "severity": "warning",
-            },
-            {
-                "claim_id": "c2",
-                "category": "trading_instruction",
-                "detail": "critical detail",
-                "severity": "critical",
-            },
-        ],
+    assert response["result"] == {"passed": False, "findings": expected_findings}
+    assert module._map_result(AuditResult(True, findings)) == {
+        "passed": True,
+        "findings": expected_findings,
     }
-    assert module._map_result(AuditResult(True, [findings[1]]))["passed"] is False
+
+
+def test_inconsistent_internal_result_fails_closed(monkeypatch, capsys):
+    import follow_the_money.agent_invocation as module
+    from follow_the_money.audit import AuditFinding, AuditResult
+
+    class InconsistentAuditor:
+        def audit_text(self, text, *, claim_id=None):
+            return AuditResult(
+                True,
+                [
+                    AuditFinding(
+                        "c1",
+                        "trading_instruction",
+                        "critical detail",
+                        "critical",
+                    )
+                ],
+            )
+
+    monkeypatch.setattr(module, "ClaimAuditor", InconsistentAuditor)
+    code = _call_main(monkeypatch, _request("audit.text", {"text": "ok"}), module)
+    captured = capsys.readouterr()
+
+    assert code != 0
+    assert "Traceback" not in captured.out
+    assert captured.err == ""
+    lines = captured.out.splitlines()
+    assert len(lines) == 1
+    response = json.loads(lines[0])
+    validate_against(SCHEMA, response)
+    assert response == {
+        "contract_version": 1,
+        "error": {"code": "execution_failure", "message": "execution failure"},
+    }
 
 
 def test_agent_values_remain_agent_owned_and_one_addressed_method_runs_once(monkeypatch, capsys):
