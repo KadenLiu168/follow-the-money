@@ -4,13 +4,12 @@ Covers strict-UTF-8/lone-surrogate rejection, numeric-vs-categorical unknown
 semantics, duplicate provider IDs, unverified enabled adapters, charset/BOM
 rules, closed fetch/redirect/source-link policies, the six-group coverage
 matrix with copied shipped manifests, the 13 roles / nine asset groups / three
-surprise scales, weight sums, lookback/limit positivity, and optional extras.
+surprise scales, weight sums, lookback/limit positivity, and provider configuration.
 """
 
 from __future__ import annotations
 
 import shutil
-import sys
 from pathlib import Path
 
 import pytest
@@ -64,7 +63,7 @@ def test_shipped_defaults_load_structure_without_enablement():
     )
     assert cfg.schema_version == 1
     assert cfg.name == "follow-the-money"
-    assert len(cfg.providers) == 10
+    assert len(cfg.providers) == 9
     assert len(cfg.roles) == 13
     assert cfg.role_ids == V1_ROLE_IDS
     assert len(cfg.scoring.asset_groups) == 9
@@ -78,7 +77,6 @@ def test_shipped_defaults_load_structure_without_enablement():
         in ("federal_reserve", "bls", "sec_edgar", "pboc", "nbs", "sse", "szse", "yahoo_market")
     )
     assert not cfg.provider("cftc").enabled  # verified optional; disabled by default
-    assert not cfg.provider("akshare").enabled  # optional extra stays disabled
     # v1 defaults
     assert cfg.feed.bootstrap_lookback_hours == 72
     assert cfg.feed.gap_threshold_hours == 72
@@ -544,28 +542,6 @@ def test_shipped_charset_is_utf8_strict():
     for p in cfg.providers:
         assert p.allowed_charset.lower() in {"utf-8", "utf8"}
         assert p.allowed_bom is False  # no conflicting BOM policy shipped
-
-
-# ---------------------------------------------------------------------------
-# Optional extras not installed (import isolation is task 3.15; here we only
-# assert the shipped registry does not depend on them).
-# ---------------------------------------------------------------------------
-
-
-def test_shipped_config_does_not_require_optional_extras():
-    cfg = load_config(
-        DEFAULT_CONFIG,
-        DEFAULT_PROVIDERS,
-        manifest_root=DEFAULT_MANIFEST_ROOT,
-        require_verified_enabled=False,
-    )
-    # AKShare is present but disabled and not a member of any mandatory row.
-    akshare = cfg.provider("akshare")
-    assert not akshare.enabled
-    assert not akshare.verified
-    mandatory_members = {m for row in cfg.coverage.rows if not row.optional for m in row.members}
-    assert "akshare" not in mandatory_members
-    assert "akshare" not in sys.modules
 
 
 def test_config_loads_without_any_llm_section():

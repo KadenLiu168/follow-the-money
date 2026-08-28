@@ -827,8 +827,8 @@ def build_registry(
     """Build the explicit provider registry from resolved Provider entries.
 
     Returns every adapter required by the six mandatory v1 coverage rows,
-    plus the verified-optional CFTC/CP and disabled-by-default extras. The
-    registry itself never enables anything; enablement is configuration.
+    plus verified-optional CFTC. The registry itself never enables anything;
+    enablement is configuration.
     """
     resolved_runtime = providers is not None
     if providers is None:
@@ -837,7 +837,6 @@ def build_registry(
         providers = {
             pid: manifest_to_provider_entry(manifest)
             for pid, manifest in load_all_manifests().items()
-            if pid != "akshare"
         }
     elif not isinstance(providers, Mapping):
         providers = {provider.id: provider for provider in providers}

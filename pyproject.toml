@@ -13,11 +13,6 @@ dependencies = [
     "exchange-calendars>=4.8,<5",
 ]
 
-[project.optional-dependencies]
-akshare = [
-    "akshare>=1.14,<2",
-]
-
 [dependency-groups]
 dev = [
     "hatchling>=1.27,<2",

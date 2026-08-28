@@ -422,7 +422,6 @@ def test_all_manifests_load_and_provider_id_matches():
         "sse",
         "szse",
         "yahoo_market",
-        "akshare",
     }
     for pid, m in manifests.items():
         assert m["provider_id"] == pid
@@ -437,9 +436,8 @@ def test_no_manifest_claims_verified_without_date():
             assert m["verification"]["verification_date"] is not None
 
 
-def test_verified_adapters_enabled_unverified_disabled():
-    # Gate 13.1: verified core adapters are enabled; unverified/optional
-    # adapters (AKShare) never count as coverage by manifest alone.
+def test_verified_adapters_enabled_optional_disabled():
+    # Gate 13.1: verified core adapters are enabled; optional CFTC stays disabled.
     from follow_the_money.providers.manifest import load_all_manifests, manifest_to_provider_entry
 
     for pid, m in load_all_manifests().items():

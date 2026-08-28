@@ -15,7 +15,6 @@ providers:
   - { id: sse, enabled: true }
   - { id: szse, enabled: true }
   - { id: yahoo_market, enabled: true }
-  - { id: akshare, enabled: false, optional: true }
 
 coverage:
   - { group: us_official_macro_policy, members: [federal_reserve, bls], minimum: 2, capability: release_and_calendar, optional: false }

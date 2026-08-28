@@ -2,17 +2,13 @@
 
 Proves that no mandatory v1 matrix row is silently weakened: every adapter
 without a verified contract and implementation stays disabled and cannot
-count as working coverage; CFTC stays verified-optional; AKShare/BEA/HKEX/
-Tier-2 media/paid enhancements stay disabled.
+count as working coverage; CFTC stays verified-optional.
 """
 
 from __future__ import annotations
 
 from follow_the_money.config import load_config
-from follow_the_money.providers.manifest import (
-    load_all_manifests,
-    manifest_to_provider_entry,
-)
+from follow_the_money.providers.manifest import load_all_manifests
 
 REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO_ROOT / "config" / "config.yaml"
@@ -61,18 +57,6 @@ def test_shipped_matrix_minima_match_design():
         assert r.capability  # every row names its capability
 
 
-def test_unverified_adapters_never_enabled_by_manifest():
-    manifests = load_all_manifests()
-    for pid, m in manifests.items():
-        entry = manifest_to_provider_entry(m)
-        if pid == "akshare":
-            assert not entry.enabled, f"{pid} must stay disabled (optional extra)"
-        # Verified manifests with default_enabled enable; unverified never do.
-        if not m["verification"]["verified"]:
-            assert not entry.enabled, f"{pid} must stay disabled until verified"
-            assert not entry.verified, f"{pid} must not claim verified status"
-
-
 def test_cftc_verified_optional_not_mandatory():
     cfg = load_config(
         DEFAULT_CONFIG,
@@ -84,28 +68,14 @@ def test_cftc_verified_optional_not_mandatory():
     assert "cftc" not in mandatory  # CFTC is verified-optional coverage
 
 
-def test_akshare_never_counts_as_coverage():
-    cfg = load_config(
-        DEFAULT_CONFIG,
-        DEFAULT_PROVIDERS,
-        manifest_root=DEFAULT_MANIFEST_ROOT,
-        require_verified_enabled=False,
-    )
-    mandatory = {m for r in cfg.coverage.rows for m in r.members}
-    assert "akshare" not in mandatory
-    assert not cfg.provider("akshare").enabled
-
-
 def test_no_hidden_default_enablement():
-    # Every mandatory matrix row must be backed by verified enabled members;
-    # an optional/unverified extra (AKShare) never counts as coverage.
+    # Every mandatory matrix row must be backed by verified enabled members.
     cfg = load_config(
         DEFAULT_CONFIG,
         DEFAULT_PROVIDERS,
         manifest_root=DEFAULT_MANIFEST_ROOT,
         require_verified_enabled=True,
     )
-    assert not cfg.provider("akshare").enabled
     assert not cfg.provider("cftc").enabled
     for row in cfg.coverage.rows:
         enabled = [m for m in row.members if cfg.provider(m).enabled and cfg.provider(m).verified]
@@ -132,11 +102,12 @@ def test_manifest_charset_and_source_link_rules_present():
         assert "source_link_hosts" in m, f"{pid} missing source_link_hosts"
 
 
-def test_all_verified_core_adapters_are_implemented():
-    # Every mandatory provider has a concrete adapter; optional extras remain
-    # disabled and are not part of the production registry.
+def test_all_shipped_adapters_are_implemented():
+    # Every shipped provider has a concrete adapter; CFTC remains disabled by
+    # default because it is optional coverage.
     from follow_the_money.providers.adapters import (
         BlsAdapter,
+        CftcAdapter,
         FedAdapter,
         NbsAdapter,
         PbocAdapter,
@@ -150,6 +121,7 @@ def test_all_verified_core_adapters_are_implemented():
         FedAdapter,
         BlsAdapter,
         SecEdgarAdapter,
+        CftcAdapter,
         PbocAdapter,
         NbsAdapter,
         SseAdapter,
