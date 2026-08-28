@@ -228,6 +228,66 @@ def test_multi_fact_distinct_effective_times():
     assert event["economic_effective_time"]["value"] == T1
 
 
+def test_first_canonical_effective_time_value_can_be_null():
+    ledger = Ledger()
+    null_fact = _fact(ledger, predicate="z_null", effective_time=None, precision="date")
+    known_fact = _fact(ledger, predicate="a_known", effective_time=T1, precision="date")
+    event = build_event(
+        event_type="policy",
+        evidence_ids=["ev-1"],
+        entity_ids=["ent_fed"],
+        event_defining_fact_ids=[known_fact.fact_id, null_fact.fact_id],
+        ledger=ledger,
+        subject_zh="美联储",
+    )
+
+    assert event["key_fact_ids"][0] == null_fact.fact_id
+    assert event["economic_effective_time"] == {"value": None, "precision": "date"}
+    assert event["common_effective_time"] is None
+
+
+def test_all_null_effective_times_use_first_canonical_precision():
+    ledger = Ledger()
+    first_candidate = _fact(ledger, predicate="first_null", effective_time=None, precision="date")
+    second_candidate = _fact(ledger, predicate="second_null", effective_time=None, precision="year")
+    first = min((first_candidate, second_candidate), key=lambda fact: fact.fact_id)
+    event = build_event(
+        event_type="policy",
+        evidence_ids=["ev-1"],
+        entity_ids=["ent_fed"],
+        event_defining_fact_ids=[second_candidate.fact_id, first_candidate.fact_id],
+        ledger=ledger,
+        subject_zh="美联储",
+    )
+
+    assert event["key_fact_ids"][0] == first.fact_id
+    assert event["economic_effective_time"] == {
+        "value": None,
+        "precision": first.effective_precision,
+    }
+    assert event["common_effective_time"] is None
+
+
+def test_partially_known_effective_times_have_no_common_projection():
+    ledger = Ledger()
+    null_fact = _fact(ledger, predicate="nullable", effective_time=None, precision="date")
+    known_one = _fact(ledger, predicate="known_one", effective_time=T1, precision="date")
+    known_two = _fact(ledger, predicate="known_two", effective_time=T1, precision="date")
+    event = build_event(
+        event_type="policy",
+        evidence_ids=["ev-1"],
+        entity_ids=["ent_fed"],
+        event_defining_fact_ids=[known_two.fact_id, null_fact.fact_id, known_one.fact_id],
+        ledger=ledger,
+        subject_zh="美联储",
+    )
+
+    assert event["key_fact_ids"] == sorted(
+        [null_fact.fact_id, known_one.fact_id, known_two.fact_id]
+    )
+    assert event["common_effective_time"] is None
+
+
 def test_mixed_effective_precision_uses_one_first_canonical_fact():
     ledger = Ledger()
     first_candidate = _fact(

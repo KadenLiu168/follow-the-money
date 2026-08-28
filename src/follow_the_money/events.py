@@ -168,16 +168,20 @@ def build_event(
     )
 
     # Economic effective/reference times from key facts.
+    first_key_fact = key_facts[0]
     times = [f.effective_time for f in key_facts if f.effective_time is not None]
     precisions = {f.effective_precision for f in key_facts}
-    first_effective_fact = next(
-        (fact for fact in key_facts if fact.effective_time is not None),
-        None,
-    )
     common = None
     multiple = len(set(times)) > 1 or len(precisions) > 1
-    if times and not multiple and len(precisions) == 1:
-        common = {"value": times[0], "precision": next(iter(precisions))}
+    if first_key_fact.effective_time is not None and all(
+        fact.effective_time == first_key_fact.effective_time
+        and fact.effective_precision == first_key_fact.effective_precision
+        for fact in key_facts
+    ):
+        common = {
+            "value": first_key_fact.effective_time,
+            "precision": first_key_fact.effective_precision,
+        }
     return {
         "schema_version": 1,
         "event_id": event_id,
@@ -189,10 +193,8 @@ def build_event(
         "coexistence_pair_ids": [list(p) for p in pairs],
         "display_label": label,
         "economic_effective_time": {
-            "value": times[0] if times else None,
-            "precision": first_effective_fact.effective_precision
-            if first_effective_fact is not None
-            else "instant",
+            "value": first_key_fact.effective_time,
+            "precision": first_key_fact.effective_precision,
         },
         "common_effective_time": common,
         "multiple_effective_times": multiple if times else False,

@@ -265,6 +265,21 @@ def test_process_event_structure_returns_exact_closed_event_projection():
     }
 
 
+def test_process_event_structure_preserves_nullable_effective_time_projection():
+    input_value = _event_input(effective_time=None, effective_precision="month")
+
+    proc, response = _run(_request("event.structure", input_value))
+
+    assert proc.returncode == 0
+    assert response["contract_version"] == 1
+    assert response["operation"] == "event.structure"
+    result = response["result"]
+    assert result["economic_effective_time"] == {"value": None, "precision": "month"}
+    assert result["common_effective_time"] is None
+    assert result["key_fact_effective_times"][0]["value"] is None
+    assert result["key_fact_effective_times"][0]["precision"] == "month"
+
+
 def test_process_event_structure_supports_default_and_filing_labels():
     default_input = _event_input(
         event_type="default",

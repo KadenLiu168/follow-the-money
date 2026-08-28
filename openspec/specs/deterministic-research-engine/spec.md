@@ -162,6 +162,18 @@ caller remains absent.
 - **WHEN** a canonical Event contains multiple ordered key facts with different effective-time precisions
 - **THEN** `economic_effective_time.value` and `precision` come from the same first ordered key fact, `common_effective_time` is null, and the result is stable across process hash seeds
 
+#### Scenario: First canonical key fact has no effective-time value
+- **WHEN** the first canonical key fact has a null effective-time value and a later canonical key fact has a non-null effective-time value
+- **THEN** `economic_effective_time.value` is null, its precision is the first canonical key fact's exact precision, and the later fact does not replace that projection
+
+#### Scenario: Effective times are all unknown
+- **WHEN** all key facts have null effective-time values
+- **THEN** `economic_effective_time` is derived from the first canonical key fact, `common_effective_time` is null, and no synthetic precision is introduced
+
+#### Scenario: Effective time is only partially known
+- **WHEN** at least one key fact has a null effective-time value and another key fact has a non-null effective-time value
+- **THEN** `common_effective_time` is null even when all known values and all declared precisions are otherwise identical
+
 #### Scenario: Family has one member
 - **WHEN** a family is constructed from exactly one canonical Event ID
 - **THEN** it receives that Event's `fam_single_<event_id>` identity rather than a shared label-derived identity
