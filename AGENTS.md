@@ -41,7 +41,6 @@ Deterministic Audit 或 Event Structuring；它们不组成 mandatory sequence�
 * 自动交易或投资执行能力
 * 为补全 pipeline 而 fake-wire retained deterministic libraries
 
-Post-Feed deterministic libraries 暂无 production caller 是合法状态。
 
 ## 2. Sources of Truth
 
