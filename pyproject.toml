@@ -1,7 +1,7 @@
 [project]
 name = "follow-the-money"
 version = "0.1.0"
-description = "Credential-free evidence Feed for AI Agents, plus retained deterministic financial research libraries without production orchestration."
+description = "Credential-free evidence Feed for AI Agents, plus private on-demand deterministic Audit and Event Structuring; other research libraries remain retained without production orchestration."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Proprietary" }

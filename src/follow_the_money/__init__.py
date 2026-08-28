@@ -1,8 +1,7 @@
-"""Follow the Money — a deterministic, script-first daily financial intelligence pipeline.
+"""Follow the Money — a credential-free evidence Feed with private on-demand Audit and Event Structuring.
 
-The package exposes the ``follow-the-money`` console entry points and keeps all
-production logic under ``src/follow_the_money``. Importing this package never
-reads credentials or network state.
+Production logic lives under ``src/follow_the_money``. Importing this package
+never reads credentials or network state.
 """
 
 __version__ = "0.1.0"

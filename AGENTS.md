@@ -13,7 +13,7 @@
 
 `follow-the-money` 是面向 Host Agent 的金融研究 Skill，核心是 credential-free deterministic evidence engine。
 
-当前 live production path：
+当前 live production surfaces：
 
 ```text
 Evidence providers
@@ -24,6 +24,10 @@ Host Agent reasoning
       ↓
 Grounded research output
 ```
+
+Host Agent 也可以通过 private one-shot boundary 显式、独立地按需调用
+Deterministic Audit 或 Event Structuring；它们不组成 mandatory sequence，
+也不通过 Feed 自动串联。
 
 仓库负责事实、provenance、确定性规则、计算与验证；Host Agent 负责分析和叙事。
 
@@ -170,7 +174,8 @@ Feed 是 evidence contract，不是 intelligence output。
 
 不要在 Feed 中加入金融分析、ranking、market regime、asset impact 或投资判断。
 
-Retained libraries，包括 ledger、candidate/event、market、watchlist、scoring、selection、`ClaimAuditor`，可以没有 production orchestration caller。
+Market Analytics and State、Confidence and Watchlist、Scoring and Ranking
+保持 retained 状态，当前没有 production orchestration caller。
 
 “没有 caller”本身不能作为删除或接线理由。
 

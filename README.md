@@ -92,7 +92,7 @@ is investment advice.
 config/           closed versioned YAML configuration (v1 defaults, no secrets)
 providers/        provider contract manifests and fixture provenance
 schemas/          JSON Schema 2020-12 contracts (Feed plus Agent invocation)
-src/follow_the_money/  live Feed/Audit paths plus retained deterministic libraries
+src/follow_the_money/  live Feed/Audit/Event paths plus retained deterministic libraries
 scripts/feed/     minimal internal Feed entry: follow-the-money-feed
 feeds/            published artifacts (daily/<date>/<run_id>.json, latest.json)
 tests/            pytest suite (credential-free)

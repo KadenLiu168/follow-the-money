@@ -81,7 +81,7 @@ Analytics and State、Confidence and Watchlist、Scoring and Ranking 仍 deferre
 config/          封闭的版本化 YAML 配置（v1 默认值，无任何密钥）
 providers/       provider 契约 manifest 与 fixture 来源记录
 schemas/         JSON Schema 2020-12 契约（Feed 与 Agent invocation）
-src/follow_the_money/  live Feed/Audit 路径与保留的确定性库
+src/follow_the_money/  live Feed/Audit/Event 路径与保留的确定性库
 scripts/feed/    最小内部 Feed 入口：follow-the-money-feed
 feeds/           发布产物（daily/<date>/<run_id>.json、latest.json）
 tests/           pytest 测试套件（无需凭据）
