@@ -15,10 +15,7 @@ Design section 2:
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
-
-from ..config.model import ProviderEntry
 
 
 @runtime_checkable
@@ -32,14 +29,6 @@ class Provider(Protocol):
 
     def normalize(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
         """Normalize raw into Feed items (each already URL-validated)."""
-
-
-@dataclass(frozen=True)
-class OutcomeCounters:
-    attempted: int = 0
-    fetched: int = 0
-    accepted: int = 0
-    rejected: int = 0
 
 
 class ProviderRegistry:
@@ -56,8 +45,3 @@ class ProviderRegistry:
 
     def ids(self) -> tuple[str, ...]:
         return tuple(sorted(self._providers))
-
-    def enabled_ids(self, config_providers: Mapping[str, ProviderEntry]) -> tuple[str, ...]:
-        return tuple(
-            pid for pid in self.ids() if config_providers.get(pid) and config_providers[pid].enabled
-        )

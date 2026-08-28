@@ -147,10 +147,6 @@ class RateRegistry:
     def _write_registry(self, data: dict[str, Any]) -> None:
         _atomic_write(self.registry_path, json.dumps(data, sort_keys=True).encode("utf-8"))
 
-    def initialized_scopes(self) -> tuple[str, ...]:
-        data = self._read_registry()
-        return tuple(sorted(data.get("scopes", {})))
-
     # -- scope lifecycle ----------------------------------------------------
 
     def initialize_scope(

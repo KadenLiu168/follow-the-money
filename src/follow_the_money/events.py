@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Iterable, Mapping
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from .canonical import canonical_text
@@ -207,7 +207,3 @@ def build_event(
             for f in key_facts
         ],
     }
-
-
-def utc_now_iso() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"

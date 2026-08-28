@@ -778,9 +778,6 @@ def _provider_scope(pid: str, cfg: AppConfig):
     return None
 
 
-_client_cache: dict[str, Any] = {}
-
-
 def _client_for(adapter: Any) -> Any:
     import httpx
 

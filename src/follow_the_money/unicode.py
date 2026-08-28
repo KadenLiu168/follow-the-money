@@ -56,9 +56,3 @@ def validate_prose(text: str, *, where: str = "prose") -> str:
     if "\n" in one_line or "\r" in one_line:
         raise UnicodeError_(f"{where}: embedded newline after normalization")
     return one_line
-
-
-def utf8_byte_length(text: str) -> int:
-    """Strict UTF-8 byte length (rejects lone surrogates first)."""
-    validate_scalar_string(text)
-    return len(text.encode("utf-8"))

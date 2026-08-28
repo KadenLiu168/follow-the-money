@@ -632,7 +632,6 @@ class YahooMarketAdapter(BaseAdapter):
         result = ((data.get("chart") or {}).get("result") or [None])[0]
         if not isinstance(result, dict):
             return []
-        result.get("meta") or {}
         timestamps = result.get("timestamp") or []
         indicators = result.get("indicators") or {}
         quotes = (indicators.get("quote") or [None])[0] or {}

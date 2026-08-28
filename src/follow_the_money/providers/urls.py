@@ -175,8 +175,3 @@ def canonicalize_url(
             raise UrlValidationError(f"{where}: secret material found in URL")
 
     return canonical
-
-
-def normalize_host_for_hash(canonical_url: str) -> str:
-    """Return the canonical host (for provider-ID-to-host binding before hashing)."""
-    return urlsplit(canonical_url).hostname or ""
