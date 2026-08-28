@@ -6,6 +6,7 @@ are literal so a second parser cannot make the test tautological.
 
 from __future__ import annotations
 
+import inspect
 import shutil
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from follow_the_money.config.load import ConfigError
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO_ROOT / "config" / "config.yaml"
 DEFAULT_PROVIDERS = REPO_ROOT / "config" / "providers.yaml"
+DEFAULT_MANIFEST_ROOT = REPO_ROOT / "providers"
 
 
 def _copy_contracts(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -53,9 +55,91 @@ def _strict_load(config_path: Path, providers_path: Path, manifest_root: Path):
         config_path,
         providers_path,
         manifest_root=manifest_root,
-        strict=True,
         require_verified_enabled=True,
     )
+
+
+@pytest.mark.parametrize("authority_key", ["providers", "coverage"])
+def test_application_file_cannot_declare_provider_authority(tmp_path: Path, authority_key: str):
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config[authority_key] = []
+    _write_yaml(config_path, config)
+
+    with pytest.raises(ConfigError, match="unknown keys"):
+        load_config(
+            config_path,
+            providers_path,
+            manifest_root=manifest_root,
+            require_verified_enabled=True,
+        )
+
+
+def test_explicit_provider_authorities_must_be_readable(tmp_path: Path):
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    providers_path.unlink()
+
+    with pytest.raises(ConfigError, match="cannot read config"):
+        load_config(
+            config_path,
+            providers_path,
+            manifest_root=manifest_root,
+            require_verified_enabled=True,
+        )
+
+
+def test_explicit_provider_authorities_must_be_valid(tmp_path: Path):
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    providers_path.write_text("providers: [", encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="invalid YAML"):
+        load_config(
+            config_path,
+            providers_path,
+            manifest_root=manifest_root,
+            require_verified_enabled=True,
+        )
+
+
+def test_complete_contract_resolves_at_an_unrelated_path(tmp_path: Path):
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path / "unrelated")
+
+    cfg = load_config(
+        config_path,
+        providers_path,
+        manifest_root=manifest_root,
+        require_verified_enabled=True,
+    )
+
+    assert cfg.name == "follow-the-money"
+    assert cfg.provider("federal_reserve").enabled is True
+    assert cfg.provider("federal_reserve").coverage_groups == (
+        "future_calendar",
+        "us_official_macro_policy",
+    )
+
+
+def test_load_config_exposes_only_explicit_strict_authorities():
+    parameters = inspect.signature(load_config).parameters
+
+    assert parameters["providers_path"].default is inspect.Parameter.empty
+    assert parameters["manifest_root"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameters["manifest_root"].default is inspect.Parameter.empty
+    assert "strict" not in parameters
+
+
+def test_load_config_rejects_implicit_authorities_and_removed_strict_keyword(tmp_path: Path):
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+
+    with pytest.raises(TypeError):
+        load_config(config_path, providers_path)
+    with pytest.raises(TypeError):
+        load_config(
+            config_path,
+            providers_path,
+            manifest_root=manifest_root,
+            strict=True,
+        )
 
 
 def _mutate_yahoo_mapping(manifest_root: Path, role_id: str, **changes: object) -> None:
@@ -437,7 +521,12 @@ def test_authoritative_https_provenance_is_policy_checked_without_network(
 
 
 def test_shipped_mapping_inventory_is_exact_and_evidence_backed():
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=True)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=True,
+    )
     mappings = {str(item["role_id"]): item for item in cfg.provider("yahoo_market").role_mappings}
     assert tuple(mappings) == (
         "sp500",
@@ -472,7 +561,12 @@ def test_production_yahoo_planning_uses_only_verified_mappings():
     from follow_the_money.feed.cli import _production_adapters
     from follow_the_money.providers.adapters import build_registry
 
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=True)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=True,
+    )
     planned = _production_adapters(cfg, build_registry({p.id: p for p in cfg.providers}))
 
     assert [adapter._role_id for adapter in planned["yahoo_market"]] == ["sp500"]
@@ -481,7 +575,12 @@ def test_production_yahoo_planning_uses_only_verified_mappings():
 def test_provider_snapshot_retains_mapping_audit_state():
     from follow_the_money.feed.cli import _provider_contract_snapshots
 
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=True)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=True,
+    )
     snapshot = next(
         item for item in _provider_contract_snapshots(cfg) if item["provider_id"] == "yahoo_market"
     )
@@ -496,7 +595,12 @@ def test_provider_snapshot_retains_mapping_audit_state():
 
 
 def test_resolved_mapping_and_nested_provenance_are_immutable():
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=True)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=True,
+    )
     mapping = cfg.provider("yahoo_market").role_mappings[0]
 
     with pytest.raises(TypeError):
@@ -671,7 +775,12 @@ def test_adapter_and_snapshot_share_resolved_provider_contract(tmp_path: Path):
 
 
 def test_disabled_provider_is_not_initialized(monkeypatch):
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=True)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=True,
+    )
     from follow_the_money.providers import adapters
 
     class DisabledAdapterMustNotInitialize:
@@ -806,7 +915,12 @@ def test_disabled_market_provider_rejects_stale_broad_coverage_label(tmp_path: P
 
 
 def test_existing_v1_role_and_coverage_facts_remain_literal():
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=True)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=True,
+    )
     assert cfg.role_ids == (
         "sp500",
         "csi300",

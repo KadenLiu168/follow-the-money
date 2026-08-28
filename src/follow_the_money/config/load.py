@@ -38,7 +38,6 @@ from .model import (
     CoverageRow,
     Entity,
     FeedLimits,
-    FetchRule,
     MarketRole,
     MarketState,
     ProviderEntry,
@@ -48,12 +47,9 @@ from .model import (
     Scoring,
     Session,
     SourceFamily,
-    SourceLinkRule,
     SurpriseScale,
     WatchCompany,
 )
-
-DEFAULT_MANIFEST_ROOT = Path(__file__).resolve().parents[3] / "providers"
 
 SCORING_ENUMS: Mapping[str, set[str]] = {
     "scope": {"single_entity", "sector", "single_market", "cross_market", "unknown"},
@@ -153,8 +149,6 @@ ALLOWED_CONFIG_KEYS: frozenset[str] = frozenset(
         "source_families",
         "entities",
         "watched_companies",
-        "providers",
-        "coverage",
     }
 )
 
@@ -288,122 +282,16 @@ def _load_yaml(path: Path) -> Mapping[str, Any]:
     return data
 
 
-def _parse_fetch_rules(raw: Any, where: str) -> tuple[FetchRule, ...]:
-    rules: list[FetchRule] = []
-    for item in raw or []:
-        _require_keys(item, {"host"}, f"{where}.fetch_rule")
-        rules.append(
-            FetchRule(
-                host=str(item["host"]).lower().rstrip("."),
-                allow_subdomains=bool(item.get("allow_subdomains", False)),
-                allowed_ports=tuple(int(p) for p in item.get("allowed_ports", [443])),
-            )
-        )
-    return tuple(rules)
-
-
-def _parse_source_link_rules(raw: Any, where: str) -> tuple[SourceLinkRule, ...]:
-    rules: list[SourceLinkRule] = []
-    for item in raw or []:
-        _require_keys(item, {"host"}, f"{where}.source_link_host")
-        rules.append(
-            SourceLinkRule(
-                host=str(item["host"]).lower().rstrip("."),
-                allow_subdomains=bool(item.get("allow_subdomains", False)),
-                allowed_ports=tuple(int(p) for p in item.get("allowed_ports", [443])),
-                allowed_query_params=tuple(item.get("allowed_query_params", [])),
-                query_value_grammar=str(item.get("query_value_grammar", "any")),
-                drop_query_params=tuple(item.get("drop_query_params", [])),
-            )
-        )
-    return tuple(rules)
-
-
-def _parse_rate_policy(raw: Any, where: str) -> RatePolicy | None:
-    if raw is None:
-        return None
-    if raw.get("unlimited"):
-        return RatePolicy(
-            scope_id=str(raw["scope_id"]),
-            capacity=0,
-            refill_period_seconds=0,
-            minimum_interval_seconds=0,
-            unlimited=True,
-            shared_host=raw.get("shared_host"),
-        )
-    if int(raw.get("capacity", 0)) <= 0:
-        raise ConfigError(f"{where}: rate capacity must be positive")
-    if int(raw.get("refill_period_seconds", 0)) <= 0:
-        raise ConfigError(f"{where}: rate refill period must be positive")
-    if int(raw.get("minimum_interval_seconds", -1)) < 0:
-        raise ConfigError(f"{where}: rate minimum interval must be non-negative")
-    return RatePolicy(
-        scope_id=str(raw["scope_id"]),
-        capacity=int(raw["capacity"]),
-        refill_period_seconds=int(raw["refill_period_seconds"]),
-        minimum_interval_seconds=int(raw.get("minimum_interval_seconds", 0)),
-        shared_host=raw.get("shared_host"),
-    )
-
-
-def _parse_providers(raw: Any, where: str) -> tuple[ProviderEntry, ...]:
-    providers: list[ProviderEntry] = []
-    seen_ids: set[str] = set()
-    for item in raw or []:
-        _require_keys(item, {"id", "name", "group"}, f"{where}.provider")
-        pid = str(item["id"])
-        if pid in seen_ids:
-            raise ConfigError(f"{where}: duplicate provider id {pid!r}")
-        seen_ids.add(pid)
-        tier = str(item.get("tier", "Tier 2"))
-        _check_enum(tier, "tier", f"{where}.provider.{pid}")
-        rate = _parse_rate_policy(item.get("rate_policy"), f"{where}.provider.{pid}")
-        providers.append(
-            ProviderEntry(
-                id=pid,
-                name=str(item["name"]),
-                enabled=bool(item.get("enabled", False)),
-                verified=bool(item.get("verified", False)),
-                default_enabled=bool(item.get("default_enabled", False)),
-                group=str(item["group"]),
-                source_family_id=str(item.get("source_family_id", pid)),
-                tier=tier,
-                user_agent=str(item.get("user_agent", "")),
-                fetch_hosts=_parse_fetch_rules(item.get("fetch_hosts"), f"{where}.provider.{pid}"),
-                redirect_hosts=_parse_fetch_rules(
-                    item.get("redirect_hosts"), f"{where}.provider.{pid}"
-                ),
-                source_link_hosts=_parse_source_link_rules(
-                    item.get("source_link_hosts"), f"{where}.provider.{pid}"
-                ),
-                rate_policy=rate,
-                allowed_charset=str(item.get("allowed_charset", "utf-8")),
-                allowed_bom=bool(item.get("allowed_bom", False)),
-                allowed_content_type_header=item.get("allowed_content_type_header"),
-                pagination=str(item.get("pagination", "none")),
-                empty_valid_for_window=bool(item.get("empty_valid_for_window", False)),
-                response_limit_bytes=int(item.get("response_limit_bytes", 10 * 1024 * 1024)),
-                credentials_required=bool(item.get("credentials_required", False)),
-                verification_date=item.get("verification_date"),
-                contract_url=item.get("contract_url"),
-                notes=item.get("notes"),
-            )
-        )
-    return tuple(providers)
-
-
-def _parse_coverage(raw: Any, where: str, *, strict: bool = False) -> CoverageMatrix:
+def _parse_coverage(raw: Any, where: str) -> CoverageMatrix:
     rows: list[CoverageRow] = []
     for item in raw or []:
-        if strict:
-            item = _closed_section(
-                item,
-                required=frozenset({"group", "members", "minimum", "capability", "optional"}),
-                where=f"{where}.row",
-            )
-            if not isinstance(item["optional"], bool):
-                raise ConfigError(f"{where}.row.{item['group']}.optional must be boolean")
-        _require_keys(item, {"group", "members", "minimum", "capability"}, f"{where}.row")
+        item = _closed_section(
+            item,
+            required=frozenset({"group", "members", "minimum", "capability", "optional"}),
+            where=f"{where}.row",
+        )
+        if not isinstance(item["optional"], bool):
+            raise ConfigError(f"{where}.row.{item['group']}.optional must be boolean")
         if int(item["minimum"]) <= 0:
             raise ConfigError(f"{where}.row.{item['group']}.minimum must be positive")
         rows.append(
@@ -412,7 +300,7 @@ def _parse_coverage(raw: Any, where: str, *, strict: bool = False) -> CoverageMa
                 members=tuple(str(m) for m in item["members"]),
                 minimum=int(item["minimum"]),
                 capability=str(item["capability"]),
-                optional=bool(item.get("optional", False)),
+                optional=bool(item["optional"]),
             )
         )
     if len({row.group for row in rows}) != len(rows):
@@ -420,64 +308,31 @@ def _parse_coverage(raw: Any, where: str, *, strict: bool = False) -> CoverageMa
     return CoverageMatrix(tuple(rows))
 
 
-def _parse_entities(raw: Any, where: str) -> tuple[Entity, ...]:
-    entities: list[Entity] = []
-    for item in raw or []:
-        _require_keys(item, {"id", "name"}, f"{where}.entity")
-        entities.append(
-            Entity(
-                id=str(item["id"]),
-                name=str(item["name"]),
-                name_zh=str(item.get("name_zh", item["name"])),
-                aliases=tuple(str(a) for a in item.get("aliases", [])),
-                kind=str(item.get("kind", "institution")),
-            )
-        )
-    return tuple(entities)
-
-
-def _parse_roles(raw: Any, where: str, *, strict: bool = False) -> tuple[MarketRole, ...]:
+def _parse_roles(raw: Any, where: str) -> tuple[MarketRole, ...]:
     roles: list[MarketRole] = []
     for item in raw or []:
-        if strict:
-            item = _closed_section(
-                item,
-                required=frozenset(
-                    {
-                        "id",
-                        "name",
-                        "name_zh",
-                        "instrument",
-                        "unit",
-                        "provider_id",
-                        "economic_identity",
-                        "daily_close_semantics",
-                        "mapping_verified",
-                        "availability_lag_seconds",
-                        "session_id",
-                        "session_class",
-                        "kind",
-                    }
-                ),
-                where=f"{where}.role",
-            )
-        _require_keys(
+        item = _closed_section(
             item,
-            {
-                "id",
-                "name",
-                "instrument",
-                "unit",
-                "provider_id",
-                "economic_identity",
-                "daily_close_semantics",
-                "mapping_verified",
-                "availability_lag_seconds",
-                "session_id",
-            },
-            f"{where}.role",
+            required=frozenset(
+                {
+                    "id",
+                    "name",
+                    "name_zh",
+                    "instrument",
+                    "unit",
+                    "provider_id",
+                    "economic_identity",
+                    "daily_close_semantics",
+                    "mapping_verified",
+                    "availability_lag_seconds",
+                    "session_id",
+                    "session_class",
+                    "kind",
+                }
+            ),
+            where=f"{where}.role",
         )
-        session_class = str(item.get("session_class", "exchange_traded"))
+        session_class = str(item["session_class"])
         _check_enum(session_class, "session_class", f"{where}.role.{item['id']}")
         availability_lag_seconds = int(item["availability_lag_seconds"])
         if availability_lag_seconds < 0:
@@ -497,7 +352,7 @@ def _parse_roles(raw: Any, where: str, *, strict: bool = False) -> tuple[MarketR
             MarketRole(
                 id=str(item["id"]),
                 name=str(item["name"]),
-                name_zh=str(item["name_zh"] if strict else item.get("name_zh", item["name"])),
+                name_zh=str(item["name_zh"]),
                 instrument=str(item["instrument"]),
                 unit=str(item["unit"]),
                 provider_id=str(item["provider_id"]),
@@ -507,54 +362,50 @@ def _parse_roles(raw: Any, where: str, *, strict: bool = False) -> tuple[MarketR
                 availability_lag_seconds=availability_lag_seconds,
                 session_id=str(item["session_id"]),
                 session_class=session_class,
-                kind=str(item["kind"] if strict else item.get("kind", "price")),
+                kind=str(item["kind"]),
             )
         )
     return tuple(roles)
 
 
-def _parse_scoring(raw: Any, where: str, *, strict: bool = False) -> Scoring:
-    if strict:
-        raw = _closed_section(raw, required=SCORING_KEYS, where=where)
-    field = lambda name, default: raw[name] if strict else raw.get(name, default)
+def _parse_scoring(raw: Any, where: str) -> Scoring:
+    raw = _closed_section(raw, required=SCORING_KEYS, where=where)
     weights = cast(
         tuple[int, int, int, int, int],
-        tuple(int(w) for w in field("significance_weights", [30, 20, 20, 20, 10])),
+        tuple(int(w) for w in raw["significance_weights"]),
     )
     if sum(weights) != 100:
         raise ConfigError(f"{where}: significance weights must sum to 100, got {sum(weights)}")
-    asset_groups_raw = field("asset_groups", [])
+    asset_groups_raw = raw["asset_groups"]
     asset_group_list: list[AssetGroupMapping] = []
     for index, g in enumerate(asset_groups_raw):
-        if strict:
-            g = _closed_section(
-                g,
-                required=frozenset({"group", "name_zh", "proxies"}),
-                where=f"{where}.asset_groups[{index}]",
-            )
+        g = _closed_section(
+            g,
+            required=frozenset({"group", "name_zh", "proxies"}),
+            where=f"{where}.asset_groups[{index}]",
+        )
         asset_group_list.append(
             AssetGroupMapping(
                 group=str(g["group"]),
-                name_zh=str(g["name_zh"] if strict else g.get("name_zh", g["group"])),
-                proxies=tuple(str(p) for p in (g["proxies"] if strict else g.get("proxies", []))),
+                name_zh=str(g["name_zh"]),
+                proxies=tuple(str(p) for p in g["proxies"]),
             )
         )
     asset_groups = tuple(asset_group_list)
     if len(asset_groups) != 9:
         raise ConfigError(f"{where}: exactly nine asset groups required, got {len(asset_groups)}")
     scales_list = []
-    for index, s in enumerate(field("surprise_scales", [])):
-        if strict:
-            s = _closed_section(
-                s,
-                required=frozenset({"series_id", "scale", "note"}),
-                where=f"{where}.surprise_scales[{index}]",
-            )
+    for index, s in enumerate(raw["surprise_scales"]):
+        s = _closed_section(
+            s,
+            required=frozenset({"series_id", "scale", "note"}),
+            where=f"{where}.surprise_scales[{index}]",
+        )
         scales_list.append(
             SurpriseScale(
                 series_id=str(s["series_id"]),
                 scale=str(s["scale"]),
-                note=s["note"] if strict else s.get("note"),
+                note=s["note"],
             )
         )
     scales = tuple(scales_list)
@@ -563,50 +414,34 @@ def _parse_scoring(raw: Any, where: str, *, strict: bool = False) -> Scoring:
             raise ConfigError(f"{where}: surprise scale for {scale.series_id} must be positive")
     freshness_bins = cast(
         tuple[tuple[int, int], ...],
-        tuple(
-            tuple(int(v) for v in row) for row in field("freshness_bins", Scoring.freshness_bins)
-        ),
+        tuple(tuple(int(v) for v in row) for row in raw["freshness_bins"]),
     )
     relevance_weights = cast(
         tuple[int, int, int, int],
-        tuple(int(v) for v in field("relevance_weights", Scoring.relevance_weights)),
+        tuple(int(v) for v in raw["relevance_weights"]),
     )
     base_priority_weights = cast(
         tuple[str, str],
-        tuple(str(v) for v in field("base_priority_weights", Scoring.base_priority_weights)),
+        tuple(str(v) for v in raw["base_priority_weights"]),
     )
     return Scoring(
         significance_weights=weights,
         freshness_bins=freshness_bins,
-        freshness_older_score=int(field("freshness_older_score", 0)),
+        freshness_older_score=int(raw["freshness_older_score"]),
         relevance_weights=relevance_weights,
         base_priority_weights=base_priority_weights,
-        min_component_coverage=str(field("min_component_coverage", "60")),
-        family_penalty=str(field("family_penalty", "15")),
-        anomaly_z_threshold=str(field("anomaly_z_threshold", "2.0")),
-        scope_map={str(k): int(v) for k, v in field("scope_map", Scoring().scope_map).items()},
-        fundamental_depth_map={
-            str(k): int(v)
-            for k, v in field("fundamental_depth_map", Scoring().fundamental_depth_map).items()
-        },
-        reversibility_map={
-            str(k): int(v)
-            for k, v in field("reversibility_map", Scoring().reversibility_map).items()
-        },
-        structural_horizon_map={
-            str(k): int(v)
-            for k, v in field("structural_horizon_map", Scoring().structural_horizon_map).items()
-        },
+        min_component_coverage=str(raw["min_component_coverage"]),
+        family_penalty=str(raw["family_penalty"]),
+        anomaly_z_threshold=str(raw["anomaly_z_threshold"]),
+        scope_map={str(k): int(v) for k, v in raw["scope_map"].items()},
+        fundamental_depth_map={str(k): int(v) for k, v in raw["fundamental_depth_map"].items()},
+        reversibility_map={str(k): int(v) for k, v in raw["reversibility_map"].items()},
+        structural_horizon_map={str(k): int(v) for k, v in raw["structural_horizon_map"].items()},
         surprise_bins=tuple(
-            (str(row[0]), str(row[1]), int(row[2]))
-            for row in field("surprise_bins", Scoring().surprise_bins)
+            (str(row[0]), str(row[1]), int(row[2])) for row in raw["surprise_bins"]
         ),
-        exposure_map={
-            str(k): int(v) for k, v in field("exposure_map", Scoring().exposure_map).items()
-        },
-        catalyst_map={
-            str(k): int(v) for k, v in field("catalyst_map", Scoring().catalyst_map).items()
-        },
+        exposure_map={str(k): int(v) for k, v in raw["exposure_map"].items()},
+        catalyst_map={str(k): int(v) for k, v in raw["catalyst_map"].items()},
         asset_groups=asset_groups,
         surprise_scales=scales,
     )
@@ -775,23 +610,20 @@ _REGISTRY_PROVIDER_KEYS = frozenset(
 )
 
 
-def _parse_registry_policies(raw: Any, where: str, *, strict: bool) -> tuple[dict[str, Any], ...]:
+def _parse_registry_policies(raw: Any, where: str) -> tuple[dict[str, Any], ...]:
     policies: list[dict[str, Any]] = []
     seen: set[str] = set()
     for index, item in enumerate(raw or []):
         if not isinstance(item, dict):
             raise ConfigError(f"{where}[{index}] must be a mapping")
-        if strict:
-            _closed_section(
-                item,
-                required=frozenset({"id", "enabled"}),
-                allowed=_REGISTRY_PROVIDER_KEYS,
-                where=f"{where}[{index}]",
-            )
-            if not isinstance(item["enabled"], bool):
-                raise ConfigError(f"{where}[{index}].enabled must be boolean")
-        else:
-            _require_keys(item, {"id", "name", "group"}, f"{where}.provider")
+        _closed_section(
+            item,
+            required=frozenset({"id", "enabled"}),
+            allowed=_REGISTRY_PROVIDER_KEYS,
+            where=f"{where}[{index}]",
+        )
+        if not isinstance(item["enabled"], bool):
+            raise ConfigError(f"{where}[{index}].enabled must be boolean")
         pid = str(item["id"])
         if pid in seen:
             raise ConfigError(f"{where}: duplicate provider id {pid!r}")
@@ -874,20 +706,19 @@ def _resolve_provider_entries(
     return tuple(entries)
 
 
-def _parse_source_families(raw: Any, *, strict: bool) -> tuple[SourceFamily, ...]:
+def _parse_source_families(raw: Any) -> tuple[SourceFamily, ...]:
     values: list[SourceFamily] = []
     seen: set[str] = set()
     for index, item in enumerate(raw or []):
-        if strict:
-            item = _closed_section(
-                item,
-                required=frozenset({"id", "name", "tier"}),
-                where=f"source_families[{index}]",
-            )
+        item = _closed_section(
+            item,
+            required=frozenset({"id", "name", "tier"}),
+            where=f"source_families[{index}]",
+        )
         family = SourceFamily(
             str(item["id"]),
             str(item["name"]),
-            str(item["tier"] if strict else item.get("tier", "Tier 2")),
+            str(item["tier"]),
         )
         if family.id in seen:
             raise ConfigError(f"duplicate source family id {family.id!r}")
@@ -983,32 +814,9 @@ def _parse_watched_strict(raw: Any) -> tuple[WatchCompany, ...]:
     return tuple(values)
 
 
-def _parse_feed_limits(raw: Any, *, strict: bool) -> FeedLimits:
-    if strict:
-        raw = _closed_section(raw, required=FEED_KEYS, where="feed")
-    defaults = {
-        "bootstrap_lookback_hours": 72,
-        "gap_threshold_hours": 72,
-        "calendar_horizon_hours": 26,
-        "pre_commit_deadline_seconds": 300,
-        "commit_reserve_seconds": 15,
-        "global_concurrency": 8,
-        "per_host_concurrency": 2,
-        "http_attempt_timeout_seconds": 20,
-        "max_attempts": 3,
-        "max_decompressed_response_bytes": 10 * 1024 * 1024,
-        "max_items_per_provider": 2000,
-        "max_title_code_points": 300,
-        "max_snippet_code_points": 1000,
-        "max_url_characters": 2048,
-        "max_observations_per_instrument": 260,
-        "max_serialized_feed_bytes": 50 * 1024 * 1024,
-        "lock_timeout_seconds": 60,
-    }
-    values = {
-        name: int(raw[name] if strict else raw.get(name, default))
-        for name, default in defaults.items()
-    }
+def _parse_feed_limits(raw: Any) -> FeedLimits:
+    raw = _closed_section(raw, required=FEED_KEYS, where="feed")
+    values = {name: int(raw[name]) for name in FEED_KEYS}
     limits = FeedLimits(**values)
     positive = {
         "bootstrap_lookback_hours": limits.bootstrap_lookback_hours,
@@ -1035,170 +843,72 @@ def _parse_feed_limits(raw: Any, *, strict: bool) -> FeedLimits:
     return limits
 
 
-def _parse_market_state(raw: Any, *, strict: bool) -> MarketState:
-    if strict:
-        raw = _closed_section(raw, required=MARKET_STATE_KEYS, where="market_state")
-    read = raw.__getitem__ if strict else raw.get
+def _parse_market_state(raw: Any) -> MarketState:
+    raw = _closed_section(raw, required=MARKET_STATE_KEYS, where="market_state")
     return MarketState(
-        z_supportive=str(read("z_supportive", "0.5") if not strict else read("z_supportive")),
-        breadth_supportive=str(
-            read("breadth_supportive", "0.20") if not strict else read("breadth_supportive")
-        ),
-        regime_sum_threshold=str(
-            read("regime_sum_threshold", "2") if not strict else read("regime_sum_threshold")
-        ),
-        risk_appetite_min_votes=int(
-            read("risk_appetite_min_votes", 2) if not strict else read("risk_appetite_min_votes")
-        ),
-        rates_min_votes=int(read("rates_min_votes", 1) if not strict else read("rates_min_votes")),
-        liquidity_min_votes=int(
-            read("liquidity_min_votes", 1) if not strict else read("liquidity_min_votes")
-        ),
-        growth_min_votes=int(
-            read("growth_min_votes", 1) if not strict else read("growth_min_votes")
-        ),
-        inflation_min_votes=int(
-            read("inflation_min_votes", 1) if not strict else read("inflation_min_votes")
-        ),
-        required_known_dimensions=int(
-            read("required_known_dimensions", 4)
-            if not strict
-            else read("required_known_dimensions")
-        ),
-        rules_order=tuple(
-            str(v)
-            for v in (
-                read("rules_order", ("risk_off", "risk_on", "neutral"))
-                if not strict
-                else read("rules_order")
-            )
-        ),
+        z_supportive=str(raw["z_supportive"]),
+        breadth_supportive=str(raw["breadth_supportive"]),
+        regime_sum_threshold=str(raw["regime_sum_threshold"]),
+        risk_appetite_min_votes=int(raw["risk_appetite_min_votes"]),
+        rates_min_votes=int(raw["rates_min_votes"]),
+        liquidity_min_votes=int(raw["liquidity_min_votes"]),
+        growth_min_votes=int(raw["growth_min_votes"]),
+        inflation_min_votes=int(raw["inflation_min_votes"]),
+        required_known_dimensions=int(raw["required_known_dimensions"]),
+        rules_order=tuple(str(v) for v in raw["rules_order"]),
     )
 
 
-def _parse_calendar(raw: Any, *, strict: bool) -> CalendarPolicy:
-    if strict:
-        raw = _closed_section(raw, required=CALENDAR_KEYS, where="calendar")
-    read = raw.__getitem__ if strict else raw.get
+def _parse_calendar(raw: Any) -> CalendarPolicy:
+    raw = _closed_section(raw, required=CALENDAR_KEYS, where="calendar")
     return CalendarPolicy(
-        allowed_priorities=tuple(
-            str(v)
-            for v in (
-                read("allowed_priorities", ("critical", "high"))
-                if not strict
-                else read("allowed_priorities")
-            )
-        ),
-        max_items=int(read("max_items", 6) if not strict else read("max_items")),
-        stale_after_minutes=int(
-            read("stale_after_minutes", 30) if not strict else read("stale_after_minutes")
-        ),
-        hard_lag_hours=int(read("hard_lag_hours", 2) if not strict else read("hard_lag_hours")),
+        allowed_priorities=tuple(str(v) for v in raw["allowed_priorities"]),
+        max_items=int(raw["max_items"]),
+        stale_after_minutes=int(raw["stale_after_minutes"]),
+        hard_lag_hours=int(raw["hard_lag_hours"]),
     )
 
 
-def _parse_safety(raw: Any, *, strict: bool) -> SafetyLexicon:
-    if strict:
-        raw = _closed_section(raw, required=SAFETY_KEYS, where="safety_lexicon")
-    read = raw.__getitem__ if strict else raw.get
+def _parse_safety(raw: Any) -> SafetyLexicon:
+    raw = _closed_section(raw, required=SAFETY_KEYS, where="safety_lexicon")
     return SafetyLexicon(
-        zh_terms=tuple(
-            str(v)
-            for v in (
-                read("zh_terms", SafetyLexicon().zh_terms) if not strict else read("zh_terms")
-            )
-        ),
-        en_terms=tuple(
-            str(v)
-            for v in (
-                read("en_terms", SafetyLexicon().en_terms) if not strict else read("en_terms")
-            )
-        ),
-        descriptive_exceptions=tuple(
-            str(v)
-            for v in (
-                read("descriptive_exceptions", SafetyLexicon().descriptive_exceptions)
-                if not strict
-                else read("descriptive_exceptions")
-            )
-        ),
+        zh_terms=tuple(str(v) for v in raw["zh_terms"]),
+        en_terms=tuple(str(v) for v in raw["en_terms"]),
+        descriptive_exceptions=tuple(str(v) for v in raw["descriptive_exceptions"]),
     )
 
 
-def _parse_rate_registry(raw: Any, *, strict: bool) -> RateRegistry:
-    if strict:
-        raw = _closed_section(raw, required=RATE_REGISTRY_KEYS, where="rate_registry")
-    read = raw.__getitem__ if strict else raw.get
+def _parse_rate_registry(raw: Any) -> RateRegistry:
+    raw = _closed_section(raw, required=RATE_REGISTRY_KEYS, where="rate_registry")
     return RateRegistry(
-        version=str(read("version", "1") if not strict else read("version")),
-        crash_cooldown_hours=int(
-            read("crash_cooldown_hours", 24) if not strict else read("crash_cooldown_hours")
-        ),
-        schema_file=str(
-            read("schema_file", "rate-registry.json") if not strict else read("schema_file")
-        ),
+        version=str(raw["version"]),
+        crash_cooldown_hours=int(raw["crash_cooldown_hours"]),
+        schema_file=str(raw["schema_file"]),
     )
 
 
 def load_config(
     config_path: str | Path,
-    providers_path: str | Path | None = None,
+    providers_path: str | Path,
     *,
+    manifest_root: str | Path,
     require_verified_enabled: bool = True,
-    manifest_root: str | Path | None = None,
-    strict: bool | None = None,
 ) -> AppConfig:
     """Load and strictly validate configuration from YAML files."""
     config_path = Path(config_path)
+    providers_path = Path(providers_path)
+    manifest_root = Path(manifest_root)
     data = _load_yaml(config_path)
     _reject_unknown_keys(data, ALLOWED_CONFIG_KEYS, str(config_path))
 
-    if strict is None:
-        strict = (
-            manifest_root is not None
-            or (
-                config_path.resolve() == (config_path.parent / "config.yaml").resolve()
-                and config_path.parent.name == "config"
-                and config_path.parent.parent.resolve() == DEFAULT_MANIFEST_ROOT.parent.resolve()
-            )
-            or (
-                providers_path is not None
-                and Path(providers_path).resolve()
-                == DEFAULT_MANIFEST_ROOT.parent / "config" / "providers.yaml"
-            )
-        )
-    if (
-        manifest_root is None
-        and strict
-        and config_path.resolve() == DEFAULT_MANIFEST_ROOT.parent / "config" / "config.yaml"
-    ):
-        manifest_root = DEFAULT_MANIFEST_ROOT
-    if (
-        manifest_root is None
-        and strict
-        and providers_path is not None
-        and Path(providers_path).resolve()
-        == DEFAULT_MANIFEST_ROOT.parent / "config" / "providers.yaml"
-    ):
-        manifest_root = DEFAULT_MANIFEST_ROOT
-    if manifest_root is not None:
-        manifest_root = Path(manifest_root)
-
-    providers_file_data: Mapping[str, Any] = {}
-    if providers_path is not None:
-        providers_path = Path(providers_path)
-        providers_file_data = _load_yaml(providers_path)
-        _reject_unknown_keys(providers_file_data, ALLOWED_PROVIDER_FILE_KEYS, str(providers_path))
-
-    if strict:
-        _require_keys(data, set(APPLICATION_REQUIRED_KEYS), str(config_path))
-        if providers_path is None:
-            raise ConfigError("provider registry is required for strict resolution")
-        _require_keys(
-            providers_file_data, {"schema_version", "providers", "coverage"}, str(providers_path)
-        )
-        if int(providers_file_data["schema_version"]) != 1:
-            raise ConfigError(f"{providers_path}: unsupported provider registry schema_version")
+    _require_keys(data, set(APPLICATION_REQUIRED_KEYS), str(config_path))
+    providers_file_data = _load_yaml(providers_path)
+    _reject_unknown_keys(providers_file_data, ALLOWED_PROVIDER_FILE_KEYS, str(providers_path))
+    _require_keys(
+        providers_file_data, {"schema_version", "providers", "coverage"}, str(providers_path)
+    )
+    if int(providers_file_data["schema_version"]) != 1:
+        raise ConfigError(f"{providers_path}: unsupported provider registry schema_version")
 
     _require_keys(
         data,
@@ -1209,59 +919,22 @@ def load_config(
     if schema_version != 1:
         raise ConfigError(f"{config_path}: unsupported config schema_version {schema_version}")
 
-    providers_raw: list[Any] = []
-    providers_raw.extend(providers_file_data.get("providers", []))
-    providers_raw.extend(data.get("providers", []))
-    policies = _parse_registry_policies(providers_raw, "providers", strict=bool(strict))
+    policies = _parse_registry_policies(providers_file_data["providers"], "providers")
+    coverage = _parse_coverage(providers_file_data["coverage"], "coverage")
+    providers = _resolve_provider_entries(
+        policies, coverage, manifest_root, require_verified_enabled=require_verified_enabled
+    )
 
-    coverage_raw = providers_file_data.get("coverage", data.get("coverage", []))
-    coverage = _parse_coverage(coverage_raw, "coverage", strict=bool(strict))
+    scoring = _parse_scoring(data["scoring"], "scoring")
+    _validate_scoring_domains(scoring)
 
-    if strict:
-        if manifest_root is None:
-            raise ConfigError("manifest root is required for strict provider resolution")
-        providers = _resolve_provider_entries(
-            policies, coverage, manifest_root, require_verified_enabled=require_verified_enabled
-        )
-    else:
-        providers = _parse_providers(providers_raw, "providers")
-        if require_verified_enabled:
-            for p in providers:
-                if p.enabled and not p.verified:
-                    raise ConfigError(f"provider {p.id!r} is enabled but unverified")
-            _validate_coverage(providers, coverage)
-            _validate_rate_policies(providers)
-
-    feed_raw = data["feed"]
-    scoring = _parse_scoring(data["scoring"], "scoring", strict=bool(strict))
-    if strict:
-        _validate_scoring_domains(scoring)
-
-    roles = _parse_roles(data.get("roles", []), "roles", strict=bool(strict))
+    roles = _parse_roles(data["roles"], "roles")
     if require_verified_enabled:
         _validate_role_ids(roles)
 
-    entities = (
-        _parse_entities_strict(data.get("entities", []))
-        if strict
-        else _parse_entities(data.get("entities", []), "entities")
-    )
-    source_families = _parse_source_families(data.get("source_families", []), strict=bool(strict))
-    sessions = (
-        _parse_sessions_strict(data.get("sessions", []))
-        if strict
-        else tuple(
-            Session(
-                id=str(s["id"]),
-                calendar=str(s["calendar"]),
-                session_class=str(s.get("session_class", "exchange_traded")),
-                timezone=str(s.get("timezone", "UTC")),
-                annualization_factor=str(s.get("annualization_factor", "252")),
-                availability_lag_seconds=int(s.get("availability_lag_seconds", 300)),
-            )
-            for s in data.get("sessions", [])
-        )
-    )
+    entities = _parse_entities_strict(data["entities"])
+    source_families = _parse_source_families(data["source_families"])
+    sessions = _parse_sessions_strict(data["sessions"])
     session_by_id: dict[str, Session] = {}
     for session in sessions:
         if session.id in session_by_id:
@@ -1289,62 +962,40 @@ def load_config(
                     f"role {role.id!r}: session {role.session_id!r} is incompatible "
                     f"with role session_class {role.session_class!r}"
                 )
-    watched = (
-        _parse_watched_strict(data.get("watched_companies", []))
-        if strict
-        else tuple(
-            WatchCompany(
-                cik=str(w["cik"]),
-                name=str(w["name"]),
-                tickers=tuple(str(t) for t in w.get("tickers", [])),
+    watched = _parse_watched_strict(data["watched_companies"])
+
+    feed_limits = _parse_feed_limits(data["feed"])
+    market_state = _parse_market_state(data["market_state"])
+    calendar = _parse_calendar(data["calendar"])
+    safety = _parse_safety(data["safety_lexicon"])
+    rate_registry = _parse_rate_registry(data["rate_registry"])
+
+    provider_ids = {p.id for p in providers}
+    family_ids = {family.id for family in source_families}
+    session_ids = {session.id for session in sessions}
+    for provider in providers:
+        if provider.source_family_id not in family_ids:
+            raise ConfigError(
+                f"provider {provider.id!r}: unknown source family {provider.source_family_id!r}"
             )
-            for w in data.get("watched_companies", [])
-        )
-    )
-
-    feed_limits = _parse_feed_limits(feed_raw, strict=bool(strict))
-    market_state = (
-        _parse_market_state(data["market_state"], strict=bool(strict)) if strict else MarketState()
-    )
-    calendar = (
-        _parse_calendar(data["calendar"], strict=bool(strict)) if strict else CalendarPolicy()
-    )
-    safety = (
-        _parse_safety(data["safety_lexicon"], strict=bool(strict)) if strict else SafetyLexicon()
-    )
-    rate_registry = (
-        _parse_rate_registry(data["rate_registry"], strict=bool(strict))
-        if strict
-        else RateRegistry()
-    )
-
-    if strict:
-        provider_ids = {p.id for p in providers}
-        family_ids = {family.id for family in source_families}
-        session_ids = {session.id for session in sessions}
-        for provider in providers:
-            if provider.source_family_id not in family_ids:
-                raise ConfigError(
-                    f"provider {provider.id!r}: unknown source family {provider.source_family_id!r}"
-                )
-            if (
-                provider.enabled
-                and provider.response_limit_bytes > feed_limits.max_decompressed_response_bytes
-            ):
-                raise ConfigError(
-                    f"provider {provider.id!r}: response limit exceeds global decompressed-response bound"
-                )
-        for role in roles:
-            if role.provider_id not in provider_ids:
-                raise ConfigError(f"role {role.id!r}: unknown provider {role.provider_id!r}")
-            if role.session_id not in session_ids:
-                raise ConfigError(f"role {role.id!r}: unknown session {role.session_id!r}")
-        _validate_coverage(providers, coverage)
-        _validate_market_coverage(providers, coverage)
-        _validate_rate_policies(providers)
-        yahoo = next((p for p in providers if p.id == "yahoo_market"), None)
-        if yahoo is not None:
-            _validate_role_mapping_mirrors(yahoo, roles)
+        if (
+            provider.enabled
+            and provider.response_limit_bytes > feed_limits.max_decompressed_response_bytes
+        ):
+            raise ConfigError(
+                f"provider {provider.id!r}: response limit exceeds global decompressed-response bound"
+            )
+    for role in roles:
+        if role.provider_id not in provider_ids:
+            raise ConfigError(f"role {role.id!r}: unknown provider {role.provider_id!r}")
+        if role.session_id not in session_ids:
+            raise ConfigError(f"role {role.id!r}: unknown session {role.session_id!r}")
+    _validate_coverage(providers, coverage)
+    _validate_market_coverage(providers, coverage)
+    _validate_rate_policies(providers)
+    yahoo = next((p for p in providers if p.id == "yahoo_market"), None)
+    if yahoo is not None:
+        _validate_role_mapping_mirrors(yahoo, roles)
 
     return AppConfig(
         schema_version=schema_version,
@@ -1362,13 +1013,9 @@ def load_config(
         calendar=calendar,
         safety_lexicon=safety,
         rate_registry=rate_registry,
-        output_root=str(data["output_root"]) if strict else str(data.get("output_root", "feeds")),
-        runs_root=str(data["runs_root"]) if strict else str(data.get("runs_root", "runs")),
-        timezone=str(data["timezone"]) if strict else str(data.get("timezone", "Asia/Shanghai")),
-        freshness_limit_minutes=int(data["freshness_limit_minutes"])
-        if strict
-        else int(data.get("freshness_limit_minutes", 30)),
-        normal_lag_hours=int(data["normal_lag_hours"])
-        if strict
-        else int(data.get("normal_lag_hours", 2)),
+        output_root=str(data["output_root"]),
+        runs_root=str(data["runs_root"]),
+        timezone=str(data["timezone"]),
+        freshness_limit_minutes=int(data["freshness_limit_minutes"]),
+        normal_lag_hours=int(data["normal_lag_hours"]),
     )

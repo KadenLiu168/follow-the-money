@@ -3,12 +3,13 @@
 Covers strict-UTF-8/lone-surrogate rejection, numeric-vs-categorical unknown
 semantics, duplicate provider IDs, unverified enabled adapters, charset/BOM
 rules, closed fetch/redirect/source-link policies, the six-group coverage
-matrix with synthetic manifests, the 13 roles / nine asset groups / three
+matrix with copied shipped manifests, the 13 roles / nine asset groups / three
 surprise scales, weight sums, lookback/limit positivity, and optional extras.
 """
 
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
 
@@ -22,109 +23,7 @@ from follow_the_money.config.model import V1_ROLE_IDS
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO_ROOT / "config" / "config.yaml"
 DEFAULT_PROVIDERS = REPO_ROOT / "config" / "providers.yaml"
-
-
-def _write(path: Path, text: str) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(text.encode("utf-8"))
-    return path
-
-
-V1_ASSET_GROUPS = [
-    {"group": g, "name_zh": g, "proxies": p}
-    for g, p in [
-        ("cn_hk_equities", ["csi300", "hsi"]),
-        ("us_equities", ["sp500"]),
-        ("us_rates", ["us2y", "us10y"]),
-        ("china_rates", ["cn10y"]),
-        ("usd_fx", ["dxy", "usdcnh"]),
-        ("industrial_commodities", ["copper"]),
-        ("energy", ["wti"]),
-        ("precious_metals", ["gold"]),
-        ("crypto", ["btc"]),
-    ]
-]
-
-
-def _minimal_config(**overrides) -> dict:
-    sessions = [
-        {
-            "id": "exchange",
-            "calendar": "XNYS",
-            "session_class": "exchange_traded",
-            "timezone": "UTC",
-        },
-        {
-            "id": "crypto",
-            "calendar": "UTC",
-            "session_class": "continuous_247",
-            "timezone": "UTC",
-        },
-    ]
-    cfg = {
-        "schema_version": 1,
-        "name": "test",
-        "feed": {
-            "bootstrap_lookback_hours": 72,
-            "gap_threshold_hours": 72,
-            "calendar_horizon_hours": 26,
-            "pre_commit_deadline_seconds": 300,
-            "commit_reserve_seconds": 15,
-        },
-        "scoring": {
-            "significance_weights": [30, 20, 20, 20, 10],
-            "asset_groups": V1_ASSET_GROUPS,
-        },
-        "coverage": [],
-        "roles": [
-            {
-                "id": rid,
-                "name": rid,
-                "instrument": rid,
-                "unit": "index",
-                "provider_id": "prov_a",
-                "economic_identity": f"{rid} economic identity",
-                "daily_close_semantics": "provider_daily_close",
-                "source_provenance": "fixture:role-contract-v1",
-                "mapping_verified": True,
-                "availability_lag_seconds": 300,
-                "session_id": "crypto" if rid == "btc" else "exchange",
-                "session_class": "continuous_247" if rid == "btc" else "exchange_traded",
-            }
-            for rid in V1_ROLE_IDS
-        ],
-        "sessions": sessions,
-    }
-    cfg.update(overrides)
-    return cfg
-
-
-def _minimal_providers(**overrides) -> dict:
-    prov = {
-        "providers": [
-            {
-                "id": "prov_a",
-                "name": "Provider A",
-                "enabled": True,
-                "verified": True,
-                "group": "us_official_macro_policy",
-                "source_family_id": "fam_a",
-                "tier": "Tier 1",
-                "user_agent": "ua",
-                "fetch_hosts": [{"host": "a.example.com"}],
-                "redirect_hosts": [],
-                "source_link_hosts": [{"host": "a.example.com"}],
-                "rate_policy": {
-                    "scope_id": "scope_a",
-                    "capacity": 10,
-                    "refill_period_seconds": 60,
-                    "minimum_interval_seconds": 1,
-                },
-            }
-        ]
-    }
-    prov.update(overrides)
-    return prov
+DEFAULT_MANIFEST_ROOT = REPO_ROOT / "providers"
 
 
 @pytest.fixture
@@ -132,12 +31,23 @@ def tmp_repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _load_pair(tmp_path: Path, config: dict, providers: dict | None = None, **kw):
-    cfg_path = _write(tmp_path / "config.yaml", yaml.safe_dump(config))
-    if providers is None:
-        return load_config(cfg_path, None, **kw)
-    prov_path = _write(tmp_path / "providers.yaml", yaml.safe_dump(providers))
-    return load_config(cfg_path, prov_path, **kw)
+def _copy_contracts(tmp_path: Path) -> tuple[Path, Path, Path]:
+    config_path = tmp_path / "config" / "config.yaml"
+    providers_path = tmp_path / "config" / "providers.yaml"
+    manifest_root = tmp_path / "providers"
+    config_path.parent.mkdir(parents=True)
+    shutil.copy2(DEFAULT_CONFIG, config_path)
+    shutil.copy2(DEFAULT_PROVIDERS, providers_path)
+    shutil.copytree(DEFAULT_MANIFEST_ROOT, manifest_root)
+    return config_path, providers_path, manifest_root
+
+
+def _read_yaml(path: Path) -> dict:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _write_yaml(path: Path, value: dict) -> None:
+    path.write_text(yaml.safe_dump(value, sort_keys=False, allow_unicode=True), encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +56,12 @@ def _load_pair(tmp_path: Path, config: dict, providers: dict | None = None, **kw
 
 
 def test_shipped_defaults_load_structure_without_enablement():
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=False)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=False,
+    )
     assert cfg.schema_version == 1
     assert cfg.name == "follow-the-money"
     assert len(cfg.providers) == 10
@@ -192,7 +107,12 @@ def test_shipped_defaults_load_structure_without_enablement():
 def test_shipped_defaults_pass_strict_enablement_after_verification():
     # Gate 13.1: every mandatory matrix row is verified and enabled; strict
     # validation must now pass rather than block Apply.
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=True)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=True,
+    )
     for row in cfg.coverage.rows:
         enabled = [m for m in row.members if cfg.provider(m).enabled and cfg.provider(m).verified]
         assert len(enabled) >= row.minimum, f"{row.group}: {row.minimum} enabled required"
@@ -209,29 +129,36 @@ def test_lone_surrogate_rejected(tmp_path):
     # emit the escaped sequence directly as raw YAML text.
     path.write_text('schema_version: 1\nname: "bad\\ud800name"\n', encoding="utf-8")
     with pytest.raises(ConfigError, match="surrogate"):
-        load_config(path)
+        load_config(path, DEFAULT_PROVIDERS, manifest_root=DEFAULT_MANIFEST_ROOT)
 
 
 def test_lone_low_surrogate_rejected(tmp_path):
     path = tmp_path / "config.yaml"
     path.write_text('schema_version: 1\nname: "bad\\udfff"\n', encoding="utf-8")
     with pytest.raises(ConfigError, match="surrogate"):
-        load_config(path)
+        load_config(path, DEFAULT_PROVIDERS, manifest_root=DEFAULT_MANIFEST_ROOT)
 
 
 def test_invalid_utf8_bytes_rejected(tmp_path):
     path = tmp_path / "config.yaml"
     path.write_bytes(b"schema_version: 1\nname: \xff\xfe broken\n")
     with pytest.raises(ConfigError, match="UTF-8"):
-        load_config(path)
+        load_config(path, DEFAULT_PROVIDERS, manifest_root=DEFAULT_MANIFEST_ROOT)
 
 
 def test_unknown_top_level_key_rejected(tmp_path):
     # Config objects are closed: unknown keys must be rejected.
-    cfg = _minimal_config(extra_secret_key=True)
-    path = _write(tmp_path / "config.yaml", yaml.safe_dump(cfg))
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["extra_secret_key"] = True
+    _write_yaml(config_path, config)
     with pytest.raises(ConfigError, match="unknown"):
-        load_config(path, None, require_verified_enabled=False)
+        load_config(
+            config_path,
+            providers_path,
+            manifest_root=manifest_root,
+            require_verified_enabled=False,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -240,11 +167,17 @@ def test_unknown_top_level_key_rejected(tmp_path):
 
 
 def test_duplicate_provider_ids_rejected(tmp_path):
-    cfg = _minimal_config()
-    prov = _minimal_providers()
-    prov["providers"].append(dict(prov["providers"][0], name="clone"))
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    providers = _read_yaml(providers_path)
+    providers["providers"].append({"id": "federal_reserve", "enabled": False})
+    _write_yaml(providers_path, providers)
     with pytest.raises(ConfigError, match="duplicate provider id"):
-        _load_pair(tmp_path, cfg, prov, require_verified_enabled=False)
+        load_config(
+            config_path,
+            providers_path,
+            manifest_root=manifest_root,
+            require_verified_enabled=False,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -253,19 +186,20 @@ def test_duplicate_provider_ids_rejected(tmp_path):
 
 
 def test_enabled_unverified_adapter_rejected(tmp_path):
-    cfg = _minimal_config()
-    prov = _minimal_providers()
-    prov["providers"][0]["verified"] = False
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    manifest = _read_yaml(manifest_root / "federal_reserve" / "manifest.yaml")
+    manifest["verification"]["verified"] = False
+    _write_yaml(manifest_root / "federal_reserve" / "manifest.yaml", manifest)
     with pytest.raises(ConfigError, match="enabled but unverified"):
-        _load_pair(tmp_path, cfg, prov)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_disabled_unverified_adapter_ok(tmp_path):
-    cfg = _minimal_config()
-    prov = _minimal_providers()
-    prov["providers"][0]["enabled"] = False
-    prov["providers"][0]["verified"] = False
-    _load_pair(tmp_path, cfg, prov)  # OK
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    manifest = _read_yaml(manifest_root / "cftc" / "manifest.yaml")
+    manifest["verification"]["verified"] = False
+    _write_yaml(manifest_root / "cftc" / "manifest.yaml", manifest)
+    load_config(config_path, providers_path, manifest_root=manifest_root)  # OK
 
 
 # ---------------------------------------------------------------------------
@@ -274,11 +208,17 @@ def test_disabled_unverified_adapter_ok(tmp_path):
 
 
 def test_invalid_source_tier_rejected(tmp_path):
-    cfg = _minimal_config()
-    prov = _minimal_providers()
-    prov["providers"][0]["tier"] = "Tier 5"
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["source_families"][0]["tier"] = "Tier 5"
+    _write_yaml(config_path, config)
     with pytest.raises(ConfigError, match="tier"):
-        _load_pair(tmp_path, cfg, prov, require_verified_enabled=False)
+        load_config(
+            config_path,
+            providers_path,
+            manifest_root=manifest_root,
+            require_verified_enabled=False,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -287,55 +227,60 @@ def test_invalid_source_tier_rejected(tmp_path):
 
 
 def test_coverage_row_missing_member_rejected(tmp_path):
-    cfg = _minimal_config(
-        coverage=[{"group": "g", "members": ["ghost"], "minimum": 1, "capability": "x"}]
-    )
-    prov = _minimal_providers()
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    providers = _read_yaml(providers_path)
+    providers["coverage"][0]["members"] = ["ghost"]
+    _write_yaml(providers_path, providers)
     with pytest.raises(ConfigError, match="unknown member"):
-        _load_pair(tmp_path, cfg, prov)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_coverage_row_unverified_member_rejected(tmp_path):
-    cfg = _minimal_config(
-        coverage=[{"group": "g", "members": ["prov_a"], "minimum": 1, "capability": "x"}]
-    )
-    prov = _minimal_providers()
-    prov["providers"][0]["verified"] = False
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    providers = _read_yaml(providers_path)
+    providers["coverage"][0]["members"] = ["federal_reserve"]
+    _write_yaml(providers_path, providers)
+    manifest = _read_yaml(manifest_root / "federal_reserve" / "manifest.yaml")
+    manifest["verification"]["verified"] = False
+    _write_yaml(manifest_root / "federal_reserve" / "manifest.yaml", manifest)
     with pytest.raises(ConfigError, match="unverified"):
-        _load_pair(tmp_path, cfg, prov)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_coverage_row_disabled_member_rejected(tmp_path):
-    cfg = _minimal_config(
-        coverage=[{"group": "g", "members": ["prov_a"], "minimum": 1, "capability": "x"}]
-    )
-    prov = _minimal_providers()
-    prov["providers"][0]["enabled"] = False
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    providers = _read_yaml(providers_path)
+    providers["coverage"][0]["members"] = ["cftc"]
+    _write_yaml(providers_path, providers)
     with pytest.raises(ConfigError, match="disabled"):
-        _load_pair(tmp_path, cfg, prov)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_coverage_row_unachievable_minimum_rejected(tmp_path):
     # Row requires 3 enabled members but only two are enabled/verified.
-    cfg = _minimal_config(
-        coverage=[{"group": "g", "members": ["prov_a", "prov_b"], "minimum": 3, "capability": "x"}]
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    providers = _read_yaml(providers_path)
+    providers["coverage"][0].update(
+        members=["federal_reserve", "bls"],
+        minimum=3,
     )
-    prov = _minimal_providers()
-    prov["providers"].append(
-        dict(prov["providers"][0], id="prov_b", name="B", enabled=True, verified=True)
-    )
+    _write_yaml(providers_path, providers)
     with pytest.raises(ConfigError, match="not achievable"):
-        _load_pair(tmp_path, cfg, prov)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_optional_row_can_be_unachievable(tmp_path):
-    cfg = _minimal_config(
-        coverage=[
-            {"group": "g", "members": ["prov_a"], "minimum": 2, "capability": "x", "optional": True}
-        ]
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    providers = _read_yaml(providers_path)
+    providers["coverage"][0].update(
+        members=["federal_reserve", "bls"],
+        minimum=3,
+        optional=True,
     )
-    prov = _minimal_providers()
-    _load_pair(tmp_path, cfg, prov)  # optional rows are not enforced
+    _write_yaml(providers_path, providers)
+    load_config(
+        config_path, providers_path, manifest_root=manifest_root
+    )  # optional rows are not enforced
 
 
 # ---------------------------------------------------------------------------
@@ -344,77 +289,99 @@ def test_optional_row_can_be_unachievable(tmp_path):
 
 
 def test_roles_must_be_exact_canonical_set(tmp_path):
-    cfg = _minimal_config()
-    cfg["roles"] = [dict(cfg["roles"][0], id="sp500")]  # only one role
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["roles"] = [dict(config["roles"][0], id="sp500")]  # only one role
+    _write_yaml(config_path, config)
     with pytest.raises(ConfigError, match="canonical v1 set"):
-        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_role_order_must_match_canonical(tmp_path):
-    cfg = _minimal_config()
-    cfg["roles"] = list(reversed(cfg["roles"]))
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["roles"] = list(reversed(config["roles"]))
+    _write_yaml(config_path, config)
     with pytest.raises(ConfigError, match="canonical v1 set"):
-        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_every_role_requires_explicit_session_id(tmp_path):
-    cfg = _minimal_config()
-    del cfg["roles"][0]["session_id"]
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    del config["roles"][0]["session_id"]
+    _write_yaml(config_path, config)
     with pytest.raises(ConfigError, match="session_id"):
-        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_role_unknown_session_id_rejected(tmp_path):
-    cfg = _minimal_config()
-    cfg["roles"][0]["session_id"] = "missing"
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["roles"][0]["session_id"] = "missing"
+    _write_yaml(config_path, config)
     with pytest.raises(ConfigError, match="unknown session"):
-        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_role_session_class_mismatch_rejected(tmp_path):
-    cfg = _minimal_config()
-    cfg["roles"][0]["session_id"] = "crypto"
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["roles"][0]["session_id"] = "crypto_247"
+    _write_yaml(config_path, config)
     with pytest.raises(ConfigError, match="incompatible"):
-        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_exchange_traded_session_unknown_calendar_rejected(tmp_path):
-    cfg = _minimal_config()
-    cfg["sessions"][0]["calendar"] = "XNYX"
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["sessions"][0]["calendar"] = "XNYX"
+    _write_yaml(config_path, config)
     with pytest.raises(ConfigError, match="unknown exchange calendar"):
-        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_duplicate_role_ownership_rejected(tmp_path):
-    cfg = _minimal_config()
-    cfg["roles"][1]["id"] = cfg["roles"][0]["id"]
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["roles"][1]["id"] = config["roles"][0]["id"]
+    _write_yaml(config_path, config)
     with pytest.raises(ConfigError, match="duplicate role"):
-        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_role_contract_does_not_require_parallel_source_provenance(tmp_path):
-    cfg = _minimal_config()
-    del cfg["roles"][0]["source_provenance"]
-    loaded = _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    loaded = load_config(config_path, providers_path, manifest_root=manifest_root)
     assert not hasattr(loaded.roles[0], "source_provenance")
 
 
 def test_role_contract_requires_non_negative_availability_lag(tmp_path):
-    cfg = _minimal_config()
-    cfg["roles"][0]["availability_lag_seconds"] = -1
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["roles"][0]["availability_lag_seconds"] = -1
+    _write_yaml(config_path, config)
     with pytest.raises(ConfigError, match="availability_lag_seconds"):
-        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_role_mapping_verified_must_be_boolean(tmp_path):
-    cfg = _minimal_config()
-    cfg["roles"][0]["mapping_verified"] = "false"
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["roles"][0]["mapping_verified"] = "false"
+    _write_yaml(config_path, config)
     with pytest.raises(ConfigError, match="mapping_verified must be boolean"):
-        _load_pair(tmp_path, cfg, None, require_verified_enabled=True)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_shipped_roles_expose_a_complete_verified_contract():
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=True)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=True,
+    )
     assert all(role.provider_id == "yahoo_market" for role in cfg.roles)
     assert all(role.economic_identity for role in cfg.roles)
     assert all(role.daily_close_semantics for role in cfg.roles)
@@ -438,7 +405,12 @@ def test_shipped_roles_expose_a_complete_verified_contract():
 def test_shipped_role_contract_matches_yahoo_manifest_mappings():
     from follow_the_money.providers.manifest import load_all_manifests
 
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=True)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=True,
+    )
     mappings = {str(m["role_id"]): m for m in load_all_manifests()["yahoo_market"]["role_mappings"]}
     assert set(mappings) == set(cfg.role_ids)
     for role in cfg.roles:
@@ -458,26 +430,30 @@ def test_shipped_role_contract_matches_yahoo_manifest_mappings():
 
 
 def test_significance_weights_must_sum_100(tmp_path):
-    cfg = _minimal_config(scoring={"significance_weights": [30, 20, 20, 20, 9]})
-    path = _write(tmp_path / "config.yaml", yaml.safe_dump(cfg))
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["scoring"]["significance_weights"] = [30, 20, 20, 20, 9]
+    _write_yaml(config_path, config)
     with pytest.raises(ConfigError, match="sum to 100"):
-        load_config(path)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_asset_groups_must_be_nine(tmp_path):
-    cfg = _minimal_config()
-    cfg["scoring"]["asset_groups"] = [{"group": "only", "proxies": []}]
-    path = _write(tmp_path / "config.yaml", yaml.safe_dump(cfg))
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["scoring"]["asset_groups"] = [{"group": "only", "name_zh": "only", "proxies": []}]
+    _write_yaml(config_path, config)
     with pytest.raises(ConfigError, match="nine asset groups"):
-        load_config(path)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 def test_surprise_scale_must_be_positive(tmp_path):
-    cfg = _minimal_config()
-    cfg["scoring"]["surprise_scales"] = [{"series_id": "x", "scale": "0"}]
-    path = _write(tmp_path / "config.yaml", yaml.safe_dump(cfg))
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["scoring"]["surprise_scales"] = [{"series_id": "x", "scale": "0", "note": "test"}]
+    _write_yaml(config_path, config)
     with pytest.raises(ConfigError, match="positive"):
-        load_config(path)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 # ---------------------------------------------------------------------------
@@ -496,11 +472,12 @@ def test_surprise_scale_must_be_positive(tmp_path):
     ],
 )
 def test_non_positive_feed_limit_rejected(tmp_path, field):
-    cfg = _minimal_config()
-    cfg["feed"][field] = 0
-    path = _write(tmp_path / "config.yaml", yaml.safe_dump(cfg))
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["feed"][field] = 0
+    _write_yaml(config_path, config)
     with pytest.raises(ConfigError, match="positive"):
-        load_config(path)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 # ---------------------------------------------------------------------------
@@ -509,41 +486,47 @@ def test_non_positive_feed_limit_rejected(tmp_path, field):
 
 
 def test_rate_capacity_must_be_positive(tmp_path):
-    cfg = _minimal_config()
-    prov = _minimal_providers()
-    prov["providers"][0]["rate_policy"]["capacity"] = 0
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    manifest_path = manifest_root / "federal_reserve" / "manifest.yaml"
+    manifest = _read_yaml(manifest_path)
+    manifest["rate_policy"]["capacity"] = 0
+    _write_yaml(manifest_path, manifest)
     with pytest.raises(ConfigError, match="capacity"):
-        _load_pair(tmp_path, cfg, prov, require_verified_enabled=False)
+        load_config(
+            config_path,
+            providers_path,
+            manifest_root=manifest_root,
+            require_verified_enabled=False,
+        )
 
 
 def test_rate_refill_must_be_positive(tmp_path):
-    cfg = _minimal_config()
-    prov = _minimal_providers()
-    prov["providers"][0]["rate_policy"]["refill_period_seconds"] = 0
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    manifest_path = manifest_root / "federal_reserve" / "manifest.yaml"
+    manifest = _read_yaml(manifest_path)
+    manifest["rate_policy"]["refill_period_seconds"] = 0
+    _write_yaml(manifest_path, manifest)
     with pytest.raises(ConfigError, match="refill"):
-        _load_pair(tmp_path, cfg, prov, require_verified_enabled=False)
+        load_config(
+            config_path,
+            providers_path,
+            manifest_root=manifest_root,
+            require_verified_enabled=False,
+        )
 
 
 def test_inconsistent_same_scope_rate_policies_rejected(tmp_path):
-    cfg = _minimal_config(
-        coverage=[{"group": "g", "members": ["prov_a", "prov_b"], "minimum": 2, "capability": "x"}]
-    )
-    prov = _minimal_providers()
-    prov["providers"].append(
-        dict(
-            prov["providers"][0],
-            id="prov_b",
-            name="B",
-            rate_policy={
-                "scope_id": "scope_a",  # same scope, different capacity
-                "capacity": 999,
-                "refill_period_seconds": 60,
-                "minimum_interval_seconds": 1,
-            },
-        )
-    )
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    federal_path = manifest_root / "federal_reserve" / "manifest.yaml"
+    bls_path = manifest_root / "bls" / "manifest.yaml"
+    federal = _read_yaml(federal_path)
+    bls = _read_yaml(bls_path)
+    federal["rate_policy"]["scope_id"] = "shared_test_scope"
+    bls["rate_policy"].update(scope_id="shared_test_scope", capacity=999)
+    _write_yaml(federal_path, federal)
+    _write_yaml(bls_path, bls)
     with pytest.raises(ConfigError, match="inconsistently"):
-        _load_pair(tmp_path, cfg, prov)
+        load_config(config_path, providers_path, manifest_root=manifest_root)
 
 
 # ---------------------------------------------------------------------------
@@ -552,7 +535,12 @@ def test_inconsistent_same_scope_rate_policies_rejected(tmp_path):
 
 
 def test_shipped_charset_is_utf8_strict():
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=False)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=False,
+    )
     for p in cfg.providers:
         assert p.allowed_charset.lower() in {"utf-8", "utf8"}
         assert p.allowed_bom is False  # no conflicting BOM policy shipped
@@ -565,7 +553,12 @@ def test_shipped_charset_is_utf8_strict():
 
 
 def test_shipped_config_does_not_require_optional_extras():
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=False)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=False,
+    )
     # AKShare is present but disabled and not a member of any mandatory row.
     akshare = cfg.provider("akshare")
     assert not akshare.enabled
@@ -578,7 +571,12 @@ def test_shipped_config_does_not_require_optional_extras():
 def test_config_loads_without_any_llm_section():
     # The deterministic engine is credential-free: no `llm:` section exists
     # in the config contract and loading never reads a model or API key.
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=False)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=False,
+    )
     assert not hasattr(cfg, "llm")
     assert not hasattr(cfg, "audit_severity")
     assert cfg.safety_lexicon.zh_terms  # deterministic safety contract still loads
@@ -590,7 +588,10 @@ def test_config_loads_without_any_llm_section():
 
 
 def test_config_yaml_round_trip(tmp_path):
-    cfg = _load_pair(tmp_path, _minimal_config(), _minimal_providers())
-    assert cfg.name == "test"
-    assert cfg.provider("prov_a").name == "Provider A"
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    _write_yaml(config_path, _read_yaml(config_path))
+    _write_yaml(providers_path, _read_yaml(providers_path))
+    cfg = load_config(config_path, providers_path, manifest_root=manifest_root)
+    assert cfg.name == "follow-the-money"
+    assert cfg.provider("federal_reserve").name == "Federal Reserve"
     assert cfg.role("sp500").id == "sp500"

@@ -108,7 +108,6 @@ def _load_app_config(config_path: str | None) -> AppConfig:
             providers,
             require_verified_enabled=True,
             manifest_root=_default_manifest_root(),
-            strict=True,
         )
     except ConfigError as exc:
         raise FeedInputError(str(exc)) from exc

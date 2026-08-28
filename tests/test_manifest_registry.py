@@ -17,6 +17,7 @@ from follow_the_money.providers.manifest import (
 REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO_ROOT / "config" / "config.yaml"
 DEFAULT_PROVIDERS = REPO_ROOT / "config" / "providers.yaml"
+DEFAULT_MANIFEST_ROOT = REPO_ROOT / "providers"
 
 # The six mandatory v1 groups and their exact members (design matrix).
 MANDATORY_ROWS = {
@@ -30,13 +31,23 @@ MANDATORY_ROWS = {
 
 
 def test_shipped_config_declares_exact_six_groups():
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=False)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=False,
+    )
     rows = {r.group: r.members for r in cfg.coverage.rows}
     assert rows == MANDATORY_ROWS
 
 
 def test_shipped_matrix_minima_match_design():
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=False)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=False,
+    )
     for r in cfg.coverage.rows:
         expected_min = {
             "us_official_macro_policy": 2,
@@ -63,13 +74,23 @@ def test_unverified_adapters_never_enabled_by_manifest():
 
 
 def test_cftc_verified_optional_not_mandatory():
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=False)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=False,
+    )
     mandatory = {m for r in cfg.coverage.rows for m in r.members}
     assert "cftc" not in mandatory  # CFTC is verified-optional coverage
 
 
 def test_akshare_never_counts_as_coverage():
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=False)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=False,
+    )
     mandatory = {m for r in cfg.coverage.rows for m in r.members}
     assert "akshare" not in mandatory
     assert not cfg.provider("akshare").enabled
@@ -78,7 +99,12 @@ def test_akshare_never_counts_as_coverage():
 def test_no_hidden_default_enablement():
     # Every mandatory matrix row must be backed by verified enabled members;
     # an optional/unverified extra (AKShare) never counts as coverage.
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=True)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=True,
+    )
     assert not cfg.provider("akshare").enabled
     assert not cfg.provider("cftc").enabled
     for row in cfg.coverage.rows:
@@ -87,7 +113,12 @@ def test_no_hidden_default_enablement():
 
 
 def test_every_shipped_provider_has_manifest():
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=False)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=False,
+    )
     manifests = load_all_manifests()
     for p in cfg.providers:
         # provider ids in config use underscores; manifest dirs match.

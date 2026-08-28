@@ -18,11 +18,15 @@ from follow_the_money.market.formulas import (
 )
 from follow_the_money.market.snapshot import RoleMetric, build_market_snapshot
 
-from .test_config import DEFAULT_CONFIG, DEFAULT_PROVIDERS
+from .test_config import DEFAULT_CONFIG, DEFAULT_MANIFEST_ROOT, DEFAULT_PROVIDERS
 
 
 def _verified_config():
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+    )
     return replace(
         cfg,
         roles=tuple(replace(role, mapping_verified=True) for role in cfg.roles),
@@ -398,7 +402,11 @@ def test_insufficient_history_is_explicit_without_compression():
     ["hsi", "vix", "us2y", "us10y", "cn10y", "dxy", "usdcnh", "copper", "wti", "gold", "btc"],
 )
 def test_unverified_mapping_fails_closed_even_with_complete_observations(role_id):
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+    )
     role = cfg.role(role_id)
     feed = _feed(
         role_id,
@@ -412,7 +420,11 @@ def test_unverified_mapping_fails_closed_even_with_complete_observations(role_id
 
 
 def test_unverified_mapping_guard_wins_over_matching_canonical_feed_item():
-    cfg = load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS)
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+    )
     role = cfg.role("csi300")
     feed = _feed(
         "csi300",

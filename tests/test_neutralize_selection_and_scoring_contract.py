@@ -31,7 +31,12 @@ DEFAULT_PROVIDERS = REPO_ROOT / "config" / "providers.yaml"
 
 
 def _scoring():
-    return load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=False).scoring
+    return load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=REPO_ROOT / "providers",
+        require_verified_enabled=False,
+    ).scoring
 
 
 def _components(scoring: Scoring, **overrides):
@@ -378,7 +383,6 @@ def test_strict_loader_rejects_every_removed_scoring_key(tmp_path: Path, legacy_
         load_config(
             config_path,
             providers_path,
-            strict=True,
             require_verified_enabled=True,
             manifest_root=REPO_ROOT / "providers",
         )

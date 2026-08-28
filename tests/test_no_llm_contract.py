@@ -126,6 +126,7 @@ def test_shipped_config_loads_credential_free():
     cfg = load_config(
         REPO_ROOT / "config" / "config.yaml",
         REPO_ROOT / "config" / "providers.yaml",
+        manifest_root=REPO_ROOT / "providers",
         require_verified_enabled=True,
     )
     assert cfg.schema_version == 1
@@ -224,6 +225,7 @@ def test_retained_rules_deterministic_and_llm_free():
     cfg = load_config(
         REPO_ROOT / "config" / "config.yaml",
         REPO_ROOT / "config" / "providers.yaml",
+        manifest_root=REPO_ROOT / "providers",
         require_verified_enabled=True,
     )
     comps = significance_components(

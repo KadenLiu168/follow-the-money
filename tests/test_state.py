@@ -19,6 +19,7 @@ from follow_the_money.watchlist import WatchlistError, build_watchlist
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO_ROOT / "config" / "config.yaml"
 DEFAULT_PROVIDERS = REPO_ROOT / "config" / "providers.yaml"
+DEFAULT_MANIFEST_ROOT = REPO_ROOT / "providers"
 
 T0 = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
 
@@ -28,7 +29,12 @@ def _ts(dt: datetime) -> str:
 
 
 def _cfg():
-    return load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=False)
+    return load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=False,
+    )
 
 
 # ---------------------------------------------------------------------------

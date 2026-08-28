@@ -22,10 +22,16 @@ from follow_the_money.feed.publish import PublishError, publish_feed
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO_ROOT / "config" / "config.yaml"
 DEFAULT_PROVIDERS = REPO_ROOT / "config" / "providers.yaml"
+DEFAULT_MANIFEST_ROOT = REPO_ROOT / "providers"
 
 
 def _cfg():
-    return load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=False)
+    return load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=False,
+    )
 
 
 def _latest(cutoff: datetime) -> dict:

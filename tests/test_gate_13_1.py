@@ -88,6 +88,7 @@ def test_all_mandatory_rows_verified_and_enabled():
     cfg = load_config(
         REPO_ROOT / "config" / "config.yaml",
         REPO_ROOT / "config" / "providers.yaml",
+        manifest_root=REPO_ROOT / "providers",
         require_verified_enabled=True,
     )
     for row in cfg.coverage.rows:

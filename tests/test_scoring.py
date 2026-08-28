@@ -21,10 +21,16 @@ from follow_the_money.selection import RankingInput, rank_events
 REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO_ROOT / "config" / "config.yaml"
 DEFAULT_PROVIDERS = REPO_ROOT / "config" / "providers.yaml"
+DEFAULT_MANIFEST_ROOT = REPO_ROOT / "providers"
 
 
 def _scoring():
-    return load_config(DEFAULT_CONFIG, DEFAULT_PROVIDERS, require_verified_enabled=False).scoring
+    return load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=False,
+    ).scoring
 
 
 # ---------------------------------------------------------------------------
