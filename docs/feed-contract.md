@@ -132,9 +132,10 @@ observations not source-available at cutoff are rejected.
 - Rename success followed by parent-`fsync` failure returns
   `commit_durability_unknown`; recovery re-applies the maximum
   `(evidence_cutoff_at, content_digest)` tuple rule.
-- The scheduled GitHub workflow runs only on a dedicated labelled
-  self-hosted runner with a persistent shared output root and durable rate
-  state; an ephemeral hosted runner/fresh root fails the contract.
+- The scheduled GitHub workflow runs on GitHub-hosted `ubuntu-latest` at
+  `20 0 * * *` (08:20 Asia/Shanghai), uses repository-backed `feeds/` state,
+  and publishes only through the durable bootstrap/lease/finalization boundary.
+  The evidence cutoff remains runtime-derived rather than the nominal schedule.
 
 ## Minimal internal Feed entry
 

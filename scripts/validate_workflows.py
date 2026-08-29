@@ -1,65 +1,21 @@
-"""Validate the repository's GitHub Actions contracts without contacting GitHub."""
+"""Validate repository-specific GitHub Actions contracts without GitHub access."""
 
 from __future__ import annotations
 
-import shutil
 import sys
-from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-
-def workflow_publication_mapping(
-    *, output_root: Path, repository_root: Path, feed_status: dict[str, Any]
-) -> dict[str, Path]:
-    """Resolve the exact two Feed paths staged by ``generate-feed.yml``."""
-    run_id = feed_status.get("run_id")
-    cutoff = feed_status.get("evidence_cutoff_at")
-    if not isinstance(run_id, str) or not run_id:
-        raise ValueError("feed status missing run_id")
-    if not isinstance(cutoff, str) or len(cutoff) < 10:
-        raise ValueError("feed status missing evidence_cutoff_at")
-    day = cutoff[:10]
-    return {
-        "dated_source": output_root / "daily" / day / f"{run_id}.json",
-        "dated_destination": repository_root / "feeds" / "daily" / day / f"{run_id}.json",
-        "latest_source": output_root / "latest.json",
-        "latest_destination": repository_root / "feeds" / "latest.json",
-    }
-
-
-def stage_workflow_artifacts(
-    *,
-    output_root: Path,
-    repository_root: Path,
-    feed_status: dict[str, Any],
-    copy_fn=shutil.copyfile,
-) -> dict[str, Path]:
-    """Behavioral model of the workflow's explicit staging step.
-
-    ``copy_fn`` is injectable so tests can prove a partial publication failure
-    without contacting GitHub or mutating any unrelated repository path.
-    """
-    paths = workflow_publication_mapping(
-        output_root=Path(output_root),
-        repository_root=Path(repository_root),
-        feed_status=feed_status,
-    )
-    for key in ("dated_source", "latest_source"):
-        source = paths[key]
-        if not source.is_file() or source.stat().st_size == 0:
-            raise ValueError(f"workflow source missing or empty: {source}")
-    paths["dated_destination"].parent.mkdir(parents=True, exist_ok=True)
-    copy_fn(paths["dated_source"], paths["dated_destination"])
-    paths["latest_destination"].parent.mkdir(parents=True, exist_ok=True)
-    copy_fn(paths["latest_source"], paths["latest_destination"])
-    if paths["dated_source"].read_bytes() != paths["dated_destination"].read_bytes():
-        raise ValueError("dated Feed staging verification failed")
-    if paths["latest_source"].read_bytes() != paths["latest_destination"].read_bytes():
-        raise ValueError("latest Feed staging verification failed")
-    return paths
+GENERATED_PATHS = [
+    "feeds/.follow-the-money-persistent",
+    "feeds/rate-registry.json",
+    "feeds/scope-*.json",
+    "feeds/feed-run-lease.json",
+    "feeds/latest.json",
+    "feeds/daily/**/*.json",
+]
 
 
 def _load(path: Path) -> tuple[dict[str, Any], str]:
@@ -73,94 +29,103 @@ def _load(path: Path) -> tuple[dict[str, Any], str]:
     return data, text
 
 
-def workflow_execution_plan(
-    feed_data: dict[str, Any],
-    feed_text: str,
-    *,
-    opt_in: str | None,
-    runner_labels: Sequence[str] = (),
-    output_root_exists: bool = False,
-    persistence_marker: bool = False,
-    rate_registry: bool = False,
-) -> dict[str, bool]:
-    """Model which Feed steps are reachable for a declared deployment state.
+def _on(data: dict[str, Any]) -> dict[str, Any]:
+    value = data.get("on")
+    if value is None:
+        value = next((item for key, item in data.items() if key is True), None)
+    if not isinstance(value, dict):
+        raise TypeError("workflow triggers must be a mapping")
+    return value
 
-    This is deliberately a small reachability model, not a second YAML
-    interpreter. ``validate_repository_workflows`` proves the step ordering;
-    this function proves the default-false and preflight-failure boundaries
-    with executable behavior-oriented tests.
-    """
-    job = feed_data.get("jobs", {}).get("generate")
-    job_gate = (
-        isinstance(job, dict) and job.get("if") == "${{ vars.FOLLOW_THE_MONEY_FEED == 'true' }}"
-    )
-    job_started = bool(job_gate and opt_in == "true")
-    runner_ready = "follow-the-money-feed" in runner_labels
-    persistent_ready = output_root_exists and persistence_marker and rate_registry
-    capability_ready = runner_ready and persistent_ready
-    return {
-        "job_started": job_started,
-        "persistent_capability_checks": job_started,
-        "checkout": job_started and capability_ready,
-        "provider_requests": job_started and capability_ready,
-        "credential_access": job_started and capability_ready and "OPENAI_API_KEY" in feed_text,
-        "output_root_access": job_started,
-    }
+
+def _require_order(text: str, *needles: str) -> None:
+    positions = [text.find(needle) for needle in needles]
+    if any(position < 0 for position in positions):
+        missing = [needle for needle, position in zip(needles, positions) if position < 0]
+        raise ValueError(f"workflow is missing required text: {missing}")
+    if positions != sorted(positions):
+        raise ValueError(f"workflow steps are out of order: {needles}")
 
 
 def validate_repository_workflows(
     repo_root: Path,
     *,
     generate_feed_path: Path | None = None,
+    test_workflow_path: Path | None = None,
 ) -> None:
     repo_root = Path(repo_root)
-    test_path = repo_root / ".github" / "workflows" / "test.yml"
+    test_path = test_workflow_path or repo_root / ".github" / "workflows" / "test.yml"
     feed_path = generate_feed_path or repo_root / ".github" / "workflows" / "generate-feed.yml"
-    _test_data, test_text = _load(test_path)
+    test_data, test_text = _load(test_path)
     feed_data, feed_text = _load(feed_path)
 
+    test_on = _on(test_data)
+    push = test_on.get("push")
+    if not isinstance(push, dict) or push.get("paths-ignore") != GENERATED_PATHS:
+        raise ValueError("test workflow paths-ignore must match generated-state allowlist")
+    if "pull_request" not in test_on:
+        raise ValueError("test workflow must retain pull_request trigger")
     if "OPENAI_API_KEY" in test_text or "pytest" not in test_text:
         raise ValueError("hosted test workflow must remain credential-free and run pytest")
+    if (
+        "actionlint" not in test_text
+        or "invalid-workflow-level-runner-context.yml" not in test_text
+    ):
+        raise ValueError("test workflow must keep actionlint and invalid-context fixture checks")
+
+    feed_on = _on(feed_data)
+    if feed_on.get("schedule") != [{"cron": "20 0 * * *"}] or "workflow_dispatch" not in feed_on:
+        raise ValueError(
+            "Feed workflow must use the 08:20 Asia/Shanghai schedule and manual dispatch"
+        )
+    if feed_data.get("permissions") != {"contents": "write"}:
+        raise ValueError("Feed workflow must request contents: write")
+    if feed_data.get("concurrency") != {
+        "group": "follow-the-money-feed",
+        "cancel-in-progress": False,
+    }:
+        raise ValueError("Feed workflow must use non-cancelling concurrency")
+
     job = feed_data.get("jobs", {}).get("generate")
     if not isinstance(job, dict):
         raise TypeError("Feed workflow is missing generate job")
-    if job.get("if") != "${{ vars.FOLLOW_THE_MONEY_FEED == 'true' }}":
-        raise ValueError("Feed workflow opt-in gate must use the job-if vars context")
-    if job.get("runs-on") != ["self-hosted", "follow-the-money-feed"]:
-        raise ValueError("Feed workflow must require the dedicated self-hosted label")
-    if "cancel-in-progress: false" not in feed_text:
-        raise ValueError("Feed workflow must be non-cancelling")
-
-    checkout_index = feed_text.find("actions/checkout")
-    steps = job.get("steps", [])
-    if not steps or not isinstance(steps[0], dict) or "run" not in steps[0]:
-        raise ValueError("persistence/rate-state guard must be the first Feed step")
-    guard = str(steps[0]["run"])
-    if "FOLLOW_THE_MONEY_OUTPUT_ROOT" not in guard or ".follow-the-money-persistent" not in guard:
-        raise ValueError("Feed workflow is missing persistent-root guard")
-    if "rate-registry.json" not in guard:
-        raise ValueError("Feed workflow is missing durable rate-state guard")
-    if checkout_index < 0 or feed_text.find("rate-registry.json") > checkout_index:
-        raise ValueError("durable capability checks must precede checkout")
-    if "clean: true" in feed_text:
-        raise ValueError("Feed workflow must not destructively clean the persistent root")
-    if "git add feeds/daily/" in feed_text or "git add ." in feed_text or "git add -A" in feed_text:
-        raise ValueError("Feed workflow staging must use an explicit allowlist")
-    for required in (
-        'cp -- "$DATED_SOURCE" "$DATED_DEST"',
-        'cp -- "$OUTPUT_ROOT/latest.json" feeds/latest.json',
-        'git add -- "$DATED_DEST" feeds/latest.json',
+    if job.get("runs-on") != "ubuntu-latest" or "if" in job:
+        raise ValueError("Feed workflow must use a hosted runner without opt-in")
+    for value, message in (
+        ("FOLLOW_THE_MONEY_FEED", "opt-in"),
+        ("FOLLOW_THE_MONEY_OUTPUT_ROOT", "external root"),
+        ("self-hosted", "hosted runner"),
+        ("--force", "force"),
+        ("git reset", "reset"),
+        ("git add .", "allowlist"),
+        ("git add -A", "allowlist"),
     ):
-        if required not in feed_text:
-            raise ValueError(f"Feed workflow is missing explicit publication mapping: {required}")
-    if "git push" not in feed_text:
-        raise ValueError("Feed workflow must expose Git publication failure")
+        if value in feed_text:
+            raise ValueError(f"Feed workflow contains forbidden {message} operation")
+    if "git add feeds/" in feed_text:
+        raise ValueError("Feed workflow staging must use an explicit allowlist")
+    if "deployment publish --phase pre" not in feed_text and "git add ." in feed_text:
+        raise ValueError("Feed workflow staging must use an explicit allowlist")
+    if "--root feeds" not in feed_text:
+        raise ValueError("Feed workflow must execute directly against feeds/")
+    _require_order(
+        feed_text,
+        "actions/checkout",
+        "follow_the_money.feed.deployment prepare",
+        "deployment publish --phase pre",
+        "deployment collect",
+        "deployment finalize",
+    )
+    if "always()" not in feed_text or "steps.feed.outcome" not in feed_text:
+        raise ValueError("Feed workflow must finalize always and preserve Feed failure")
+    if "HEAD:main" not in feed_text:
+        raise ValueError("Feed workflow must publish only to main with a normal fast-forward push")
 
 
 def main() -> int:
     try:
         validate_repository_workflows(Path(__file__).resolve().parents[1])
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         print(f"workflow contract invalid: {exc}", file=sys.stderr)
         return 1
     print("workflow contracts valid")

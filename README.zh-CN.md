@@ -86,7 +86,7 @@ scripts/feed/    最小内部 Feed 入口：follow-the-money-feed
 feeds/           发布产物（daily/<date>/<run_id>.json、latest.json）
 tests/           pytest 测试套件（无需凭据）
 docs/            架构、契约、runbook
-.github/workflows/ 托管 CI 与定时 Feed 工作流模板
+.github/workflows/ 托管 CI 与已启用的定时 Feed 工作流
 
 配置 authority 与单一 resolved Provider contract 见
 [`docs/configuration.md`](docs/configuration.md)。
@@ -110,11 +110,14 @@ uv run python -m follow_the_money.feed.cli --dry-run
 不存在公开的用户面向 CLI 产品形态：`brief`、`eval`、`replay` 子命令与
 独立 console script 均已移除。
 
-## 真实外部调度边界
+## 定时 Feed 边界
 
-定时 Feed 工作流是仓库内的**模板**：运行前必须单独准备一台带标签的专用
-self-hosted runner，配置持久化共享输出根与持久速率状态，并显式打开 opt-in
-开关。工作流启用与外部 08:30 调度是部署事项，本仓库不作此类承诺。
+GitHub Actions 使用 `ubuntu-latest` 在 `20 0 * * *`（Asia/Shanghai 08:20）
+运行免凭据 Feed，也支持 `workflow_dispatch`。`feeds/` 是仓库内的输出根和
+RateRegistry 持久状态根；首次 bootstrap 不请求 Provider，未完成运行只有在记录的
+保守边界之后才能恢复。`evidence_cutoff_at` 取实际运行时刻，不取名义调度时刻。
+在宣称部署可运行前，必须验证 Actions `contents: write` 与分支策略；Host Agent
+对 Feed 的消费和推理仍是之后独立的动作。
 
 ## 文档
 

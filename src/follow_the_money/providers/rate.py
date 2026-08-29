@@ -139,13 +139,67 @@ class RateRegistry:
         marker.touch(exist_ok=False) if not marker.exists() else None
 
     def _read_registry(self) -> dict[str, Any]:
-        data = json.loads(self.registry_path.read_bytes())
+        try:
+            data = json.loads(self.registry_path.read_bytes())
+        except (OSError, ValueError) as exc:
+            raise RateStateError(f"cannot read registry: {exc}") from exc
+        if not isinstance(data, dict):
+            raise RateStateError("registry must be a JSON object")
         if data.get("version") != REGISTRY_VERSION:
             raise RateStateError(f"unknown registry schema {data.get('version')!r}")
         return data
 
     def _write_registry(self, data: dict[str, Any]) -> None:
         _atomic_write(self.registry_path, json.dumps(data, sort_keys=True).encode("utf-8"))
+
+    def registered_scope_ids(self) -> tuple[str, ...]:
+        """Return the exact scope IDs recorded by the registry."""
+        data = self._read_registry()
+        scopes = data.get("scopes")
+        if not isinstance(scopes, dict) or any(not isinstance(key, str) for key in scopes):
+            raise RateStateError("registry scopes must be a mapping of string IDs")
+        return tuple(sorted(scopes))
+
+    def scope_path(self, scope_id: str) -> Path:
+        """Return the canonical state path for one registered scope."""
+        return _scope_file(self.root, scope_id)
+
+    def read_active_scope(self, scope_id: str) -> ScopeState:
+        """Read an active scope without completing an initializing entry."""
+        data = self._read_registry()
+        entry = data.get("scopes", {}).get(scope_id)
+        if not isinstance(entry, dict) or entry.get("status") != "active":
+            raise RateStateError(f"scope {scope_id!r} is not active")
+        state = self._read_scope_state(scope_id)
+        if state is None:
+            raise RateStateError(f"scope {scope_id!r} active but state missing/partial")
+        if state.scope_id != scope_id or state.status not in {"active", "initializing"}:
+            raise RateStateError(f"scope {scope_id!r} state is inconsistent")
+        if entry.get("policy_fingerprint") != _policy_fp(state):
+            raise RateStateError(f"scope {scope_id!r} policy fingerprint is inconsistent")
+        try:
+            tokens = Decimal(state.tokens)
+            capacity = Decimal(state.capacity)
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise RateStateError(f"scope {scope_id!r} has invalid token state") from exc
+        if (
+            not tokens.is_finite()
+            or not capacity.is_finite()
+            or capacity <= 0
+            or tokens < 0
+            or tokens > capacity
+        ):
+            raise RateStateError(f"scope {scope_id!r} has invalid token state")
+        for value in (state.refill_wall_anchor, state.last_dispatch_wall, state.cooldown_until):
+            if value is None:
+                continue
+            try:
+                instant = _parse_iso(value)
+            except (TypeError, ValueError) as exc:
+                raise RateStateError(f"scope {scope_id!r} has invalid UTC state") from exc
+            if instant.tzinfo is None or instant.utcoffset() != timedelta(0):
+                raise RateStateError(f"scope {scope_id!r} has invalid UTC state")
+        return state
 
     # -- scope lifecycle ----------------------------------------------------
 
@@ -225,7 +279,7 @@ class RateRegistry:
             raw = json.loads(path.read_bytes())
         except (OSError, ValueError):
             return None
-        if raw.get("version") != REGISTRY_VERSION:
+        if not isinstance(raw, dict) or raw.get("version") != REGISTRY_VERSION:
             return None
         try:
             return ScopeState(

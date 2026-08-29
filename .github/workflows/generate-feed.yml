@@ -1,115 +1,81 @@
-# Scheduled daily Feed generation — TEMPLATE.
-#
-# This workflow is intentionally NOT enabled by default. Enabling it requires
-# explicit deployment actions (separately authorized, outside Apply):
-#   1. Set the repository/environment opt-in variable `FOLLOW_THE_MONEY_FEED`
-#      to "true" (absent or any non-"true" value prevents checkout, provider
-#      work, credential access, and output-root access entirely).
-#   2. Provision a DEDICATED self-hosted runner with the label
-#      `follow-the-money-feed` (GitHub-hosted and non-matching runners are excluded).
-#   3. Mount a persistent shared output root on that runner and point
-#      `FOLLOW_THE_MONEY_OUTPUT_ROOT` at it; it must contain the deployment
-#      persistence marker and durable rate-state paths.
-#   4. Grant write permission to this workflow and confirm branch policy.
-#
-# The job performs one staged generation followed by schema validation,
-# stages ONLY the run-scoped dated/latest Feed paths, and exposes Git
-# publication failure. An ephemeral/fresh output root, missing persistence
-# marker, or unavailable durable rate state fails before checkout. GitHub
-# scheduler eligibility separately requires every dedicated runner label.
-
 name: generate-feed
 
 on:
   schedule:
-    # 00:20 UTC == 08:20 Asia/Shanghai
+    # 00:20 UTC == 08:20 Asia/Shanghai.
     - cron: "20 0 * * *"
   workflow_dispatch:
 
 permissions:
-  contents: write  # scoped; granted only after deployment opt-in
+  contents: write
 
 concurrency:
-  # Non-cancelling: a second scheduled run must not cancel an in-flight one.
   group: follow-the-money-feed
   cancel-in-progress: false
 
-env:
-  OUTPUT_ROOT: ${{ vars.FOLLOW_THE_MONEY_OUTPUT_ROOT }}
-
 jobs:
   generate:
-    runs-on: [self-hosted, follow-the-money-feed]
-    # The scheduler requires every label above; no runtime label check is needed.
-    # jobs.<job_id>.if does not support the env context; use vars directly.
-    if: ${{ vars.FOLLOW_THE_MONEY_FEED == 'true' }}
+    runs-on: ubuntu-latest
     steps:
-      - name: Fail on ephemeral/fresh output root or missing persistence
-        run: |
-          if [ -z "$OUTPUT_ROOT" ]; then
-            echo "FOLLOW_THE_MONEY_OUTPUT_ROOT not configured; refusing." >&2
-            exit 1
-          fi
-          if [ ! -d "$OUTPUT_ROOT" ]; then
-            echo "Output root missing (fresh root cannot satisfy persistence)." >&2
-            exit 1
-          fi
-          if [ ! -f "$OUTPUT_ROOT/.follow-the-money-persistent" ]; then
-            echo "Persistence marker missing; refusing." >&2
-            exit 1
-          fi
-          if [ ! -f "$OUTPUT_ROOT/rate-registry.json" ]; then
-            echo "Durable rate registry missing; refusing." >&2
-            exit 1
-          fi
       - uses: actions/checkout@v4
-        with:
-          clean: false  # do NOT destructively clean the persistent output root
+
       - uses: astral-sh/setup-uv@v5
         with:
           version: "0.11.21"
+
       - name: Install
         run: uv sync --frozen --all-groups
-      - name: One staged generation
+
+      - name: Static deployment preflight and durable arming
+        id: prepare
+        run: |
+          set -euo pipefail
+          uv run python -m follow_the_money.feed.deployment prepare \
+            --repo . \
+            --root feeds \
+            --run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --output "$GITHUB_OUTPUT"
+
+      - name: Publish durable pre-network state
+        if: ${{ steps.prepare.outputs.mode == 'bootstrap' || steps.prepare.outputs.mode == 'armed' }}
+        run: |
+          set -euo pipefail
+          # The helper performs exactly: git push origin HEAD:main
+          uv run python -m follow_the_money.feed.deployment publish --phase pre \
+            --repo . --root feeds --run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+      - name: Collect Feed after durable arming
         id: feed
+        if: ${{ steps.prepare.outputs.mode == 'armed' }}
         run: |
-          uv run python -m follow_the_money.feed.cli \
-            --output-root "$OUTPUT_ROOT" \
-            --status-file feed-status.json
-      - name: Validate generated Feed
+          set -euo pipefail
+          uv run python -m follow_the_money.feed.deployment collect \
+            --root feeds \
+            --run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --status-file feed-status.json \
+            --exit-file .feed-exit-code
+
+      - name: Finalize exact deployment state
+        if: ${{ always() && steps.prepare.outputs.mode == 'armed' }}
         run: |
-          test -s feed-status.json
-          echo "Feed status: $(cat feed-status.json)"
-      - name: Stage run-scoped dated/latest paths
+          set -euo pipefail
+          FEED_SUCCEEDED=false
+          if [ "${{ steps.feed.outcome }}" = "success" ]; then
+            FEED_SUCCEEDED=true
+          fi
+          uv run python -m follow_the_money.feed.deployment finalize \
+            --repo . \
+            --root feeds \
+            --run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --status-file feed-status.json \
+            --feed-succeeded "$FEED_SUCCEEDED"
+
+      - name: Preserve original Feed failure
+        if: ${{ always() && steps.feed.outcome == 'failure' }}
         run: |
-          RUN_ID=$(python -c 'import json; print(json.load(open("feed-status.json"))["run_id"])')
-          CUTOFF=$(python -c 'import json; print(json.load(open("feed-status.json"))["evidence_cutoff_at"][:10])')
-          DATED_SOURCE="$OUTPUT_ROOT/daily/$CUTOFF/$RUN_ID.json"
-          DATED_DEST="feeds/daily/$CUTOFF/$RUN_ID.json"
-          test -s "$DATED_SOURCE"
-          test -s "$OUTPUT_ROOT/latest.json"
-          mkdir -p "feeds/daily/$CUTOFF"
-          cp -- "$DATED_SOURCE" "$DATED_DEST"
-          cp -- "$OUTPUT_ROOT/latest.json" feeds/latest.json
-          cmp -- "$DATED_SOURCE" "$DATED_DEST"
-          cmp -- "$OUTPUT_ROOT/latest.json" feeds/latest.json
-      - name: Commit Feed artifacts
-        if: ${{ always() && steps.feed.outcome == 'success' }}
-        run: |
-          RUN_ID=$(python -c 'import json; print(json.load(open("feed-status.json"))["run_id"])')
-          CUTOFF=$(python -c 'import json; print(json.load(open("feed-status.json"))["evidence_cutoff_at"][:10])')
-          DATED_DEST="feeds/daily/$CUTOFF/$RUN_ID.json"
-          git config user.name "follow-the-money[bot]"
-          git config user.email "follow-the-money[bot]@users.noreply.github.com"
-          git add -- "$DATED_DEST" feeds/latest.json
-          git diff --cached --check
-          git commit -m "feeds: $(date -u +%Y-%m-%d)"
-          git push
-      - name: Upload output on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: feed-output
-          path: |
-            feed-status.json
-            ${{ env.OUTPUT_ROOT }}/latest.json
+          set -euo pipefail
+          exit_code=1
+          if [ -s .feed-exit-code ]; then
+            exit_code=$(cat .feed-exit-code)
+          fi
+          exit "$exit_code"

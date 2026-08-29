@@ -115,13 +115,15 @@ fails, surface the exact stderr and stop — do not silently substitute a
 partial digest or invent events. The retained `ClaimAuditor` may be applied
 to any submitted text as a deterministic safety check.
 
-## Non-Go boundary (do not claim)
+## Scheduled generation boundary
 
-- GitHub Actions does **not** invoke this Skill at 08:30. External scheduling
-  is configured by the deployment environment after Feed publication.
-- The Feed reflects one fixed evidence cutoff captured before provider
-  requests; it never claims coverage through collection completion or a
-  nominal 08:30 value.
+- GitHub Actions runs the deterministic Feed on `ubuntu-latest` at `20 0 * * *`
+  (08:20 Asia/Shanghai), or by `workflow_dispatch`, using repository-backed
+  `feeds/` state. It does not invoke Host-Agent reasoning, Audit, Event
+  Structuring, or retained market/scoring capabilities.
+- The Feed reflects one fixed evidence cutoff captured from actual runtime
+  before Provider requests; it never claims coverage through collection
+  completion or a nominal schedule value.
 
 ## Live path
 
@@ -139,8 +141,8 @@ scripts/feed/follow-the-money-feed      # evidence-only Feed, deterministic,
 
 ## Daily flow (scheduled or /money)
 
-1. **Feed**: `scripts/feed/follow-the-money-feed` (or
-   `uv run python -m follow_the_money.feed.cli`). Exit 0 with healthy or
+1. **Feed**: GitHub Actions publishes `feeds/latest.json` and the dated Feed,
+   or run `scripts/feed/follow-the-money-feed` locally. Exit 0 with healthy or
    degraded Feed; warnings are on stderr and in status. A Feed failure means
    no digest should be produced from it.
 2. **Evidence**: read `feeds/latest.json` (or the dated

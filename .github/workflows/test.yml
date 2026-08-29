@@ -2,6 +2,13 @@ name: test
 
 on:
   push:
+    paths-ignore:
+      - feeds/.follow-the-money-persistent
+      - feeds/rate-registry.json
+      - feeds/scope-*.json
+      - feeds/feed-run-lease.json
+      - feeds/latest.json
+      - feeds/daily/**/*.json
   pull_request:
 
 # Hosted credential-free CI: clean install, offline-only tests, no secrets.

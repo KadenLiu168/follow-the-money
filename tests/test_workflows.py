@@ -1,12 +1,9 @@
-"""Task 12.1/12.3 — workflow-contract tests.
-
-Validates that the workflow YAML files are syntactically valid, reference
-only existing entry points, keep the Feed opt-in gate defaulting false, and
-reject ephemeral/fresh output roots before any provider work.
-"""
+"""GitHub Actions contract tests for the hosted Feed deployment."""
 
 from __future__ import annotations
 
+import subprocess
+from argparse import _SubParsersAction
 from pathlib import Path
 
 import yaml
@@ -18,7 +15,11 @@ WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 def _load(name: str) -> dict:
     path = WORKFLOWS / name
     assert path.exists(), f"missing workflow {name}"
-    return yaml.safe_load(path.read_text())
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _on(data: dict) -> dict:
+    return data.get("on", data.get(True, {}))
 
 
 def test_workflow_yaml_valid():
@@ -28,98 +29,89 @@ def test_workflow_yaml_valid():
         assert "jobs" in data
 
 
-def test_test_workflow_offline_only():
+def test_test_workflow_offline_only_and_generated_push_boundary():
     data = _load("test.yml")
-    steps_text = yaml.safe_dump(data)
-    # No secrets, no provider credentials, no live endpoint dependency.
-    assert "secrets:" not in steps_text
-    # No OpenAI/LLM credential exists anywhere in the deterministic engine.
-    assert "OPENAI_API_KEY" not in steps_text
-    assert "openai" not in steps_text
-    assert "pytest" in steps_text
+    text = yaml.safe_dump(data)
+    assert "secrets:" not in text
+    assert "OPENAI_API_KEY" not in text
+    assert "openai" not in text
+    assert "pytest" in text
+    assert _on(data)["push"]["paths-ignore"] == [
+        "feeds/.follow-the-money-persistent",
+        "feeds/rate-registry.json",
+        "feeds/scope-*.json",
+        "feeds/feed-run-lease.json",
+        "feeds/latest.json",
+        "feeds/daily/**/*.json",
+    ]
+    assert "pull_request" in _on(data)
 
 
-def test_feed_workflow_opt_in_defaults_false():
+def test_feed_workflow_is_active_on_hosted_runner_and_schedule():
     data = _load("generate-feed.yml")
     job = data["jobs"]["generate"]
-    # jobs.<job_id>.if supports vars, not the workflow env context.
-    # An absent/explicit-false value prevents runner allocation and all steps.
-    assert job["if"] == "${{ vars.FOLLOW_THE_MONEY_FEED == 'true' }}"
+    assert job["runs-on"] == "ubuntu-latest"
+    assert "if" not in job
+    assert _on(data)["schedule"] == [{"cron": "20 0 * * *"}]
+    assert "workflow_dispatch" in _on(data)
+    assert data["permissions"] == {"contents": "write"}
+    assert data["concurrency"] == {
+        "group": "follow-the-money-feed",
+        "cancel-in-progress": False,
+    }
 
 
-def test_feed_workflow_requires_dedicated_runner_label():
+def test_feed_workflow_has_no_external_root_or_opt_in_contract():
     data = _load("generate-feed.yml")
-    job = data["jobs"]["generate"]
-    assert job["runs-on"] == ["self-hosted", "follow-the-money-feed"]
+    text = (WORKFLOWS / "generate-feed.yml").read_text(encoding="utf-8")
+    assert "FOLLOW_THE_MONEY_FEED" not in text
+    assert "FOLLOW_THE_MONEY_OUTPUT_ROOT" not in text
+    assert "self-hosted" not in text
+    assert data.get("env") in (None, {})
 
 
-def test_feed_workflow_uses_scheduler_as_single_runner_authority():
-    data = _load("generate-feed.yml")
-    job = data["jobs"]["generate"]
-    assert "RUNNER_LABEL" not in data.get("env", {})
-    runtime_steps = yaml.safe_dump(job["steps"])
-    assert "runner.labels" not in runtime_steps
-    assert "RUNNER_LABEL" not in runtime_steps
-    assert "non-dedicated runner" not in runtime_steps.lower()
+def test_feed_workflow_orders_static_preflight_lease_push_feed_and_finalization():
+    text = (WORKFLOWS / "generate-feed.yml").read_text(encoding="utf-8")
+    assert "follow_the_money.feed.deployment prepare" in text
+    assert "--root feeds" in text
+    assert "git push origin HEAD:main" in text
+    assert "--force" not in text
+    assert "git reset" not in text
+    assert "always()" in text
+    assert "steps.feed.outcome" in text
+    assert text.index("actions/checkout") < text.index("deployment prepare")
+    assert text.index("deployment prepare") < text.index("git push origin HEAD:main")
+    assert text.index("git push origin HEAD:main") < text.index("deployment collect")
+    assert text.index("deployment collect") < text.index("deployment finalize")
 
 
-def test_feed_workflow_persistence_checks_before_provider_work():
-    data = _load("generate-feed.yml")
-    steps = data["jobs"]["generate"]["steps"]
-    first_step = steps[0]["run"]
-    assert "persistence" in first_step.lower()
-    assert "refusing" in first_step
-    assert "checkout" not in first_step  # persistence check precedes checkout
+def test_feed_workflow_stages_only_generated_state():
+    text = (WORKFLOWS / "generate-feed.yml").read_text(encoding="utf-8")
+    assert "git add ." not in text
+    assert "git add -A" not in text
+    assert "git add feeds/" not in text
+    assert "deployment publish" in text
+    assert "deployment finalize" in text
 
 
-def test_feed_workflow_disables_destructive_cleanup():
-    data = _load("generate-feed.yml")
-    checkout_step = next(
-        s
-        for s in data["jobs"]["generate"]["steps"]
-        if s.get("uses", "").startswith("actions/checkout")
+def test_rate_scope_state_is_trackable_by_generated_state_commits():
+    result = subprocess.run(
+        ["git", "check-ignore", "--no-index", "feeds/scope-0123456789abcdef.json"],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
     )
-    assert checkout_step.get("with", {}).get("clean") is False
-
-
-def test_feed_workflow_concurrency_non_cancelling():
-    data = _load("generate-feed.yml")
-    assert data["concurrency"]["cancel-in-progress"] is False
-
-
-def test_feed_workflow_stages_only_feed_paths():
-    data = _load("generate-feed.yml")
-    steps_text = yaml.safe_dump(data)
-    assert "feeds/latest.json" in steps_text
-    assert "feeds/daily/" in steps_text
-
-
-def test_feed_workflow_publication_failure_exposed():
-    data = _load("generate-feed.yml")
-    steps_text = yaml.safe_dump(data)
-    # git push failure is a normal step failure (never reported success).
-    assert "git push" in steps_text
-
-
-def test_feed_workflow_uploads_artifact_on_failure():
-    data = _load("generate-feed.yml")
-    steps = data["jobs"]["generate"]["steps"]
-    upload = [s for s in steps if "upload-artifact" in s.get("uses", "")]
-    assert upload
-    assert upload[0]["if"] == "failure()"
+    assert result.returncode == 1, result.stdout
 
 
 def test_entry_points_referenced_exist():
     data = _load("test.yml")
     text = yaml.safe_dump(data)
     assert "follow_the_money.feed.cli" in text
-    # The only invocation surface is the minimal internal Feed entry.
     from follow_the_money.feed.cli import _build_parser
 
     parser = _build_parser()
-    actions = {a.dest for a in parser._actions}
+    actions = {action.dest for action in parser._actions}
     assert {"config", "output_root", "dry_run", "cutoff", "window_start", "status_file"} <= actions
-    # No public CLI subcommands survive.
-    from argparse import _SubParsersAction
-
-    assert not any(isinstance(a, _SubParsersAction) for a in parser._actions)
+    assert not any(isinstance(action, _SubParsersAction) for action in parser._actions)

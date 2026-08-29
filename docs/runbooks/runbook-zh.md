@@ -17,7 +17,7 @@ uv sync --frozen --all-groups
 uv run python -m follow_the_money.feed.cli --dry-run
 # 或：scripts/feed/follow-the-money-feed --dry-run
 
-# 真实运行，指定输出根：
+# 使用仓库输出根进行本地真实运行：
 uv run python -m follow_the_money.feed.cli --output-root feeds \
   --status-file feed-status.json
 ```
@@ -25,49 +25,71 @@ uv run python -m follow_the_money.feed.cli --output-root feeds \
 退出码：`0` = 健康或降级 Feed（警告在 stderr/status）；`1` = 生成/发布失败；
 `2` = 用法/配置错误。不需要任何凭据。
 
+## GitHub 部署
+
+`generate-feed.yml` 已在 GitHub-hosted `ubuntu-latest` 上启用，按
+`20 0 * * *`（Asia/Shanghai 08:20）运行，也支持 `workflow_dispatch`。工作流使用
+`feeds/` 同时作为 Feed 输出根和仓库内 RateRegistry 状态根；运行开始后才捕获实际
+cutoff，08:20 只是调度时刻。
+
+在宣称部署可运行前，必须验证仓库 Actions `contents: write` 权限，以及分支策略允许
+工作流身份向 `main` 执行普通 fast-forward commit。
+
+### 首次 bootstrap 与恢复
+
+1. 首次 bootstrap 前停用旧的 external 调度器；不要导入无法验证的状态。
+2. 手动 dispatch `generate-feed.yml`。工作流先静态解析配置与 resolved Provider
+   contract。干净仓库只创建 RateRegistry marker、registry、精确 scope 文件和
+   `bootstrap` lease；不请求任何 Provider，并通过普通 fast-forward commit 发布状态。
+3. 读取 `feeds/feed-run-lease.json`，等待 `recovery_not_before`。边界之前的运行会
+   fail closed，不会重置状态。
+4. 再次 dispatch。Feed 执行前先发布 `in_progress` 及所需状态，受控完成后再发布终态
+   精确状态。若 runner 或最终发布失败，远端 `in_progress` 继续作为恢复信号。
+
+工作流绝不 force-push 或 destructive reset。arming 阶段发生普通 fast-forward 冲突时，
+Provider 工作尚未开始；Provider 工作之后的最终发布冲突则保留远端 `in_progress`。
+
+### 生成状态 allowlist 与回滚
+
+部署 helper 只能发布以下路径：
+
+- `feeds/.follow-the-money-persistent`
+- `feeds/rate-registry.json`
+- registry 指名的精确 `feeds/scope-<digest>.json`
+- `feeds/feed-run-lease.json`
+- `feeds/latest.json` 与成功运行的 `feeds/daily/<date>/<run_id>.json`
+
+锁、status、staging、临时文件、bundle、debug/failure workspace 均保持 ignored，绝不
+staging。回滚使用 GitHub 原生 workflow-disable，保留最后远端 lease 与速率状态；不要
+reset 生成状态，也不要从不确定运行状态重启外部调度器。
+
 ## 测试
 
 ```bash
-uv run pytest                 # 全量免凭据测试
-uv run python scripts/quality_gate.py   # lint、format、type-check、workflow、build
+uv run pytest
+uv run python scripts/quality_gate.py
 ```
 
-## GitHub 部署
+quality gate 包含 workflow validator、CI 中的 actionlint、lint、format、type-check、
+免凭据测试套件与离线 wheel 构建。
 
-定时 Feed 工作流（`generate-feed.yml`）是模板。启用前：
+## 持久输出根注册表
 
-1. 设置 `FOLLOW_THE_MONEY_FEED=true`（仓库/环境变量）。
-2. 准备一台带 `follow-the-money-feed` 标签的专用 self-hosted runner。
-3. 挂载持久化共享输出根（每次调用共享），其中包含部署持久化标记
-   （`.follow-the-money-persistent`）与可写可读的持久速率状态路径。
-4. 授予 `contents: write` 并确认分支策略（受保护分支拒绝会显式失败，
-   输出以上传 artifact 保留）。
+同一 Provider/rate scope 的跨根并发使用不受支持：共享 scope 的协作进程必须共享同一
+输出根。
 
-同一 provider/rate scope 的跨根并发使用不受支持：共享 provider scope 的
-协作进程必须共享同一输出根（应用级采集锁以输出根为根）。
-
-## 持久输出根注册表（运维契约）
-
-- 输出根包含 `rate-registry.json`（带版本）+ 每个 `scope_id` 一个状态文件，
-  均在采集锁保护下通过同目录原子替换 + 文件/父目录 `fsync` 更新。
-- 新 scope：可恢复的 `initializing -> 满容量状态 -> active` 首次使用序列。
-  仅当验证无请求被受理后才能补完 `initializing` 条目。
-- active scope 状态缺失/损坏/未知 schema，或已标记持久根注册表缺失/损坏，
+- 输出根包含带版本的 `rate-registry.json` 与每个 `scope_id` 的状态文件，均在采集锁
+  下通过同目录原子替换及文件/父目录 `fsync` 更新。
+- 新 scope 使用可恢复的 `initializing -> 满容量状态 -> active` 首次使用序列；只有
+  验证没有请求被受理时才能补完 `initializing` 条目。
+- active scope 状态缺失、损坏、未知 schema，或已标记持久根的 registry 缺失/损坏，
   一律 fail closed。
-- 策略变更使用显式零发送保守迁移（新指纹、零令牌、冷却不早于旧冷却与
-  当前时间+新补满周期），绝不隐式重置。
 - 墙钟回拨不发放令牌；补满只使用非负注入 UTC 流逝时间。
-- 每次可能发送前持久扣减一枚令牌并安装 24 小时崩溃冷却；确认发送前失败
-  可退款；受控终态保留扣减但按策略/`Retry-After` 对账。
-
-## 外部调度
-
-在证据截止时间可用之后调度 Feed 生成；v1 将超过 30 分钟的滞后标记为
-stale，超过 2 小时拒绝生成。
+- 每次可能发送前持久扣减一枚令牌并安装 24 小时临时崩溃冷却；确认发送前失败可退款；
+  受控终态保留扣减并按策略/`Retry-After` 对账。
 
 ## 已知限制
 
-- 带版本的启发式分数对缺失数据有偏；已暴露组件覆盖率，且优先级分数
-  绝非收益或投资建议。
-- 保留的 scoring/selection 规则与 `ClaimAuditor` 目前没有生产调用者：
-  结构化 Agent 交付契约留待未来 Change。
+- 带版本的启发式分数对缺失数据有偏；已暴露组件覆盖率，优先级分数绝非收益或投资建议。
+- 保留的 scoring/selection 规则与 `ClaimAuditor` 目前没有生产调用者；结构化 Agent
+  交付契约留待未来 Change。

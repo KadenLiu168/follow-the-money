@@ -97,7 +97,7 @@ scripts/feed/     minimal internal Feed entry: follow-the-money-feed
 feeds/            published artifacts (daily/<date>/<run_id>.json, latest.json)
 tests/            pytest suite (credential-free)
 docs/             architecture, contracts, runbooks
-.github/workflows/ hosted CI + scheduled Feed workflow template
+.github/workflows/ hosted CI + active scheduled Feed workflow
 
 Configuration authority and the single resolved Provider contract are documented
 in [`docs/configuration.md`](docs/configuration.md).
@@ -121,13 +121,16 @@ uv run python -m follow_the_money.feed.cli --dry-run
 There is no public user-facing CLI product form: `brief`, `eval`, and
 `replay` subcommands and the standalone console script were removed.
 
-## Real external scheduling boundary
+## Scheduled Feed boundary
 
-The scheduled Feed workflow is a checked-in **template**: it requires a
-separately provisioned dedicated self-hosted runner with a persistent shared
-output root and durable rate state, plus an explicit opt-in gate, before any
-provider request runs. Workflow enablement and external 08:30 scheduling are
-deployment concerns, not claims made by this repository.
+GitHub Actions runs the credential-free Feed on `ubuntu-latest` at `20 0 * * *`
+(08:20 Asia/Shanghai), or through `workflow_dispatch`. It uses `feeds/` as the
+repository-backed output and RateRegistry root, bootstraps with zero Provider
+requests, and recovers incomplete runs only after the recorded conservative
+boundary. `evidence_cutoff_at` is captured from actual runtime, not from the
+nominal schedule. Verify Actions `contents: write` and branch policy before
+calling deployment operational; Host-Agent consumption and reasoning remain a
+separate later action.
 
 ## Documentation
 

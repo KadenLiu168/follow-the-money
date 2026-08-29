@@ -1,9 +1,25 @@
 # Local run bundles (audit evidence, never committed)
 runs/
 
-# Generated Feed artifacts (published by workflows, not committed)
-feeds/daily/
-feeds/latest.json
+# Generated Feed state: workflow staging remains an explicit allowlist.
+feeds/*
+!feeds/.follow-the-money-persistent
+!feeds/rate-registry.json
+!feeds/scope-*.json
+!feeds/feed-run-lease.json
+!feeds/latest.json
+!feeds/daily/
+!feeds/daily/*/
+!feeds/daily/*/*.json
+feeds/.collection.lock
+feeds/feed-status.json
+feeds/staging/
+feeds/tmp/
+feeds/runs/
+feeds/bundles/
+feeds/debug/
+feeds/failure/
+feeds/*.tmp-*
 
 # Python
 __pycache__/
