@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from follow_the_money.config import load_config
 from follow_the_money.feed.cli import FeedExecutionError, FeedInputError, FeedRunResult, run_feed
+from follow_the_money.feed.validate import assert_feed_identity, validate_feed
 from follow_the_money.providers.http import FetchError
 from follow_the_money.providers.rate import RateStateError
 
@@ -103,55 +107,30 @@ def test_publication_failure_is_execution_error(tmp_path, monkeypatch):
     from follow_the_money.feed import cli as feed_cli
     from follow_the_money.feed.publish import PublishError
 
-    class FakeAdapter:
-        def fetch(self, window, client=None):
-            return object()
-
-        def normalize(self, raw, window):
-            return [
-                {
-                    "id": "item_fake",
-                    "provider_id": "federal_reserve",
-                    "source": {
-                        "id": "src-1",
-                        "name": "Federal Reserve",
-                        "tier": "Tier 1",
-                        "kind": "news",
-                        "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260811a.htm",
-                        "published_at": "2026-08-11T00:10:00Z",
-                        "knowledge_available_at": "2026-08-11T00:10:00Z",
-                    },
-                    "payload": {
-                        "type": "policy",
-                        "title": "声明",
-                        "announced_at": "2026-08-11T00:10:00Z",
-                        "raw_metadata": {},
-                    },
-                }
-            ]
-
     def fail(**_kwargs):
         raise PublishError("config invalid publication")
 
     out = tmp_path / "out"
+    cfg = _source_complete_cfg()
+    monkeypatch.setattr(feed_cli, "_load_app_config", lambda _path: cfg)
+    planned = _planned_provider_ids(cfg)
+    registry = {provider_id: _OutcomeAdapter() for provider_id in planned}
     baseline = run_feed(
-        config_path=str(REPO_ROOT / "config" / "config.yaml"),
         output_root=str(out),
         cutoff=_cutoff(),
-        providers_fn=lambda: {"federal_reserve": FakeAdapter()},
-        enabled_provider_ids=["federal_reserve"],
+        providers_fn=lambda: registry,
+        enabled_provider_ids=planned,
     )
-    assert baseline.status == "degraded"
+    assert baseline.status == "healthy"
     previous_latest = (out / "latest.json").read_bytes()
 
     monkeypatch.setattr(feed_cli, "publish_feed", fail)
     with pytest.raises(FeedExecutionError):
         run_feed(
-            config_path=str(REPO_ROOT / "config" / "config.yaml"),
             output_root=str(out),
             cutoff=_cutoff().replace(hour=1),
-            providers_fn=lambda: {"federal_reserve": FakeAdapter()},
-            enabled_provider_ids=["federal_reserve"],
+            providers_fn=lambda: registry,
+            enabled_provider_ids=planned,
         )
     assert (out / "latest.json").read_bytes() == previous_latest
 
@@ -160,14 +139,35 @@ class _OutcomeAdapter:
     def __init__(self, *, items=None, error: Exception | None = None):
         self.items = items or []
         self.error = error
+        self.windows: list[dict[str, str]] = []
 
     def fetch(self, window, client=None):
+        self.windows.append(dict(window))
         if self.error is not None:
             raise self.error
         return SimpleNamespace(body_bytes=b"fixture")
 
     def normalize(self, raw, window):
         return self.items
+
+
+def _source_complete_cfg():
+    cfg = load_config(
+        REPO_ROOT / "config" / "config.yaml",
+        REPO_ROOT / "config" / "providers.yaml",
+        manifest_root=REPO_ROOT / "providers",
+        require_verified_enabled=False,
+    )
+    return replace(
+        cfg,
+        providers=tuple(
+            replace(provider, empty_valid_for_window=True) for provider in cfg.providers
+        ),
+    )
+
+
+def _planned_provider_ids(cfg) -> list[str]:
+    return [provider.id for provider in cfg.providers if provider.enabled]
 
 
 def _accepted_item(provider_id: str, item_id: str) -> dict:
@@ -192,7 +192,7 @@ def _accepted_item(provider_id: str, item_id: str) -> dict:
     }
 
 
-def test_failed_provider_and_successful_provider_are_degraded_with_both_causes(tmp_path):
+def test_failed_provider_and_successful_provider_fail_with_both_causes(tmp_path):
     result = run_feed(
         output_root=str(tmp_path / "out"),
         cutoff=_cutoff(),
@@ -206,9 +206,12 @@ def test_failed_provider_and_successful_provider_are_degraded_with_both_causes(t
         enabled_provider_ids=["federal_reserve", "bls"],
     )
 
-    assert result.status == "degraded"
-    assert result.exit_code == 0
-    assert any("bls" in warning for warning in result.warnings)
+    assert result.status == "failure"
+    assert result.exit_code == 1
+    assert any(
+        "bls" in warning and "failed" in warning and "provider unavailable" in warning
+        for warning in result.warnings
+    )
     assert any("us_official_macro_policy" in warning for warning in result.warnings)
 
 
@@ -401,7 +404,7 @@ def test_rate_reconcile_failure_is_not_retried_as_provider_degradation(tmp_path,
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
-def test_all_permitted_empty_is_failure_in_dry_run(tmp_path):
+def test_incomplete_single_empty_provider_is_failure_in_dry_run(tmp_path):
     result = run_feed(
         output_root=str(tmp_path / "out"),
         cutoff=_cutoff(),
@@ -418,6 +421,103 @@ def test_all_permitted_empty_is_failure_in_dry_run(tmp_path):
         if (tmp_path / "out" / "daily").exists()
         else True
     )
+
+
+def test_source_complete_empty_feed_publishes_and_advances_window(tmp_path, monkeypatch):
+    from follow_the_money.feed import cli as feed_cli
+
+    cfg = _source_complete_cfg()
+    monkeypatch.setattr(feed_cli, "_load_app_config", lambda _path: cfg)
+    planned = _planned_provider_ids(cfg)
+    registry = {provider_id: _OutcomeAdapter() for provider_id in planned}
+    out = tmp_path / "out"
+
+    first = run_feed(
+        output_root=str(out),
+        cutoff=_cutoff(),
+        providers_fn=lambda: registry,
+        enabled_provider_ids=planned,
+    )
+
+    assert first.status == "healthy"
+    assert first.exit_code == 0
+    assert first.feed is not None
+    assert first.feed["items"] == []
+    latest_path = out / "latest.json"
+    latest = json.loads(latest_path.read_text(encoding="utf-8"))
+    validate_feed(latest)
+    assert_feed_identity(latest)
+    assert latest["evidence_cutoff_at"] == first.feed["evidence_cutoff_at"]
+    assert latest["provider_outcomes"]
+    dated = out / "daily" / "2026-08-11" / f"{latest['run_id']}.json"
+    assert dated.is_file()
+    assert dated.read_bytes() == latest_path.read_bytes()
+
+    second = run_feed(
+        output_root=str(out),
+        cutoff=_cutoff().replace(hour=1),
+        providers_fn=lambda: registry,
+        enabled_provider_ids=planned,
+    )
+
+    assert second.status == "healthy"
+    assert second.exit_code == 0
+    assert all(
+        adapter.windows[1]["start"] == latest["evidence_cutoff_at"] for adapter in registry.values()
+    )
+
+
+def test_source_incomplete_run_keeps_latest_and_reports_provider_diagnostics(tmp_path, monkeypatch):
+    from follow_the_money.feed import cli as feed_cli
+
+    cfg = _source_complete_cfg()
+    monkeypatch.setattr(feed_cli, "_load_app_config", lambda _path: cfg)
+    planned = _planned_provider_ids(cfg)
+    out = tmp_path / "out"
+    baseline_registry = {provider_id: _OutcomeAdapter() for provider_id in planned}
+    baseline = run_feed(
+        output_root=str(out),
+        cutoff=_cutoff(),
+        providers_fn=lambda: baseline_registry,
+        enabled_provider_ids=planned,
+    )
+    assert baseline.status == "healthy"
+    previous_latest = (out / "latest.json").read_bytes()
+    previous_dated = sorted((out / "daily").rglob("*.json"))
+
+    registry = {
+        provider_id: _OutcomeAdapter(
+            error=RuntimeError("provider unavailable") if provider_id == "bls" else None
+        )
+        for provider_id in planned
+    }
+    published = False
+
+    def fail_if_called(**_kwargs):
+        nonlocal published
+        published = True
+        raise AssertionError("source-incomplete Feed must not publish")
+
+    monkeypatch.setattr(feed_cli, "publish_feed", fail_if_called)
+    result = run_feed(
+        output_root=str(out),
+        cutoff=_cutoff().replace(hour=1),
+        providers_fn=lambda: registry,
+        enabled_provider_ids=planned,
+    )
+
+    diagnostics = "\n".join(result.warnings)
+    assert result.status == "failure"
+    assert result.exit_code == 1
+    assert not published
+    assert (out / "latest.json").read_bytes() == previous_latest
+    assert sorted((out / "daily").rglob("*.json")) == previous_dated
+    assert "bls" in diagnostics
+    assert "failed" in diagnostics
+    assert "provider unavailable" in diagnostics
+    assert "us_official_macro_policy" in diagnostics
+    assert "source completeness failed" in result.message
+    assert "bls" in result.message
 
 
 def test_failure_does_not_call_publication_or_replace_latest(tmp_path, monkeypatch):
@@ -459,7 +559,7 @@ def test_failure_status_file_does_not_expose_success_paths(tmp_path, monkeypatch
             "run_id": "failure-run",
             "evidence_cutoff_at": "2026-08-11T00:20:00Z",
         },
-        warnings=["no accepted item"],
+        warnings=["source incomplete: provider_id=bls state=failed error=provider unavailable"],
     )
     monkeypatch.setattr(feed_cli, "run_feed", lambda **_kwargs: result)
     status_file = tmp_path / "status.json"
@@ -470,8 +570,11 @@ def test_failure_status_file_does_not_expose_success_paths(tmp_path, monkeypatch
         )
         == 1
     )
-    payload = __import__("json").loads(status_file.read_text())
-    assert payload == {"status": "failure", "warnings": ["no accepted item"]}
+    payload = json.loads(status_file.read_text())
+    assert payload == {
+        "status": "failure",
+        "warnings": ["source incomplete: provider_id=bls state=failed error=provider unavailable"],
+    }
 
 
 def test_dry_run_publishes_nothing(tmp_path):
@@ -517,13 +620,13 @@ def test_dry_run_publishes_nothing(tmp_path):
         providers_fn=lambda: registry,
         enabled_provider_ids=["federal_reserve"],
     )
-    # Result requires all rows healthy; with one provider the run degrades,
-    # but dry-run publishes no dated/latest artifact.
+    # The one-provider fixture leaves mandatory groups incomplete, but
+    # dry-run still publishes no dated/latest artifact.
     assert not (out / "latest.json").exists()
     assert not list((out / "daily").glob("**/*.json")) if (out / "daily").exists() else True
     assert not (out / "rate-registry.json").exists()
     assert result.feed is not None
-    assert result.feed["pipeline"]["status"] in ("healthy", "degraded")
+    assert result.feed["pipeline"]["status"] == "failure"
 
 
 def test_cli_usage_error_exit_2():

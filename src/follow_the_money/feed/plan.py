@@ -12,10 +12,9 @@ Design sections 2/4:
   ``non_advancing_cutoff`` with no call/artifact.
 - A gap > 72h uses the bounded bootstrap start and records an uncovered
   interval warning; an exact 72h gap starts at the prior cutoff.
-- Group health: a member is healthy for counting only when it succeeds with
-  accepted items or returns a manifest-permitted empty result. A deficient
-  mandatory group marks the non-empty Feed ``degraded``; zero accepted items
-  is failure.
+- Group health: a planned member is complete only when it reaches a healthy
+  state or returns a manifest-permitted empty result. Incomplete source work
+  fails the Feed even when other Providers retain accepted items.
 - Outcomes aggregate by stable ``provider_id`` key and serialize exactly one
   entry per planned provider in ascending ``provider_id`` order, so worker
   completion order never changes the Feed.
@@ -23,7 +22,7 @@ Design sections 2/4:
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -153,8 +152,8 @@ def ordered_outcomes(outcomes: Mapping[str, ProviderOutcome]) -> list[ProviderOu
 def assess_pipeline(
     *,
     config: AppConfig,
+    planned_provider_ids: Sequence[str],
     outcomes: Mapping[str, ProviderOutcome],
-    total_accepted: int,
 ) -> tuple[str, list[str]]:
     """Return ``(status, warnings)`` from provider outcomes.
 
@@ -162,41 +161,85 @@ def assess_pipeline(
     """
     provider_config = {provider.id: provider for provider in config.providers}
     warnings: list[str] = []
-    by_group: dict[str, list[ProviderOutcome]] = {}
-    for row in config.coverage.rows:
-        by_group[row.group] = [outcomes.get(m, ProviderOutcome(m)) for m in row.members]
 
-    degraded_providers: list[str] = []
-    for provider_id, provider in provider_config.items():
-        if not provider.enabled:
-            continue
-        outcome = outcomes.get(provider_id, ProviderOutcome(provider_id))
-        if outcome.state == "healthy":
-            continue
-        if outcome.state == "empty" and provider.empty_valid_for_window:
-            continue
-        degraded_providers.append(provider_id)
-    if degraded_providers:
-        warnings.append(f"degraded providers: {', '.join(sorted(degraded_providers))}")
+    plan_counts: dict[str, int] = {}
+    for provider_id in planned_provider_ids:
+        plan_counts[provider_id] = plan_counts.get(provider_id, 0) + 1
+    duplicate_plan_ids = sorted(pid for pid, count in plan_counts.items() if count > 1)
+    if duplicate_plan_ids:
+        warnings.append(f"duplicate planned providers: {', '.join(duplicate_plan_ids)}")
+
+    terminal_states = {"healthy", "empty", "partial", "failed", "skipped"}
+
+    def complete_for(provider: Any, outcome: Any) -> bool:
+        return (
+            provider is not None
+            and isinstance(outcome, ProviderOutcome)
+            and outcome.provider_id == provider.id
+            and outcome.state in terminal_states
+            and outcome.contributes_to_coverage(
+                empty_valid_for_window=provider.empty_valid_for_window
+            )
+        )
+
+    complete_by_provider: dict[str, bool] = {}
+    for provider_id in sorted(plan_counts):
+        provider = provider_config.get(provider_id)
+        candidates = sorted(
+            (
+                (key, outcome)
+                for key, outcome in outcomes.items()
+                if isinstance(outcome, ProviderOutcome) and outcome.provider_id == provider_id
+            ),
+            key=lambda candidate: candidate[0],
+        )
+        outcome = candidates[0][1] if candidates else outcomes.get(provider_id)
+
+        reason: str | None = None
+        if provider is None:
+            reason = "missing resolved provider contract"
+        elif len(candidates) != 1:
+            if isinstance(outcome, ProviderOutcome) and outcome.provider_id != provider_id:
+                reason = "provider identity mismatch"
+            else:
+                reason = (
+                    "missing terminal outcome" if not candidates else "ambiguous terminal outcome"
+                )
+        elif candidates[0][0] != provider_id:
+            reason = "provider identity mismatch"
+        elif not isinstance(outcome, ProviderOutcome) or outcome.state not in terminal_states:
+            reason = "unknown state"
+        elif not complete_for(provider, outcome):
+            reason = (
+                "empty result is not permitted for window"
+                if outcome.state == "empty"
+                else "terminal state is incomplete"
+            )
+
+        complete = reason is None and complete_for(provider, outcome)
+        complete_by_provider[provider_id] = complete
+        if not complete:
+            state = getattr(outcome, "state", "missing")
+            detail = f"source incomplete: provider_id={provider_id} state={state}"
+            error = getattr(outcome, "error", None)
+            message = getattr(outcome, "message", None)
+            if error or message:
+                detail += f" error={error or message}"
+            if reason:
+                detail += f" reason={reason}"
+            warnings.append(detail)
 
     deficient: list[str] = []
     for row in config.coverage.rows:
-        healthy_count = sum(
-            1
-            for member, outcome in zip(row.members, by_group[row.group], strict=True)
-            if outcome.contributes_to_coverage(
-                empty_valid_for_window=provider_config[member].empty_valid_for_window
-            )
-        )
-        if healthy_count < row.minimum and not row.optional:
+        complete_count = sum(1 for member in row.members if complete_by_provider.get(member))
+        if complete_count < row.minimum and not row.optional:
             deficient.append(row.group)
 
     if deficient:
         warnings.append(f"deficient coverage groups: {', '.join(deficient)}")
-    if total_accepted == 0:
-        warnings.insert(0, "no accepted item from any enabled provider")
+    if duplicate_plan_ids or any(not complete for complete in complete_by_provider.values()):
         return "failure", warnings
-    if degraded_providers or deficient:
-        return "degraded", warnings
+    if deficient:
+        return "failure", warnings
 
     return "healthy", warnings

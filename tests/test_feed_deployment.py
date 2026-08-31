@@ -14,6 +14,7 @@ from follow_the_money.config.model import RatePolicy
 from follow_the_money.feed import deployment
 from follow_the_money.feed.deployment import (
     DeploymentError,
+    allowlisted_paths,
     assert_feed_admitted,
     finalize_deployment,
     prepare_deployment,
@@ -326,6 +327,36 @@ def test_success_and_failure_finalization_keep_exact_paths(tmp_path: Path):
     )
     assert all(path.name not in {"latest.json", "feed-1.json"} for path in failure_paths)
     assert read_lease(tmp_path / "feed-run-lease.json").state == "failure"
+
+
+def test_source_completeness_failure_finalization_preserves_status_and_allowlist(
+    tmp_path: Path,
+):
+    prepare_deployment(tmp_path, _cfg(_policy()), deployment_run_id="42-1", now=_clock(NOW))
+    armed_at = NOW + timedelta(days=1)
+    prepare_deployment(tmp_path, _cfg(_policy()), deployment_run_id="43-1", now=_clock(armed_at))
+    status = tmp_path / "feed-status.json"
+    payload = {
+        "status": "failure",
+        "warnings": [
+            "source incomplete: provider_id=bls state=failed error=provider unavailable",
+        ],
+    }
+    status.write_text(json.dumps(payload), encoding="utf-8")
+
+    paths = finalize_deployment(
+        tmp_path,
+        deployment_run_id="43-1",
+        feed_succeeded=False,
+        status_path=status,
+        now=_clock(armed_at + timedelta(seconds=1)),
+    )
+
+    assert json.loads(status.read_text(encoding="utf-8")) == payload
+    assert set(paths) == set(allowlisted_paths(tmp_path))
+    assert read_lease(tmp_path / "feed-run-lease.json").state == "failure"
+    assert not (tmp_path / "latest.json").exists()
+    assert not (tmp_path / "daily").exists()
 
 
 def test_success_finalization_rejects_non_feed_status_paths(tmp_path: Path):

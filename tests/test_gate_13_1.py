@@ -188,7 +188,7 @@ def test_retryable_provider_http_failure_uses_bounded_retry_matrix(tmp_path):
         providers_fn=lambda: {"federal_reserve": adapter},
         enabled_provider_ids=["federal_reserve"],
     )
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     outcome = next(
         row for row in result.feed["provider_outcomes"] if row["provider_id"] == "federal_reserve"
     )
@@ -257,7 +257,7 @@ def test_positive_retry_after_wait_is_admitted_before_retry(tmp_path):
         now_fn=now,
         sleep_fn=sleep,
     )
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert adapter.calls == 2
     assert waits == [7.0]
 

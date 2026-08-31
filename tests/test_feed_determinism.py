@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -57,6 +58,16 @@ def _cfg():
         DEFAULT_PROVIDERS,
         manifest_root=DEFAULT_MANIFEST_ROOT,
         require_verified_enabled=False,
+    )
+
+
+def _source_complete_cfg():
+    cfg = _cfg()
+    return replace(
+        cfg,
+        providers=tuple(
+            replace(provider, empty_valid_for_window=True) for provider in cfg.providers
+        ),
     )
 
 
@@ -280,7 +291,7 @@ def test_run_feed_outcome_order_and_identity_survive_submission_permutations(tmp
     ids = ["bls", "cftc", "federal_reserve", "sec_edgar"]
     result_a = run(failing_registry(ids), ids)
     result_b = run(failing_registry(list(reversed(ids))), list(reversed(ids)))
-    assert result_a.exit_code == 0 and result_b.exit_code == 0
+    assert result_a.exit_code == 1 and result_b.exit_code == 1
     for result in (result_a, result_b):
         assert [o["provider_id"] for o in result.feed["provider_outcomes"]] == ids
         assert {o["provider_id"]: o["state"] for o in result.feed["provider_outcomes"]} == {
@@ -351,7 +362,7 @@ def test_feed_identity_survives_item_input_permutations(tmp_path):
 
     result_a = run(items)
     result_b = run(list(reversed(items)))
-    assert result_a.exit_code == 0 and result_b.exit_code == 0
+    assert result_a.exit_code == 1 and result_b.exit_code == 1
     feed_a, feed_b = result_a.feed, result_b.feed
     assert [i["id"] for i in feed_a["items"]] == ["i1"]
     assert [i["id"] for i in feed_b["items"]] == ["i1"]
@@ -399,7 +410,7 @@ def test_lifecycle_timestamps_come_from_observed_instants(tmp_path):
         now_fn=clock,
     )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     feed = result.feed
     # Exactly the four lifecycle instants were observed, in order.
     assert clock.calls == [started, retrieved, completed, generated]
@@ -437,7 +448,7 @@ def test_lifecycle_timestamps_normalize_aware_clock_to_utc(tmp_path):
         now_fn=clock,
     )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert result.feed["collection_started_at"] == _ts(T0 - timedelta(minutes=1))
     assert result.feed["evidence_cutoff_at"] == _ts(T0)
     assert result.feed["provider_outcomes"][0]["retrieved_at"] == _ts(T0 + timedelta(minutes=1))
@@ -679,17 +690,28 @@ def test_every_semantic_projection_member_changes_identity():
 # ---------------------------------------------------------------------------
 
 
-def test_published_bytes_are_canonical_bytes(tmp_path):
+def test_published_bytes_are_canonical_bytes(tmp_path, monkeypatch):
+    from follow_the_money.feed import cli as feed_cli
+
+    cfg = _source_complete_cfg()
+    monkeypatch.setattr(feed_cli, "_load_app_config", lambda _path: cfg)
+    planned = [provider.id for provider in cfg.providers if provider.enabled]
     out = tmp_path / "out"
+    registry = {
+        provider_id: _FixtureAdapter(
+            items=(
+                [_news_item("fed", "federal_reserve", knowledge=T0 - timedelta(hours=1))]
+                if provider_id == "federal_reserve"
+                else []
+            )
+        )
+        for provider_id in planned
+    }
     result = run_feed(
         output_root=str(out),
         cutoff=T0,
-        providers_fn=lambda: {
-            "federal_reserve": _FixtureAdapter(
-                items=[_news_item("fed", "federal_reserve", knowledge=T0 - timedelta(hours=1))]
-            )
-        },
-        enabled_provider_ids=["federal_reserve"],
+        providers_fn=lambda: registry,
+        enabled_provider_ids=planned,
     )
     assert result.exit_code == 0
     feed = result.feed

@@ -445,7 +445,7 @@ def run_feed(
         ordered = deterministic_item_order(deduped)
 
         status, warnings = assess_pipeline(
-            config=cfg, outcomes=outcomes, total_accepted=len(ordered)
+            config=cfg, planned_provider_ids=enabled_ids, outcomes=outcomes
         )
         if plan.gap_warning:
             warnings.append(f"coverage gap: {plan.gap_warning[0]} to {plan.gap_warning[1]}")
@@ -475,7 +475,7 @@ def run_feed(
                 exit_code=1,
                 feed=feed,
                 warnings=warnings,
-                message="no accepted evidence; Feed was not admitted for publication",
+                message="source completeness failed: " + "; ".join(warnings),
             )
 
         if dry_run:

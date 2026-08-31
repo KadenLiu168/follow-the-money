@@ -102,11 +102,16 @@ observations not source-available at cutoff are rejected.
 
 ## Health and degradation
 
-- A member is healthy for group counting only when it succeeds with accepted
-  items or returns a manifest-permitted empty result.
-- A deficient mandatory coverage group marks a non-empty Feed `degraded`.
-- Zero accepted items across all enabled providers is `failure` regardless
-  of transport success and does not replace the last valid latest.
+- A planned Provider is complete for group counting only when it reaches
+  `healthy` or returns a contract-permitted `empty` result; accepted and
+  fetched item counts do not determine completeness.
+- An incomplete planned Provider or deficient mandatory coverage group is
+  `failure`, retains Provider diagnostics, and does not replace the last valid
+  `latest.json`.
+- A source-complete Feed with `items: []` remains a normal successful Feed and
+  advances the evidence window through the usual dated/latest publication.
+- Existing `degraded` semantics remain available for accepted non-source
+  conditions.
 - Intelligence fields (importance, direction, price-in, regime, impact,
   ranking) are rejected from Feed items.
 

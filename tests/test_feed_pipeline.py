@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -146,6 +147,19 @@ def test_gap_over_72h_records_warning(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+def _planned_ids(outcomes: dict[str, ProviderOutcome]) -> tuple[str, ...]:
+    return tuple(sorted(outcomes))
+
+
+def _all_empty_cfg(cfg):
+    return replace(
+        cfg,
+        providers=tuple(
+            replace(provider, empty_valid_for_window=True) for provider in cfg.providers
+        ),
+    )
+
+
 def test_healthy_six_row_coverage():
     cfg = _cfg()
     # Only a subset of the shipped (unverified) providers exist; simulate a
@@ -153,34 +167,41 @@ def test_healthy_six_row_coverage():
     outcomes = {}
     for row in cfg.coverage.rows:
         for member in row.members:
-            outcomes[member] = ProviderOutcome(member, state="healthy", accepted=1)
-    status, warnings = assess_pipeline(config=cfg, outcomes=outcomes, total_accepted=10)
+            outcomes[member] = ProviderOutcome(member, state="healthy")
+    status, warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(outcomes), outcomes=outcomes
+    )
     assert status == "healthy"
     assert warnings == []
 
 
-def test_one_below_minimum_degrades():
-    cfg = _cfg()
-    outcomes = {}
-    for row in cfg.coverage.rows:
-        for i, member in enumerate(row.members):
-            # First member of every row fails => below minimum everywhere.
-            outcomes[member] = ProviderOutcome(member, state="failed")
-    outcomes["federal_reserve"] = ProviderOutcome("federal_reserve", state="healthy", accepted=1)
-    status, warnings = assess_pipeline(config=cfg, outcomes=outcomes, total_accepted=1)
-    assert status == "degraded"
-    assert any("deficient" in w for w in warnings)
-
-
-def test_permitted_empty_counts_healthy_not_accepted_item():
+def test_incomplete_provider_and_coverage_fail_with_accepted_evidence():
     cfg = _cfg()
     outcomes = {}
     for row in cfg.coverage.rows:
         for member in row.members:
-            outcomes[member] = ProviderOutcome(member, state="empty", accepted=0)
-    # Empty results are healthy for counting but no accepted item => failure.
-    status, _warnings = assess_pipeline(config=cfg, outcomes=outcomes, total_accepted=0)
+            # First member of every row fails => below minimum everywhere.
+            outcomes[member] = ProviderOutcome(member, state="failed")
+    outcomes["federal_reserve"] = ProviderOutcome("federal_reserve", state="healthy", accepted=1)
+    status, warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(outcomes), outcomes=outcomes
+    )
     assert status == "failure"
+    assert any("incomplete" in w for w in warnings)
+    assert any("deficient" in w for w in warnings)
+
+
+def test_permitted_empty_counts_healthy_without_accepted_item():
+    cfg = _all_empty_cfg(_cfg())
+    outcomes = {}
+    for row in cfg.coverage.rows:
+        for member in row.members:
+            outcomes[member] = ProviderOutcome(member, state="empty", accepted=0)
+    status, warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(outcomes), outcomes=outcomes
+    )
+    assert status == "healthy"
+    assert warnings == []
 
 
 def test_mixed_validity_with_accepted_item():
@@ -190,21 +211,26 @@ def test_mixed_validity_with_accepted_item():
         for member in row.members:
             outcomes[member] = ProviderOutcome(member, state="healthy", accepted=1)
     outcomes["sec_edgar"] = ProviderOutcome("sec_edgar", state="failed")
-    status, warnings = assess_pipeline(config=cfg, outcomes=outcomes, total_accepted=5)
-    assert status == "degraded"
+    status, warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(outcomes), outcomes=outcomes
+    )
+    assert status == "failure"
     # The failed member makes us_company_filings deficient (1/1 minimum).
     assert any("deficient" in w for w in warnings)
 
 
-def test_all_enabled_empty_is_failure():
-    cfg = _cfg()
+def test_source_complete_empty_is_healthy():
+    cfg = _all_empty_cfg(_cfg())
     outcomes = {
         member: ProviderOutcome(member, state="empty")
         for row in cfg.coverage.rows
         for member in row.members
     }
-    status, _ = assess_pipeline(config=cfg, outcomes=outcomes, total_accepted=0)
-    assert status == "failure"
+    status, warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(outcomes), outcomes=outcomes
+    )
+    assert status == "healthy"
+    assert warnings == []
 
 
 def _all_healthy_outcomes(cfg) -> dict[str, ProviderOutcome]:
@@ -219,8 +245,9 @@ def test_permitted_empty_contributes_to_coverage():
     cfg = _cfg()
     outcomes = _all_healthy_outcomes(cfg)
     outcomes["federal_reserve"] = ProviderOutcome("federal_reserve", state="empty")
-
-    status, warnings = assess_pipeline(config=cfg, outcomes=outcomes, total_accepted=1)
+    status, warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(outcomes), outcomes=outcomes
+    )
 
     assert status == "healthy"
     assert warnings == []
@@ -231,9 +258,11 @@ def test_non_permitted_empty_does_not_contribute_and_names_provider():
     outcomes = _all_healthy_outcomes(cfg)
     outcomes["yahoo_market"] = ProviderOutcome("yahoo_market", state="empty")
 
-    status, warnings = assess_pipeline(config=cfg, outcomes=outcomes, total_accepted=1)
+    status, warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(outcomes), outcomes=outcomes
+    )
 
-    assert status == "degraded"
+    assert status == "failure"
     assert any("yahoo_market" in warning for warning in warnings)
     assert any("verified_market_data" in warning for warning in warnings)
 
@@ -244,14 +273,16 @@ def test_incomplete_provider_states_do_not_contribute_and_name_provider(state):
     outcomes = _all_healthy_outcomes(cfg)
     outcomes["sec_edgar"] = ProviderOutcome("sec_edgar", state=state, accepted=1)
 
-    status, warnings = assess_pipeline(config=cfg, outcomes=outcomes, total_accepted=1)
+    status, warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(outcomes), outcomes=outcomes
+    )
 
-    assert status == "degraded"
+    assert status == "failure"
     assert any("sec_edgar" in warning for warning in warnings)
     assert any("us_company_filings" in warning for warning in warnings)
 
 
-def test_zero_accepted_retains_provider_and_group_warnings():
+def test_source_failure_retains_provider_and_group_warnings_without_zero_count_cause():
     cfg = _cfg()
     outcomes = {
         member: ProviderOutcome(member, state="empty")
@@ -261,12 +292,135 @@ def test_zero_accepted_retains_provider_and_group_warnings():
     outcomes["sec_edgar"] = ProviderOutcome("sec_edgar", state="failed")
     outcomes["yahoo_market"] = ProviderOutcome("yahoo_market", state="empty")
 
-    status, warnings = assess_pipeline(config=cfg, outcomes=outcomes, total_accepted=0)
+    status, warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(outcomes), outcomes=outcomes
+    )
 
     assert status == "failure"
-    assert any("no accepted" in warning for warning in warnings)
+    assert not any("no accepted" in warning for warning in warnings)
     assert any("sec_edgar" in warning for warning in warnings)
     assert any("us_company_filings" in warning for warning in warnings)
+
+
+def test_missing_terminal_outcome_fails_closed():
+    cfg = _cfg()
+    outcomes = _all_healthy_outcomes(cfg)
+    planned = _planned_ids(outcomes)
+    del outcomes["sec_edgar"]
+
+    status, warnings = assess_pipeline(config=cfg, planned_provider_ids=planned, outcomes=outcomes)
+
+    assert status == "failure"
+    assert any("sec_edgar" in warning and "missing" in warning for warning in warnings)
+
+
+def test_duplicate_planned_provider_fails_closed():
+    cfg = _cfg()
+    outcomes = _all_healthy_outcomes(cfg)
+    planned = (*_planned_ids(outcomes), "sec_edgar")
+
+    status, warnings = assess_pipeline(config=cfg, planned_provider_ids=planned, outcomes=outcomes)
+
+    assert status == "failure"
+    assert any("duplicate" in warning and "sec_edgar" in warning for warning in warnings)
+
+
+def test_ambiguous_terminal_outcomes_fail_closed():
+    cfg = _cfg()
+    outcomes = _all_healthy_outcomes(cfg)
+    outcomes["sec_edgar_alias"] = ProviderOutcome("sec_edgar", state="healthy")
+
+    status, warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(_all_healthy_outcomes(cfg)), outcomes=outcomes
+    )
+
+    assert status == "failure"
+    assert any("ambiguous" in warning and "sec_edgar" in warning for warning in warnings)
+
+
+def test_ambiguous_terminal_outcome_diagnostics_ignore_mapping_order():
+    cfg = _cfg()
+    canonical = ProviderOutcome("sec_edgar", state="failed", error="canonical failure")
+    alias = ProviderOutcome("sec_edgar", state="healthy")
+    base = _all_healthy_outcomes(cfg)
+    base.pop("sec_edgar")
+
+    first_status, first_warnings = assess_pipeline(
+        config=cfg,
+        planned_provider_ids=(*_planned_ids(base), "sec_edgar"),
+        outcomes={**base, "sec_edgar": canonical, "sec_edgar_alias": alias},
+    )
+    second_status, second_warnings = assess_pipeline(
+        config=cfg,
+        planned_provider_ids=(*_planned_ids(base), "sec_edgar"),
+        outcomes={**base, "sec_edgar_alias": alias, "sec_edgar": canonical},
+    )
+
+    assert first_status == second_status == "failure"
+    assert first_warnings == second_warnings
+
+
+@pytest.mark.parametrize(
+    ("outcome", "expected_warning"),
+    [
+        (ProviderOutcome("sec_edgar", state="unknown"), "unknown state"),
+        (ProviderOutcome("other", state="healthy"), "identity"),
+    ],
+)
+def test_invalid_terminal_outcomes_fail_closed(outcome, expected_warning):
+    cfg = _cfg()
+    outcomes = _all_healthy_outcomes(cfg)
+    outcomes["sec_edgar"] = outcome
+
+    status, warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(outcomes), outcomes=outcomes
+    )
+
+    assert status == "failure"
+    assert any("sec_edgar" in warning and expected_warning in warning for warning in warnings)
+
+
+def test_assessment_uses_only_planned_providers_and_future_plan_members():
+    cfg = SimpleNamespace(
+        providers=(
+            SimpleNamespace(id="cftc", enabled=False, empty_valid_for_window=True),
+            SimpleNamespace(id="yahoo_market", enabled=True, empty_valid_for_window=False),
+        ),
+        coverage=SimpleNamespace(rows=()),
+    )
+    unplanned = {
+        "cftc": ProviderOutcome("cftc", state="failed"),
+        "yahoo_market": ProviderOutcome("yahoo_market", state="failed"),
+    }
+
+    status, warnings = assess_pipeline(config=cfg, planned_provider_ids=(), outcomes=unplanned)
+
+    assert status == "healthy"
+    assert warnings == []
+
+    future_cfg = SimpleNamespace(
+        providers=(
+            SimpleNamespace(id="future_provider", enabled=True, empty_valid_for_window=True),
+        ),
+        coverage=SimpleNamespace(
+            rows=(
+                SimpleNamespace(
+                    group="future_group",
+                    members=("future_provider",),
+                    minimum=1,
+                    optional=False,
+                ),
+            ),
+        ),
+    )
+    status, warnings = assess_pipeline(
+        config=future_cfg,
+        planned_provider_ids=("future_provider",),
+        outcomes={"future_provider": ProviderOutcome("future_provider", state="empty")},
+    )
+
+    assert status == "healthy"
+    assert warnings == []
 
 
 def _feed_item(provider_id: str, item_id: str) -> dict:
@@ -318,7 +472,7 @@ def test_accepted_and_rejected_items_make_provider_partial(tmp_path):
         enabled_provider_ids=["yahoo_market"],
     )
 
-    assert result.status == "degraded"
+    assert result.status == "failure"
     assert result.feed is not None
     outcome = result.feed["provider_outcomes"][0]
     assert outcome["state"] == "partial"
@@ -340,7 +494,7 @@ def test_accepted_evidence_survives_later_failed_role_as_partial(tmp_path):
         enabled_provider_ids=["yahoo_market"],
     )
 
-    assert result.status == "degraded"
+    assert result.status == "failure"
     assert result.feed is not None
     outcome = result.feed["provider_outcomes"][0]
     assert outcome["state"] == "partial"
@@ -362,7 +516,7 @@ def test_non_permitted_empty_and_accepted_roles_are_partial_in_any_order(tmp_pat
         enabled_provider_ids=["yahoo_market"],
     )
 
-    assert result.status == "degraded"
+    assert result.status == "failure"
     assert result.feed is not None
     outcome = result.feed["provider_outcomes"][0]
     assert outcome["state"] == "partial"

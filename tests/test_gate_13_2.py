@@ -37,7 +37,8 @@ def _ts(dt: datetime) -> str:
 class _MinimalAdapter:
     """One healthy provider adapter producing a single valid policy item."""
 
-    provider_id = "federal_reserve"
+    def __init__(self, provider_id: str = "federal_reserve"):
+        self.provider_id = provider_id
 
     def fetch(self, window, client=None):
         from types import SimpleNamespace
@@ -47,14 +48,14 @@ class _MinimalAdapter:
     def normalize(self, raw, window):
         return [
             {
-                "id": "item_min",
-                "provider_id": "federal_reserve",
+                "id": f"item_min_{self.provider_id}",
+                "provider_id": self.provider_id,
                 "source": {
-                    "id": "src-min",
+                    "id": f"src-min-{self.provider_id}",
                     "name": "Federal Reserve",
                     "tier": "Tier 1",
                     "kind": "news",
-                    "url": "https://www.federalreserve.gov/newsevents/pressreleases/min20260811.htm",
+                    "url": f"https://example.com/{self.provider_id}/min20260811",
                     "published_at": _ts(T0),
                     "knowledge_available_at": _ts(T0),
                 },
@@ -69,7 +70,19 @@ class _MinimalAdapter:
 
 
 def _minimal_registry() -> dict:
-    return {"federal_reserve": _MinimalAdapter()}
+    return {provider_id: _MinimalAdapter(provider_id) for provider_id in _minimal_enabled_ids()}
+
+
+def _minimal_enabled_ids() -> list[str]:
+    from follow_the_money.config import load_config
+
+    cfg = load_config(
+        REPO_ROOT / "config" / "config.yaml",
+        REPO_ROOT / "config" / "providers.yaml",
+        manifest_root=REPO_ROOT / "providers",
+        require_verified_enabled=False,
+    )
+    return [provider.id for provider in cfg.providers if provider.enabled]
 
 
 def _healthy_feed_dict() -> dict:
@@ -409,7 +422,7 @@ def _child_run_feed(out_root: str, cutoff_iso: str, status_file: str) -> None:
         output_root=out_root,
         cutoff=cutoff,
         providers_fn=_minimal_registry,
-        enabled_provider_ids=["federal_reserve"],
+        enabled_provider_ids=_minimal_enabled_ids(),
     )
     Path(status_file).write_text(json.dumps({"exit": result.exit_code, "status": result.status}))
 
@@ -423,7 +436,7 @@ def test_two_processes_serialized_lock_before_cutoff(tmp_path):
         output_root=str(out),
         cutoff=T0,
         providers_fn=_minimal_registry,
-        enabled_provider_ids=["federal_reserve"],
+        enabled_provider_ids=_minimal_enabled_ids(),
     )
     assert r1.exit_code == 0
     latest = json.loads((out / "latest.json").read_bytes())
@@ -435,7 +448,7 @@ def test_two_processes_serialized_lock_before_cutoff(tmp_path):
         output_root=str(out),
         cutoff=T0 + timedelta(hours=1),
         providers_fn=_minimal_registry,
-        enabled_provider_ids=["federal_reserve"],
+        enabled_provider_ids=_minimal_enabled_ids(),
     )
     assert r2.exit_code == 0
     latest2 = json.loads((out / "latest.json").read_bytes())
@@ -457,15 +470,19 @@ def test_cutoff_clock_is_read_after_lock_acquisition(tmp_path, monkeypatch):
         order.append("lock")
         return original_acquire(self)
 
+    clock = {"calls": 0}
+
     def now() -> datetime:
         order.append("clock")
-        return T0
+        value = T0 + timedelta(seconds=clock["calls"])
+        clock["calls"] += 1
+        return value
 
     monkeypatch.setattr(feed_cli.CollectionLock, "acquire", acquire)
     result = run_feed(
         output_root=str(tmp_path / "out"),
         providers_fn=_minimal_registry,
-        enabled_provider_ids=["federal_reserve"],
+        enabled_provider_ids=_minimal_enabled_ids(),
         now_fn=now,
     )
 
@@ -481,14 +498,14 @@ def test_non_advancing_cutoff_no_artifact(tmp_path):
         output_root=str(out),
         cutoff=T0,
         providers_fn=_minimal_registry,
-        enabled_provider_ids=["federal_reserve"],
+        enabled_provider_ids=_minimal_enabled_ids(),
     )
     with pytest.raises(FeedExecutionError, match="non_advancing"):
         run_feed(
             output_root=str(out),
             cutoff=T0,
             providers_fn=_minimal_registry,
-            enabled_provider_ids=["federal_reserve"],
+            enabled_provider_ids=_minimal_enabled_ids(),
         )
     # No second dated artifact.
     dated = list((out / "daily").rglob("*.json"))
