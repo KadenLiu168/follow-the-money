@@ -1,0 +1,1 @@
+{"capacity": "20", "cooldown_until": "2026-08-31T07:39:20.046Z", "last_dispatch_wall": "2026-08-31T07:39:19.046Z", "minimum_interval_seconds": 1, "policy_fingerprint": null, "refill_period_seconds": 60, "refill_wall_anchor": "2026-08-31T07:39:19.046Z", "scope_id": "us_gov", "status": "active", "tokens": "18.33345866666666666666666667", "version": "1"}

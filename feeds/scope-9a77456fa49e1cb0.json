@@ -1,0 +1,1 @@
+{"capacity": "10", "cooldown_until": "2026-08-31T07:39:23.047Z", "last_dispatch_wall": "2026-08-31T07:39:18.047Z", "minimum_interval_seconds": 5, "policy_fingerprint": null, "refill_period_seconds": 60, "refill_wall_anchor": "2026-08-31T07:39:18.047Z", "scope_id": "sec_edgar", "status": "active", "tokens": "9", "version": "1"}
