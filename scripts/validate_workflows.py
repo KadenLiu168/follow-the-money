@@ -91,6 +91,31 @@ def validate_repository_workflows(
         raise TypeError("Feed workflow is missing generate job")
     if job.get("runs-on") != "ubuntu-latest" or "if" in job:
         raise ValueError("Feed workflow must use a hosted runner without opt-in")
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        raise TypeError("Feed workflow steps must be a list")
+    diagnostics = [
+        step
+        for step in steps
+        if isinstance(step, dict) and "diagnostics" in str(step.get("name", "")).lower()
+    ]
+    if len(diagnostics) != 1:
+        raise ValueError("Feed workflow must define one failure diagnostics step")
+    diagnostics_step = diagnostics[0]
+    if diagnostics_step.get("if") != "${{ always() && steps.feed.outcome == 'failure' }}":
+        raise ValueError("Feed diagnostics must be failure-only and always-run")
+    if diagnostics_step.get("continue-on-error") is not True:
+        raise ValueError("Feed diagnostics must be non-gating")
+    diagnostics_run = diagnostics_step.get("run")
+    if not isinstance(diagnostics_run, str) or any(
+        value not in diagnostics_run
+        for value in (
+            "deployment diagnostics",
+            "--status-file feed-status.json",
+            '--summary-file "$GITHUB_STEP_SUMMARY"',
+        )
+    ):
+        raise ValueError("Feed diagnostics must use only the private renderer inputs")
     for value, message in (
         ("FOLLOW_THE_MONEY_FEED", "opt-in"),
         ("FOLLOW_THE_MONEY_OUTPUT_ROOT", "external root"),
@@ -115,11 +140,15 @@ def validate_repository_workflows(
         "deployment publish --phase pre",
         "deployment collect",
         "deployment finalize",
+        "deployment diagnostics",
+        "Preserve original Feed failure",
     )
     if "always()" not in feed_text or "steps.feed.outcome" not in feed_text:
         raise ValueError("Feed workflow must finalize always and preserve Feed failure")
     if "HEAD:main" not in feed_text:
         raise ValueError("Feed workflow must publish only to main with a normal fast-forward push")
+    if "cat .feed-exit-code" not in feed_text or 'exit "$exit_code"' not in feed_text:
+        raise ValueError("Feed workflow must preserve the .feed-exit-code authority")
 
 
 def main() -> int:

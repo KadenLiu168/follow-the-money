@@ -83,6 +83,25 @@ def test_feed_workflow_orders_static_preflight_lease_push_feed_and_finalization(
     assert text.index("deployment prepare") < text.index("git push origin HEAD:main")
     assert text.index("git push origin HEAD:main") < text.index("deployment collect")
     assert text.index("deployment collect") < text.index("deployment finalize")
+    assert text.index("deployment finalize") < text.index("deployment diagnostics")
+    assert text.index("deployment diagnostics") < text.index("Preserve original Feed failure")
+
+
+def test_feed_workflow_diagnostics_is_failure_only_non_gating_and_keeps_exit_authority():
+    data = _load("generate-feed.yml")
+    steps = data["jobs"]["generate"]["steps"]
+    diagnostics = next(step for step in steps if "diagnostics" in step.get("name", "").lower())
+    restoration = next(
+        step for step in steps if step.get("name") == "Preserve original Feed failure"
+    )
+
+    assert diagnostics["if"] == "${{ always() && steps.feed.outcome == 'failure' }}"
+    assert diagnostics["continue-on-error"] is True
+    assert "deployment diagnostics" in diagnostics["run"]
+    assert "--status-file feed-status.json" in diagnostics["run"]
+    assert '--summary-file "$GITHUB_STEP_SUMMARY"' in diagnostics["run"]
+    assert "cat .feed-exit-code" in restoration["run"]
+    assert 'exit "$exit_code"' in restoration["run"]
 
 
 def test_feed_workflow_stages_only_generated_state():

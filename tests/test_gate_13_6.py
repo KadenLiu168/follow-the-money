@@ -40,3 +40,20 @@ def test_workflow_validator_rejects_broad_generated_ci_ignore(tmp_path: Path):
     altered.write_text(text, encoding="utf-8")
     with pytest.raises(ValueError, match="paths-ignore"):
         validate_repository_workflows(REPO_ROOT, test_workflow_path=altered)
+
+
+@pytest.mark.parametrize(
+    ("needle", "replacement"),
+    [
+        ("deployment diagnostics", "deployment missing-diagnostics"),
+        ("continue-on-error: true", "continue-on-error: false"),
+    ],
+)
+def test_workflow_validator_requires_non_gating_failure_diagnostics(
+    tmp_path: Path, needle: str, replacement: str
+):
+    workflow = REPO_ROOT / ".github/workflows/generate-feed.yml"
+    altered = tmp_path / "generate-feed.yml"
+    altered.write_text(workflow.read_text(encoding="utf-8").replace(needle, replacement))
+    with pytest.raises(ValueError, match="diagnostics"):
+        validate_repository_workflows(REPO_ROOT, generate_feed_path=altered)

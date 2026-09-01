@@ -12,6 +12,7 @@ import pytest
 
 from follow_the_money.config.model import RatePolicy
 from follow_the_money.feed import deployment
+from follow_the_money.feed.cli import FeedExecutionError, FeedInputError, FeedRunResult
 from follow_the_money.feed.deployment import (
     DeploymentError,
     allowlisted_paths,
@@ -354,6 +355,7 @@ def test_source_completeness_failure_finalization_preserves_status_and_allowlist
 
     assert json.loads(status.read_text(encoding="utf-8")) == payload
     assert set(paths) == set(allowlisted_paths(tmp_path))
+    assert status not in allowlisted_paths(tmp_path)
     assert read_lease(tmp_path / "feed-run-lease.json").state == "failure"
     assert not (tmp_path / "latest.json").exists()
     assert not (tmp_path / "daily").exists()
@@ -453,3 +455,248 @@ def test_git_publication_is_non_force_and_stages_only_allowlist(tmp_path: Path):
         or (tmp_path / "unrelated.txt").read_text() == "do not stage"
     )
     assert all("--force" not in call for call in calls)
+
+
+def test_failed_feed_status_preserves_existing_failure_facts_without_parsing_warnings(
+    tmp_path: Path,
+):
+    outcomes = [
+        {
+            "provider_id": "bls",
+            "state": "failed",
+            "error": "HTTP 403",
+            "attempted": 1,
+            "fetched": 0,
+            "accepted": 0,
+            "rejected": 2,
+        },
+        {
+            "provider_id": "sec_edgar",
+            "state": "empty",
+            "error": None,
+            "attempted": 1,
+            "fetched": 1,
+            "accepted": 0,
+            "rejected": 0,
+        },
+    ]
+    warnings = ["opaque warning: provider_id=not-a-fact state=not-a-state"]
+    status_path = tmp_path / "feed-status.json"
+
+    deployment._write_feed_status(
+        status_path,
+        FeedRunResult(
+            status="failure",
+            exit_code=1,
+            feed={"provider_outcomes": outcomes},
+            warnings=warnings,
+            message="source completeness failed",
+        ),
+    )
+
+    assert json.loads(status_path.read_text(encoding="utf-8")) == {
+        "status": "failure",
+        "message": "source completeness failed",
+        "warnings": warnings,
+        "provider_outcomes": outcomes,
+    }
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_code"),
+    [
+        (FeedInputError("execution failed: invalid input"), 2),
+        (FeedExecutionError("input failed: provider execution"), 1),
+    ],
+)
+def test_typed_collect_failures_write_narrow_status_without_provider_facts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+    expected_code: int,
+):
+    from follow_the_money.feed import cli
+
+    monkeypatch.setattr(deployment, "assert_feed_admitted", lambda *_args, **_kwargs: None)
+
+    def fail(**_kwargs):
+        raise error
+
+    monkeypatch.setattr(cli, "run_feed", fail)
+    status_path = tmp_path / "feed-status.json"
+    exit_path = tmp_path / ".feed-exit-code"
+
+    code = deployment._command_collect(
+        SimpleNamespace(
+            root=str(tmp_path),
+            config=None,
+            run_id="run-1",
+            status_file=str(status_path),
+            exit_file=str(exit_path),
+        )
+    )
+
+    assert code == expected_code
+    assert json.loads(status_path.read_text(encoding="utf-8")) == {
+        "status": "failure",
+        "message": str(error),
+        "warnings": [],
+    }
+    assert "provider_outcomes" not in json.loads(status_path.read_text(encoding="utf-8"))
+    assert exit_path.read_text(encoding="utf-8") == str(expected_code)
+
+
+def test_diagnostics_renderer_selects_known_fields_and_preserves_provider_order(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    status_path = tmp_path / "feed-status.json"
+    summary_path = tmp_path / "summary.md"
+    status_path.write_text(
+        json.dumps(
+            {
+                "status": "failure",
+                "message": "line one\nline two | * [unsafe] \x00",
+                "warnings": ["warning\ttext"],
+                "provider_outcomes": [
+                    {
+                        "provider_id": "zeta",
+                        "state": "failed",
+                        "error": "bad\nerror | `code`",
+                        "attempted": 2,
+                        "fetched": 1,
+                        "accepted": 3,
+                        "rejected": 4,
+                        "ignored": "must not render",
+                    },
+                    {
+                        "provider_id": "alpha",
+                        "state": "partial",
+                        "error": "partial error",
+                        "attempted": 5,
+                        "fetched": 6,
+                        "accepted": 7,
+                        "rejected": 8,
+                    },
+                ],
+                "ignored": "must not render",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert deployment._render_feed_diagnostics(status_path, summary_path) == 0
+    rendered = capsys.readouterr().out
+    summary = summary_path.read_text(encoding="utf-8")
+
+    assert rendered == summary
+    assert rendered.index("provider_id: zeta") < rendered.index("provider_id: alpha")
+    for field, value in (
+        ("provider_id", "zeta"),
+        ("state", "failed"),
+        ("error", "bad"),
+        ("attempted", "2"),
+        ("fetched", "1"),
+        ("accepted", "3"),
+        ("rejected", "4"),
+    ):
+        assert f"{field}: {value}" in rendered
+    assert "must not render" not in rendered
+    assert "\\n" in rendered
+    assert "\\t" in rendered
+    assert "\\x00" in rendered
+    assert "\\|" in rendered
+    assert "`code`" not in rendered
+    assert "\x00" not in rendered
+
+
+def test_diagnostics_renderer_bounds_fields_and_total_output(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    status_path = tmp_path / "feed-status.json"
+    status_path.write_text(
+        json.dumps(
+            {
+                "status": "failure",
+                "message": "m" * 400,
+                "warnings": ["w" * 400],
+                "provider_outcomes": [
+                    {
+                        "provider_id": "provider",
+                        "state": "failed",
+                        "error": "e" * 400,
+                        "attempted": 1,
+                        "fetched": 0,
+                        "accepted": 0,
+                        "rejected": 1,
+                    }
+                ]
+                * 30,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert deployment._render_feed_diagnostics(status_path, None) == 0
+    rendered = capsys.readouterr().out.rstrip("\n")
+    assert len(rendered) <= 4096
+    assert len(next(line for line in rendered.splitlines() if line.startswith("message: "))) == 265
+    assert (
+        len(next(line for line in rendered.splitlines() if line.startswith("warning[1]: "))) == 268
+    )
+    assert len(next(line for line in rendered.splitlines() if line.startswith("error: "))) == 263
+
+
+@pytest.mark.parametrize("contents", [None, "{"])
+def test_missing_or_corrupt_diagnostics_status_is_bounded_and_non_gating(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], contents: str | None
+):
+    status_path = tmp_path / "feed-status.json"
+    if contents is not None:
+        status_path.write_text(contents, encoding="utf-8")
+
+    assert deployment._render_feed_diagnostics(status_path, tmp_path / "summary.md") == 0
+    rendered = capsys.readouterr().out
+    assert "diagnostics unavailable" in rendered
+    assert len(rendered) <= 256
+    assert not (tmp_path / "summary.md").exists()
+
+
+def test_diagnostics_summary_write_failure_is_bounded_and_non_gating(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    status_path = tmp_path / "feed-status.json"
+    status_path.write_text(
+        json.dumps({"status": "failure", "message": "failure", "warnings": []}),
+        encoding="utf-8",
+    )
+    summary_path = tmp_path / "missing-parent" / "summary.md"
+
+    assert deployment._render_feed_diagnostics(status_path, summary_path) == 0
+    rendered = capsys.readouterr().out
+    assert "Feed failure diagnostics" in rendered
+    assert "diagnostics unavailable" in rendered
+
+
+def test_diagnostics_command_entry_renders_status_and_summary(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    status_path = tmp_path / "feed-status.json"
+    summary_path = tmp_path / "summary.md"
+    status_path.write_text(
+        json.dumps({"status": "failure", "message": "failure", "warnings": []}),
+        encoding="utf-8",
+    )
+
+    assert (
+        deployment.main(
+            [
+                "diagnostics",
+                "--status-file",
+                str(status_path),
+                "--summary-file",
+                str(summary_path),
+            ]
+        )
+        == 0
+    )
+    assert capsys.readouterr().out == summary_path.read_text(encoding="utf-8")

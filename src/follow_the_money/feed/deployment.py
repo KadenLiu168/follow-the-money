@@ -6,6 +6,7 @@ import argparse
 import json
 import subprocess
 import sys
+import unicodedata
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -36,6 +37,21 @@ LEASE_FIELDS = frozenset(
         "recovery_not_before",
     }
 )
+
+_DIAGNOSTIC_FIELD_LIMIT = 256
+_DIAGNOSTIC_REPORT_LIMIT = 4096
+_DIAGNOSTIC_UNAVAILABLE = "Feed failure diagnostics unavailable"
+_DIAGNOSTIC_PROVIDER_FIELDS = (
+    "provider_id",
+    "state",
+    "error",
+    "attempted",
+    "fetched",
+    "accepted",
+    "rejected",
+)
+_DIAGNOSTIC_COUNTER_FIELDS = frozenset({"attempted", "fetched", "accepted", "rejected"})
+_MARKDOWN_SPECIAL = frozenset("\\`*_{}[]()#+-.!|<>~")
 
 
 class DeploymentError(ValueError):
@@ -488,7 +504,13 @@ def _write_output(path: str | None, mode: str) -> None:
 
 def _write_feed_status(path: Path, result: Any) -> None:
     status: dict[str, Any] = {"status": result.status, "warnings": result.warnings}
-    if result.feed is not None and result.status in {"healthy", "degraded"}:
+    if result.status == "failure":
+        status["message"] = result.message
+        if result.feed is not None:
+            provider_outcomes = result.feed.get("provider_outcomes")
+            if isinstance(provider_outcomes, list):
+                status["provider_outcomes"] = provider_outcomes
+    elif result.feed is not None and result.status in {"healthy", "degraded"}:
         cutoff = datetime.fromisoformat(result.feed["evidence_cutoff_at"])
         day = cutoff.astimezone(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
         status.update(
@@ -500,6 +522,118 @@ def _write_feed_status(path: Path, result: Any) -> None:
             }
         )
     Path(path).write_text(json.dumps(status), encoding="utf-8")
+
+
+def _write_typed_failure_status(path: Path, message: str) -> None:
+    Path(path).write_text(
+        json.dumps({"status": "failure", "message": message, "warnings": []}),
+        encoding="utf-8",
+    )
+
+
+def _bound_diagnostic_text(value: str, limit: int = _DIAGNOSTIC_FIELD_LIMIT) -> str:
+    encoded = value.encode("utf-8")
+    if len(encoded) <= limit:
+        return value
+    return encoded[:limit].decode("utf-8", errors="ignore").rstrip("\\")
+
+
+def _sanitize_diagnostic_text(value: str) -> str:
+    pieces: list[str] = []
+    for char in value:
+        code = ord(char)
+        category = unicodedata.category(char)
+        if char == "\n":
+            pieces.append("\\\\n")
+        elif char == "\r":
+            pieces.append("\\\\r")
+        elif char == "\t":
+            pieces.append("\\\\t")
+        elif char in {"\u2028", "\u2029"}:
+            pieces.append(f"\\\\u{code:04x}")
+        elif category.startswith("C"):
+            pieces.append(f"\\\\x{code:02x}" if code <= 0xFF else f"\\\\u{code:04x}")
+        elif char in _MARKDOWN_SPECIAL:
+            pieces.append(f"\\{char}")
+        else:
+            pieces.append(char)
+    return _bound_diagnostic_text("".join(pieces))
+
+
+def _read_diagnostic_status(path: Path) -> dict[str, Any]:
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or raw.get("status") != "failure":
+        raise ValueError("diagnostic status is not a failure status")
+
+    message = raw.get("message")
+    if message is not None and not isinstance(message, str):
+        raise ValueError("diagnostic message is invalid")
+    warnings = raw.get("warnings", [])
+    if not isinstance(warnings, list) or any(not isinstance(item, str) for item in warnings):
+        raise ValueError("diagnostic warnings are invalid")
+
+    outcomes = raw.get("provider_outcomes", [])
+    if not isinstance(outcomes, list):
+        raise TypeError("diagnostic provider outcomes are invalid")
+    selected_outcomes: list[dict[str, Any]] = []
+    for outcome in outcomes:
+        if not isinstance(outcome, dict):
+            raise TypeError("diagnostic provider outcome is invalid")
+        selected: dict[str, Any] = {}
+        for field in _DIAGNOSTIC_PROVIDER_FIELDS:
+            if field not in outcome:
+                continue
+            value = outcome[field]
+            if field == "error":
+                if value is not None and not isinstance(value, str):
+                    raise ValueError("diagnostic provider error is invalid")
+            elif field in _DIAGNOSTIC_COUNTER_FIELDS:
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    raise ValueError("diagnostic provider counter is invalid")
+            elif not isinstance(value, str):
+                raise ValueError("diagnostic provider field is invalid")
+            selected[field] = value
+        selected_outcomes.append(selected)
+    return {
+        "status": "failure",
+        "message": message,
+        "warnings": warnings,
+        "provider_outcomes": selected_outcomes,
+    }
+
+
+def _diagnostic_report(status: dict[str, Any]) -> str:
+    lines = ["Feed failure diagnostics", "status: failure"]
+    if status["message"] is not None:
+        lines.append(f"message: {_sanitize_diagnostic_text(status['message'])}")
+    for index, warning in enumerate(status["warnings"], start=1):
+        lines.append(f"warning[{index}]: {_sanitize_diagnostic_text(warning)}")
+    for index, outcome in enumerate(status["provider_outcomes"], start=1):
+        lines.append(f"provider[{index}]:")
+        for field in _DIAGNOSTIC_PROVIDER_FIELDS:
+            value = outcome.get(field)
+            if value is None:
+                continue
+            rendered = _sanitize_diagnostic_text(value) if isinstance(value, str) else str(value)
+            lines.append(f"{field}: {rendered}")
+    return _bound_diagnostic_text("\n".join(lines), _DIAGNOSTIC_REPORT_LIMIT)
+
+
+def _render_feed_diagnostics(status_path: Path, summary_path: Path | None) -> int:
+    try:
+        report = _diagnostic_report(_read_diagnostic_status(Path(status_path)))
+    except (KeyError, OSError, TypeError, UnicodeError, ValueError):
+        print(_DIAGNOSTIC_UNAVAILABLE)
+        return 0
+
+    print(report)
+    if summary_path is not None:
+        try:
+            with Path(summary_path).open("a", encoding="utf-8") as summary:
+                summary.write(report + "\n")
+        except OSError:
+            print(_DIAGNOSTIC_UNAVAILABLE)
+    return 0
 
 
 def _command_prepare(args: argparse.Namespace) -> int:
@@ -544,14 +678,10 @@ def _command_collect(args: argparse.Namespace) -> int:
         _write_feed_status(status_path, result)
         code = result.exit_code
     except FeedInputError as exc:
-        status_path.write_text(
-            json.dumps({"status": "failure", "message": str(exc)}), encoding="utf-8"
-        )
+        _write_typed_failure_status(status_path, str(exc))
         code = 2
     except FeedExecutionError as exc:
-        status_path.write_text(
-            json.dumps({"status": "failure", "message": str(exc)}), encoding="utf-8"
-        )
+        _write_typed_failure_status(status_path, str(exc))
         code = 1
     if exit_path:
         exit_path.write_text(str(code), encoding="utf-8")
@@ -574,6 +704,11 @@ def _command_finalize(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_diagnostics(args: argparse.Namespace) -> int:
+    summary_path = Path(args.summary_file) if args.summary_file else None
+    return _render_feed_diagnostics(Path(args.status_file), summary_path)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="follow-the-money-feed-deployment")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -594,6 +729,9 @@ def _build_parser() -> argparse.ArgumentParser:
     collect.add_argument("--run-id", required=True)
     collect.add_argument("--status-file", default="feed-status.json")
     collect.add_argument("--exit-file", default=None)
+    diagnostics = subparsers.add_parser("diagnostics")
+    diagnostics.add_argument("--status-file", default="feed-status.json")
+    diagnostics.add_argument("--summary-file", default=None)
     finalize = subparsers.add_parser("finalize")
     finalize.add_argument("--repo", default=".")
     finalize.add_argument("--root", default="feeds")
@@ -612,6 +750,8 @@ def main(argv: list[str] | None = None) -> int:
             return _command_publish(args)
         if args.command == "collect":
             return _command_collect(args)
+        if args.command == "diagnostics":
+            return _command_diagnostics(args)
         return _command_finalize(args)
     except DeploymentError as exc:
         print(f"follow-the-money-feed-deployment: {exc}", file=sys.stderr)
