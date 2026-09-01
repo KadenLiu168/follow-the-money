@@ -2,4 +2,13 @@
 # Minimal internal Feed entry for Agent/Skill use. Forwards arguments and
 # exit codes to the deterministic feed pipeline; there is no public CLI.
 set -euo pipefail
-exec uv run python -m follow_the_money.feed.cli "$@"
+
+repo_root="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+python="$repo_root/.venv/bin/python"
+if [[ ! -x "$python" ]]; then
+    printf 'follow-the-money-feed: missing %s; run uv sync --frozen --all-groups\n' "$python" >&2
+    exit 2
+fi
+
+cd "$repo_root"
+exec "$python" -m follow_the_money.feed.cli "$@"

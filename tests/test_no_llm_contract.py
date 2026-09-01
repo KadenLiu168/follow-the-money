@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -139,6 +140,41 @@ def test_shipped_config_loads_credential_free():
 # ---------------------------------------------------------------------------
 # Minimal internal Feed entry
 # ---------------------------------------------------------------------------
+
+
+def test_minimal_entry_runs_via_skill_symlink_without_uv_on_path(tmp_path):
+    skill = tmp_path / "follow-the-money"
+    skill.symlink_to(REPO_ROOT, target_is_directory=True)
+    env = {**os.environ, "PATH": "/usr/bin:/bin"}
+    assert shutil.which("uv", path=env["PATH"]) is None
+
+    proc = subprocess.run(
+        [str(skill / "scripts" / "feed" / "follow-the-money-feed"), "--help"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert "usage: follow-the-money-feed" in proc.stdout
+
+
+def test_minimal_entry_reports_missing_project_environment(tmp_path):
+    script = tmp_path / "repo" / "scripts" / "feed" / "follow-the-money-feed"
+    script.parent.mkdir(parents=True)
+    shutil.copy2(REPO_ROOT / "scripts" / "feed" / "follow-the-money-feed", script)
+
+    proc = subprocess.run(
+        [str(script), "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 2
+    assert "run uv sync --frozen --all-groups" in proc.stderr
 
 
 def test_minimal_entry_publishes_validating_feed(tmp_path):
