@@ -33,6 +33,19 @@ def test_workflow_validator_rejects_deployment_contract_breaks(
         validate_repository_workflows(REPO_ROOT, generate_feed_path=altered)
 
 
+def test_workflow_validator_rejects_collection_for_migration_mode(tmp_path: Path):
+    workflow = REPO_ROOT / ".github/workflows/generate-feed.yml"
+    altered = tmp_path / "generate-feed.yml"
+    text = workflow.read_text(encoding="utf-8").replace(
+        "if: ${{ steps.prepare.outputs.mode == 'armed' }}",
+        "if: ${{ steps.prepare.outputs.mode == 'armed' || steps.prepare.outputs.mode == 'migration' }}",
+        1,
+    )
+    altered.write_text(text, encoding="utf-8")
+    with pytest.raises(ValueError, match="collection must be armed-only"):
+        validate_repository_workflows(REPO_ROOT, generate_feed_path=altered)
+
+
 def test_workflow_validator_rejects_broad_generated_ci_ignore(tmp_path: Path):
     workflow = REPO_ROOT / ".github/workflows/test.yml"
     altered = tmp_path / "test.yml"

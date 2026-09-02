@@ -118,9 +118,12 @@ to any submitted text as a deterministic safety check.
 ## Scheduled generation boundary
 
 - GitHub Actions runs the deterministic Feed on `ubuntu-latest` at `20 0 * * *`
-  (08:20 Asia/Shanghai), or by `workflow_dispatch`, using repository-backed
-  `feeds/` state. It does not invoke Host-Agent reasoning, Audit, Event
-  Structuring, or retained market/scoring capabilities.
+  (08:20 Asia/Shanghai), or by `workflow_dispatch`, using `feeds/` for consumer
+  products and `.feed-state/` for repository-backed runtime state. The first
+  invocation may migrate legacy runtime files or bootstrap with zero Provider
+  requests; normal arming uses the runtime checkpoint and lease. It does not
+  invoke Host-Agent reasoning, Audit, Event Structuring, or retained
+  market/scoring capabilities.
 - The Feed reflects one fixed evidence cutoff captured from actual runtime
   before Provider requests; it never claims coverage through collection
   completion or a nominal schedule value.

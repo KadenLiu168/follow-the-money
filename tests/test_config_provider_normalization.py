@@ -808,7 +808,11 @@ def test_static_manifest_failure_happens_before_feed_runtime_mutation(tmp_path: 
     monkeypatch.setattr(feed_cli, "_default_manifest_root", lambda: manifest_root)
     output_root = tmp_path / "out"
     with pytest.raises(feed_cli.FeedInputError):
-        feed_cli.run_feed(config_path=str(config_path), output_root=str(output_root))
+        feed_cli.run_feed(
+            config_path=str(config_path),
+            output_root=str(output_root),
+            runtime_state_root=str(tmp_path / "state"),
+        )
 
     assert not output_root.exists()
 
@@ -832,7 +836,11 @@ def test_static_manifest_failure_preserves_existing_latest_and_rate_state(
     latest.write_bytes(b"previous-latest")
 
     with pytest.raises(feed_cli.FeedInputError):
-        feed_cli.run_feed(config_path=str(config_path), output_root=str(output_root))
+        feed_cli.run_feed(
+            config_path=str(config_path),
+            output_root=str(output_root),
+            runtime_state_root=str(tmp_path / "state"),
+        )
 
     assert latest.read_bytes() == b"previous-latest"
     assert not (output_root / "rate-registry.json").exists()
@@ -867,7 +875,11 @@ def test_mapping_and_coverage_failures_precede_all_feed_mutation(
     monkeypatch.setattr(feed_cli, "_default_manifest_root", lambda: manifest_root)
     output_root = tmp_path / "out"
     with pytest.raises(feed_cli.FeedInputError):
-        feed_cli.run_feed(config_path=str(config_path), output_root=str(output_root))
+        feed_cli.run_feed(
+            config_path=str(config_path),
+            output_root=str(output_root),
+            runtime_state_root=str(tmp_path / "state"),
+        )
 
     assert not output_root.exists()
 

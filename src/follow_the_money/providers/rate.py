@@ -1,11 +1,11 @@
-"""Closed durable output-root rate-state registry.
+"""Closed durable runtime-state rate registry.
 
 Design section 2 (rate policy / crash safety):
 
-- The output root holds a versioned durable rate-state registry plus one
+- The runtime-state root holds a versioned durable rate-state registry plus one
   per-``scope_id`` state, protected by the collection lock, updated by
   same-directory atomic replace plus file/parent ``fsync``.
-- A genuinely new output root creates its registry once with atomic
+- A genuinely new runtime-state root creates its registry once with atomic
   no-replace.
 - A new scope initializes through ``initializing -> full-capacity-state ->
   active``; recovery may complete an ``initializing`` entry only after
@@ -104,7 +104,7 @@ def _scope_file(root: Path, scope_id: str) -> Path:
 
 
 class RateRegistry:
-    """Durable per-output-root rate-state registry."""
+    """Durable per-runtime-state-root rate-state registry."""
 
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
@@ -147,6 +147,8 @@ class RateRegistry:
             raise RateStateError("registry must be a JSON object")
         if data.get("version") != REGISTRY_VERSION:
             raise RateStateError(f"unknown registry schema {data.get('version')!r}")
+        if data.get("root_identity") != str(self.root.resolve()):
+            raise RateStateError("rate registry root_identity is inconsistent")
         return data
 
     def _write_registry(self, data: dict[str, Any]) -> None:

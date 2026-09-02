@@ -19,7 +19,9 @@ from unittest import mock
 
 import pytest
 
-from follow_the_money.feed.cli import FeedCliError, FeedExecutionError, run_feed
+from follow_the_money.feed.checkpoint import FeedCheckpoint, write_checkpoint
+from follow_the_money.feed.cli import FeedCliError, FeedExecutionError
+from follow_the_money.feed.cli import run_feed as _run_feed
 from follow_the_money.feed.publish import (
     PublishError,
     atomic_no_replace_rename,
@@ -28,6 +30,13 @@ from follow_the_money.feed.publish import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 T0 = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
+
+
+def run_feed(**kwargs):
+    if "runtime_state_root" not in kwargs and kwargs.get("output_root") is not None:
+        output = Path(kwargs["output_root"])
+        kwargs["runtime_state_root"] = str(output.parent / f".{output.name}-state")
+    return _run_feed(**kwargs)
 
 
 def _ts(dt: datetime) -> str:
@@ -420,6 +429,7 @@ def _child_run_feed(out_root: str, cutoff_iso: str, status_file: str) -> None:
     cutoff = datetime.fromisoformat(cutoff_iso)
     result = run_feed(
         output_root=out_root,
+        runtime_state_root=str(Path(out_root).parent / f".{Path(out_root).name}-state"),
         cutoff=cutoff,
         providers_fn=_minimal_registry,
         enabled_provider_ids=_minimal_enabled_ids(),
@@ -430,8 +440,6 @@ def _child_run_feed(out_root: str, cutoff_iso: str, status_file: str) -> None:
 def test_two_processes_serialized_lock_before_cutoff(tmp_path):
     out = tmp_path / "out"
     # First process publishes at T0.
-    from follow_the_money.feed.cli import run_feed
-
     r1 = run_feed(
         output_root=str(out),
         cutoff=T0,
@@ -492,8 +500,6 @@ def test_cutoff_clock_is_read_after_lock_acquisition(tmp_path, monkeypatch):
 
 def test_non_advancing_cutoff_no_artifact(tmp_path):
     out = tmp_path / "out"
-    from follow_the_money.feed.cli import run_feed
-
     run_feed(
         output_root=str(out),
         cutoff=T0,
@@ -519,8 +525,6 @@ def test_non_advancing_cutoff_no_artifact(tmp_path):
 
 def test_deadline_reserve_blocks_publication(tmp_path):
     out = tmp_path / "out"
-    from follow_the_money.feed.cli import run_feed
-
     clock = {"t": 0.0, "calls": 0}
 
     def monotonic() -> float:
@@ -680,11 +684,12 @@ def test_production_dry_run_coordinates_and_reconciles_rate_state(tmp_path, monk
     from follow_the_money.feed import cli as feed_cli
 
     out = tmp_path / "out"
+    state_root = tmp_path / "state"
     acquire_calls: list[Path] = []
     original_acquire = feed_cli.CollectionLock.acquire
 
     def acquire(lock):
-        acquire_calls.append(out)
+        acquire_calls.append(state_root)
         return original_acquire(lock)
 
     monkeypatch.setattr(feed_cli.CollectionLock, "acquire", acquire)
@@ -697,15 +702,16 @@ def test_production_dry_run_coordinates_and_reconciles_rate_state(tmp_path, monk
 
     result = run_feed(
         output_root=str(out),
+        runtime_state_root=str(state_root),
         cutoff=T0,
         dry_run=True,
         enabled_provider_ids=["federal_reserve"],
     )
 
     assert result.feed is not None
-    assert acquire_calls == [out]
-    assert (out / "rate-registry.json").exists()
-    scope_files = [p for p in out.glob("scope-*.json")]
+    assert acquire_calls == [state_root]
+    assert (state_root / "rate-registry.json").exists()
+    scope_files = [p for p in state_root.glob("scope-*.json")]
     assert len(scope_files) == 1
     state = json.loads(scope_files[0].read_bytes())
     assert Decimal(state["tokens"]) < Decimal(state["capacity"])
@@ -741,32 +747,39 @@ def test_late_provider_result_is_not_normalized_or_added_to_feed(tmp_path):
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
-def test_zero_mutation_after_invalid_latest(tmp_path):
+def test_corrupt_latest_does_not_drive_steady_state_planning(tmp_path):
     out = tmp_path / "out"
+    state_root = tmp_path / "state"
     out.mkdir()
     (out / "latest.json").write_bytes(b"{corrupt")
-    with pytest.raises(FeedExecutionError, match="invalid_latest_integrity"):
+    write_checkpoint(state_root / "feed-checkpoint.json", FeedCheckpoint(previous_success=None))
+    checkpoint_bytes = (state_root / "feed-checkpoint.json").read_bytes()
+    with pytest.raises(FeedExecutionError, match="current latest Feed ownership key invalid"):
         run_feed(
             output_root=str(out),
+            runtime_state_root=str(state_root),
             cutoff=T0 + timedelta(hours=1),
             providers_fn=_minimal_registry,
-            enabled_provider_ids=["federal_reserve"],
+            enabled_provider_ids=_minimal_enabled_ids(),
         )
-    # Zero provider writes: no rate registry, no dated artifact, and the
-    # corrupt latest is untouched (the lock file itself is infrastructure).
-    assert not (out / "rate-registry.json").exists()
-    assert not (out / "daily").exists()
+    # Planning is checkpoint-only; publication rejects the corrupt product
+    # latest without changing it or advancing the checkpoint. The immutable
+    # dated commit may already exist before latest ownership validation fails.
+    assert (state_root / "rate-registry.json").exists()
+    assert (state_root / "feed-checkpoint.json").read_bytes() == checkpoint_bytes
+    assert len(list((out / "daily").rglob("*.json"))) == 1
     assert (out / "latest.json").read_bytes() == b"{corrupt"
 
 
 def test_two_os_processes_serialized_by_collection_lock(tmp_path):
     """Cross-process lock enforcement: while one OS process holds the
-    output-root collection lock, a second OS process's run_feed fails typed
+    runtime-state-root collection lock, a second OS process's run_feed fails typed
     ``collection_lock_timeout`` with zero artifacts (not merely an
     in-thread test)."""
     import multiprocessing as mp
 
     out = tmp_path / "out"
+    state_root = tmp_path / "state"
     held = mp.Event()
     release = mp.Event()
     status_file = str(tmp_path / "runner_status.json")
@@ -780,7 +793,7 @@ def test_two_os_processes_serialized_by_collection_lock(tmp_path):
         release_ev.wait(300)
         lock.release()
 
-    def runner(root: str, cutoff_iso: str, status: str) -> None:
+    def runner(root: str, state: str, cutoff_iso: str, status: str) -> None:
         import time as _time
         from datetime import datetime
 
@@ -801,6 +814,7 @@ def test_two_os_processes_serialized_by_collection_lock(tmp_path):
         try:
             run_feed(
                 output_root=root,
+                runtime_state_root=state,
                 cutoff=datetime.fromisoformat(cutoff_iso),
                 providers_fn=_minimal_registry,
                 enabled_provider_ids=["federal_reserve"],
@@ -812,13 +826,13 @@ def test_two_os_processes_serialized_by_collection_lock(tmp_path):
         Path(status).write_text(json.dumps(outcome))
 
     ctx = mp.get_context("fork")
-    hp = ctx.Process(target=holder, args=(str(out), held, release))
+    hp = ctx.Process(target=holder, args=(str(state_root), held, release))
     hp.start()
     try:
         assert held.wait(60), "holder process never acquired the lock"
         rp = ctx.Process(
             target=runner,
-            args=(str(out), _ts(T0), status_file),
+            args=(str(out), str(state_root), _ts(T0), status_file),
         )
         rp.start()
         rp.join(90)
@@ -837,11 +851,12 @@ def test_two_os_processes_serialized_by_collection_lock(tmp_path):
 
 def test_collection_lock_timeout_typed(tmp_path):
     out = tmp_path / "out"
-    out.mkdir()
+    state_root = tmp_path / "state"
+    state_root.mkdir()
     # Hold the lock from another process/thread with a very short timeout.
     from follow_the_money.providers.lock import CollectionLock
 
-    lock = CollectionLock(out, timeout_seconds=60, monotonic_now=time.monotonic)
+    lock = CollectionLock(state_root, timeout_seconds=60, monotonic_now=time.monotonic)
     lock.acquire()
     try:
         clock = {"t": time.monotonic()}
@@ -850,11 +865,10 @@ def test_collection_lock_timeout_typed(tmp_path):
             clock["t"] += 1000  # instantly past any deadline
             return clock["t"]
 
-        from follow_the_money.feed.cli import run_feed
-
         with pytest.raises(FeedExecutionError, match="collection_lock_timeout"):
             run_feed(
                 output_root=str(out),
+                runtime_state_root=str(state_root),
                 cutoff=T0,
                 providers_fn=_minimal_registry,
                 enabled_provider_ids=["federal_reserve"],

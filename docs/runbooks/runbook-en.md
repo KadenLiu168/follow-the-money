@@ -7,7 +7,8 @@ uv sync --frozen --all-groups
 ```
 
 The deterministic engine is credential-free: no API key or model is ever
-required. The repository reads explicit `--config` / `--output-root` paths and
+required. The repository reads explicit `--config`, `--output-root`, and
+`--runtime-state-root` paths and
 never reads `~/.follow-the-money/config.json` implicitly.
 
 ## Feed generation
@@ -19,6 +20,7 @@ uv run python -m follow_the_money.feed.cli --dry-run
 
 # Real local run with the repository output root:
 uv run python -m follow_the_money.feed.cli --output-root feeds \
+  --runtime-state-root .feed-state \
   --status-file feed-status.json
 ```
 
@@ -30,8 +32,9 @@ required.
 
 `generate-feed.yml` is active on GitHub-hosted `ubuntu-latest`, at `20 0 * * *`
 (08:20 Asia/Shanghai), and through `workflow_dispatch`. The workflow uses
-`feeds/` for both Feed output and repository-backed RateRegistry state. Its
-runtime cutoff is captured after the job starts; 08:20 is only the schedule.
+`feeds/` for consumer Feed products and `.feed-state/` for repository-backed
+RateRegistry, lease, lock, and checkpoint state. Its runtime cutoff is captured
+after the job starts; 08:20 is only the schedule.
 
 Before declaring it operational, verify repository Actions `contents: write`
 and branch policy permit the workflow identity to make ordinary fast-forward
@@ -41,12 +44,13 @@ commits to `main`.
 
 1. Disable any prior external scheduler before the first
    bootstrap; do not import unverifiable state.
-2. Dispatch `generate-feed.yml` manually. Static configuration and resolved
-   Provider contracts are checked first. A clean repository creates only the
-   RateRegistry marker, registry, exact scope files, and a `bootstrap` lease;
-   it makes zero Provider requests and publishes that state with a normal
-   fast-forward commit.
-3. Read `feeds/feed-run-lease.json` and wait until `recovery_not_before`.
+2. Dispatch `generate-feed.yml` manually. Static configuration, resolved
+   Provider contracts, and the two-root layout are checked first. A complete
+   legacy layout is migrated without Provider requests; a clean repository
+   creates the RateRegistry marker, registry, exact scope files, explicit null
+   checkpoint, and a `bootstrap` lease. Both paths publish with a normal
+   fast-forward commit and end before collection.
+3. Read `.feed-state/feed-run-lease.json` and wait until `recovery_not_before`.
    A run before that boundary fails closed without resetting state.
 4. Dispatch the workflow again. It publishes `in_progress` and all required
    state before Feed execution, then publishes terminal exact state after
@@ -61,10 +65,11 @@ work, a final publication conflict preserves remote `in_progress`.
 
 Only these paths may be published by the deployment helper:
 
-- `feeds/.follow-the-money-persistent`
-- `feeds/rate-registry.json`
-- the exact `feeds/scope-<digest>.json` files named by the registry
-- `feeds/feed-run-lease.json`
+- `.feed-state/.follow-the-money-persistent`
+- `.feed-state/rate-registry.json`
+- `.feed-state/feed-checkpoint.json` for bootstrap/migration and success finalization
+- the exact `.feed-state/scope-<digest>.json` files named by the registry
+- `.feed-state/feed-run-lease.json`
 - `feeds/latest.json` and a successful dated `feeds/daily/<date>/<run_id>.json`
 
 Locks, status files, staging, temporary files, bundles, and debug/failure
@@ -83,12 +88,12 @@ uv run python scripts/quality_gate.py
 The quality gate includes workflow validation, actionlint in CI, lint, format,
 type-checking, the credential-free test suite, and the offline wheel build.
 
-## Durable output-root registry
+## Durable runtime-state registry
 
 Cross-root concurrent use of the same Provider/rate scope is unsupported:
-cooperating processes sharing a scope must share the same output root.
+cooperating processes sharing a scope must share the same runtime-state root.
 
-- The output root holds `rate-registry.json` (versioned) plus one per-`scope_id`
+- The runtime-state root holds `rate-registry.json` (versioned) plus one per-`scope_id`
   state file, all updated by same-directory atomic replace plus file/parent
   `fsync` under the collection lock.
 - New scope: recoverable `initializing -> full-capacity state -> active`

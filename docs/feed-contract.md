@@ -67,12 +67,14 @@ Feeds always use the semantic projection.
   copying another lifecycle timestamp, or otherwise synthesizing an
   unobserved event.
 - The evidence window is `[window.start, evidence_cutoff_at)` and MUST
-  strictly advance. A captured cutoff equal to or earlier than the latest
-  valid cutoff fails `non_advancing_cutoff` with zero provider calls and
+  strictly advance. A captured cutoff equal to or earlier than the checkpoint
+  cutoff fails `non_advancing_cutoff` with zero provider calls and
   zero artifacts.
-- An actually absent `feeds/latest.json` is a first-run bootstrap with
-  `window.start = cutoff - 72h`. A present but unreadable/partial/schema-
-  invalid/digest-invalid latest fails `invalid_latest_integrity`.
+- An explicit null `.feed-state/feed-checkpoint.json` is the first-run
+  bootstrap with `window.start = cutoff - 72h`. Steady-state planning reads
+  only that checkpoint; a present but unreadable/partial/schema-invalid or
+  digest-invalid `feeds/latest.json` is rejected by the existing publication or
+  consumption boundary, not used as a continuity fallback.
 - A gap > 72h uses the bounded bootstrap start and records the uncovered
   interval as a structured `coverage_gap` (plus a warning); an exact 72h gap
   starts at the prior cutoff.
@@ -138,15 +140,16 @@ observations not source-available at cutoff are rejected.
   `commit_durability_unknown`; recovery re-applies the maximum
   `(evidence_cutoff_at, content_digest)` tuple rule.
 - The scheduled GitHub workflow runs on GitHub-hosted `ubuntu-latest` at
-  `20 0 * * *` (08:20 Asia/Shanghai), uses repository-backed `feeds/` state,
-  and publishes only through the durable bootstrap/lease/finalization boundary.
-  The evidence cutoff remains runtime-derived rather than the nominal schedule.
+  `20 0 * * *` (08:20 Asia/Shanghai), uses `feeds/` for Feed products and
+  `.feed-state/` for repository-backed runtime state, and publishes only
+  through the durable migration/bootstrap/lease/finalization boundary. The
+  evidence cutoff remains runtime-derived rather than the nominal schedule.
 
 ## Minimal internal Feed entry
 
 - The minimal internal entry (`python -m follow_the_money.feed.cli` behind
-  `scripts/feed/follow-the-money-feed`) supports explicit config/output
-  roots, `--dry-run`, fixture clocks/windows, and deterministic exit codes
+  `scripts/feed/follow-the-money-feed`) supports explicit config/product/
+  runtime-state roots, `--dry-run`, fixture clocks/windows, and deterministic exit codes
   (0 healthy/degraded, 1 generation/publication failure, 2 usage/config).
 - `--dry-run` publishes nothing but real sends still lock and durably
   debit/reconcile rate state; an explicit no-send fixture dry run may leave

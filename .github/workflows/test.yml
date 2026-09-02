@@ -3,10 +3,11 @@ name: test
 on:
   push:
     paths-ignore:
-      - feeds/.follow-the-money-persistent
-      - feeds/rate-registry.json
-      - feeds/scope-*.json
-      - feeds/feed-run-lease.json
+      - .feed-state/.follow-the-money-persistent
+      - .feed-state/feed-checkpoint.json
+      - .feed-state/rate-registry.json
+      - .feed-state/scope-*.json
+      - .feed-state/feed-run-lease.json
       - feeds/latest.json
       - feeds/daily/**/*.json
   pull_request:

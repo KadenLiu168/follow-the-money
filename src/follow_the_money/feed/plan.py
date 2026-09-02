@@ -4,11 +4,10 @@ Design sections 2/4:
 
 - The evidence window is ``[window.start, evidence_cutoff_at)`` and MUST be
   strictly advancing. After acquiring the exclusive collection lock and
-  before any provider call, planning reads ``feeds/latest.json``.
-- An actually absent path is a first-run bootstrap (``window.start =
-  cutoff - 72h``). A present but invalid latest is typed
-  ``invalid_latest_integrity`` with zero provider calls/writes.
-- If the captured cutoff <= latest cutoff, planning fails typed
+  before any provider call, planning reads the validated runtime checkpoint.
+- An explicit null previous success is a first-run bootstrap (``window.start
+  = cutoff - 72h``).
+- If the captured cutoff <= checkpoint cutoff, planning fails typed
   ``non_advancing_cutoff`` with no call/artifact.
 - A gap > 72h uses the bounded bootstrap start and records an uncovered
   interval warning; an exact 72h gap starts at the prior cutoff.
@@ -22,13 +21,13 @@ Design sections 2/4:
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 from ..config.model import AppConfig
+from .checkpoint import PreviousSuccess
 
 
 class FeedPlanError(ValueError):
@@ -44,7 +43,13 @@ class FeedPlan:
 
 
 def parse_utc(value: str) -> datetime:
-    return datetime.fromisoformat(value)
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise FeedPlanError(f"invalid checkpoint cutoff: {value!r}") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0):
+        raise FeedPlanError(f"invalid checkpoint cutoff: {value!r}")
+    return parsed
 
 
 def fmt_utc(dt: datetime) -> str:
@@ -54,49 +59,42 @@ def fmt_utc(dt: datetime) -> str:
 def plan_window(
     *,
     cutoff: datetime,
-    latest_path: Path,
+    previous_success: PreviousSuccess | None,
     bootstrap_lookback_hours: int = 72,
     gap_threshold_hours: int = 72,
-    validate_latest: Callable[[Path], Any] | None = None,
 ) -> FeedPlan:
     """Plan the strictly advancing half-open evidence window.
 
-    ``validate_latest`` returns the latest Feed dict or raises on invalid
-    integrity. ``None`` means treat any present path as invalid-integrity.
+    ``previous_success`` is validated before it reaches this pure arithmetic
+    function; it is deliberately not a path or a Feed document.
     """
+    if cutoff.tzinfo is None or cutoff.utcoffset() is None:
+        raise FeedPlanError("cutoff must be timezone-aware")
     cutoff_iso = fmt_utc(cutoff)
 
-    if not latest_path.exists():
+    if previous_success is None:
         start = cutoff - timedelta(hours=bootstrap_lookback_hours)
         return FeedPlan(window_start=fmt_utc(start), evidence_cutoff_at=cutoff_iso, bootstrap=True)
 
-    # Present path: must validate as a complete latest Feed.
-    try:
-        latest = validate_latest(latest_path) if validate_latest else None
-    except Exception as exc:
-        raise FeedPlanError(f"invalid_latest_integrity: {exc}") from exc
-    if latest is None:
-        raise FeedPlanError("invalid_latest_integrity: latest path present but unvalidated")
-
-    latest_cutoff = parse_utc(latest["evidence_cutoff_at"])
-    if cutoff <= latest_cutoff:
+    previous_cutoff = parse_utc(previous_success.evidence_cutoff_at)
+    if cutoff <= previous_cutoff:
         raise FeedPlanError(
-            "non_advancing_cutoff: new cutoff <= latest cutoff "
-            f"({cutoff_iso} <= {fmt_utc(latest_cutoff)})"
+            "non_advancing_cutoff: new cutoff <= checkpoint cutoff "
+            f"({cutoff_iso} <= {fmt_utc(previous_cutoff)})"
         )
 
-    gap = (cutoff - latest_cutoff).total_seconds() / 3600
+    gap = (cutoff - previous_cutoff).total_seconds() / 3600
     if gap > gap_threshold_hours:
         start = cutoff - timedelta(hours=bootstrap_lookback_hours)
         return FeedPlan(
             window_start=fmt_utc(start),
             evidence_cutoff_at=cutoff_iso,
             bootstrap=True,
-            gap_warning=(fmt_utc(latest_cutoff), fmt_utc(start)),
+            gap_warning=(fmt_utc(previous_cutoff), fmt_utc(start)),
         )
     # Exact 72h or less: start at the prior cutoff (strictly advancing).
     return FeedPlan(
-        window_start=fmt_utc(latest_cutoff), evidence_cutoff_at=cutoff_iso, bootstrap=False
+        window_start=fmt_utc(previous_cutoff), evidence_cutoff_at=cutoff_iso, bootstrap=False
     )
 
 

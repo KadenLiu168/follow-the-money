@@ -14,6 +14,12 @@ snapshot. A retained registry field is a validation-only compatibility mirror;
 it cannot control runtime behavior. Coverage membership comes only from matrix
 rows, so a Provider may belong to multiple groups.
 
+`output_root` and `runtime_state_root` are separate required application paths.
+The former is the consumer Feed product root (`feeds/`); the latter owns the
+collection lock, RateRegistry, deployment lease, and Feed continuity checkpoint
+(`.feed-state/`). Runtime layout is excluded from the Feed semantic
+configuration snapshot.
+
 This remains an evidence-only, credential-free Provider → Feed → Host Agent
 boundary. It does not perform mapping research or introduce an Agent/LLM
 runtime.

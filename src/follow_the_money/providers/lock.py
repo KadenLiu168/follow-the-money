@@ -1,12 +1,12 @@
-"""Exclusive full-run output-root collection lock.
+"""Exclusive full-run runtime-state collection lock.
 
 Design section 2:
 
-- V1 uses one exclusive Feed collection lock rooted in the explicit output
-  root, acquired before reading latest or capturing a cutoff and held through
+- V1 uses one exclusive Feed collection lock rooted in the explicit runtime
+  state root, acquired before reading continuity state or capturing a cutoff and held through
   provider collection and Feed publication.
 - Cooperating CLI processes that share a provider/rate scope must share that
-  output root; cross-root concurrent use of the same scope is unsupported.
+  runtime-state root; cross-root concurrent use of the same scope is unsupported.
 - Lock waiting uses the same injected monotonic deadline, occupies no
   provider-request concurrency slot, and fails typed
   ``collection_lock_timeout`` with no provider call or artifact if the
@@ -30,7 +30,7 @@ class CollectionLockError(ValueError):
 
 
 class CollectionLock:
-    """Cross-process exclusive lock on the output root (fcntl.flock)."""
+    """Cross-process exclusive lock on the runtime-state root (fcntl.flock)."""
 
     def __init__(
         self,

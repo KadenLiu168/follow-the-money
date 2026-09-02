@@ -14,7 +14,9 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from ..canonical import load_canonical_json
 from ..config.model import AppConfig, RatePolicy
+from ..providers.lock import LOCK_FILENAME
 from ..providers.rate import (
     PERSISTENCE_MARKER,
     REGISTRY_FILENAME,
@@ -22,6 +24,15 @@ from ..providers.rate import (
     RateStateError,
     _atomic_write,
 )
+from ..schema import SchemaError
+from .checkpoint import (
+    CHECKPOINT_FILENAME,
+    FeedCheckpoint,
+    PreviousSuccess,
+    read_checkpoint,
+    write_checkpoint,
+)
+from .validate import assert_feed_identity, validate_feed
 
 LEASE_FILENAME = "feed-run-lease.json"
 LEASE_VERSION = "1"
@@ -37,6 +48,13 @@ LEASE_FIELDS = frozenset(
         "recovery_not_before",
     }
 )
+_RUNTIME_DURABLE_NAMES = frozenset(
+    {PERSISTENCE_MARKER, REGISTRY_FILENAME, LEASE_FILENAME, CHECKPOINT_FILENAME}
+)
+_RUNTIME_TRANSIENT_NAMES = frozenset({LOCK_FILENAME, "feed-status.json", ".feed-exit-code"})
+_LAYOUT_EMPTY = "empty"
+_LAYOUT_NEW = "new"
+_LAYOUT_LEGACY = "legacy"
 
 _DIAGNOSTIC_FIELD_LIMIT = 256
 _DIAGNOSTIC_REPORT_LIMIT = 4096
@@ -226,7 +244,18 @@ def _validate_existing_state(
     if not marker.is_file() or not registry.registry_path.is_file():
         raise DeploymentError("established deployment state is missing marker or registry")
     try:
+        registry_payload = load_canonical_json(
+            registry.registry_path.read_bytes(), where=str(registry.registry_path)
+        )
+        if not isinstance(registry_payload, dict) or registry_payload.get("root_identity") != str(
+            root.resolve()
+        ):
+            raise DeploymentError("rate registry root_identity is inconsistent")
         scope_ids = registry.registered_scope_ids()
+        expected_scope_names = {registry.scope_path(scope_id).name for scope_id in scope_ids}
+        actual_scope_names = {path.name for path in root.glob("scope-*.json")}
+        if actual_scope_names != expected_scope_names:
+            raise DeploymentError("rate scope files are missing/partial or orphaned")
         for scope_id in scope_ids:
             state = registry.read_active_scope(scope_id)
             policy = policies.get(scope_id)
@@ -236,9 +265,216 @@ def _validate_existing_state(
                 or state.minimum_interval_seconds != policy.minimum_interval_seconds
             ):
                 raise DeploymentError(f"rate scope {scope_id!r} policy is incompatible")
+    except DeploymentError:
+        raise
     except RateStateError as exc:
         raise DeploymentError(str(exc)) from exc
+    except (OSError, ValueError) as exc:
+        raise DeploymentError("rate registry is invalid") from exc
     return registry
+
+
+def _runtime_entries(root: Path) -> tuple[Path, ...]:
+    if not root.exists():
+        return ()
+    if not root.is_dir():
+        raise DeploymentError(f"runtime state root is not a directory: {root}")
+    try:
+        return tuple(sorted(root.iterdir(), key=lambda path: path.name))
+    except OSError as exc:
+        raise DeploymentError(f"cannot inspect runtime state root {root}: {exc}") from exc
+
+
+def _is_transient_runtime_path(path: Path) -> bool:
+    name = path.name
+    return (
+        name in _RUNTIME_TRANSIENT_NAMES
+        or name.startswith(".stage-")
+        or ".tmp-" in name
+        or name.endswith(".tmp")
+    )
+
+
+def _assert_no_unknown_runtime_entries(root: Path, expected: set[str]) -> None:
+    unexpected = [
+        path.name
+        for path in _runtime_entries(root)
+        if path.name not in expected and not _is_transient_runtime_path(path)
+    ]
+    if unexpected:
+        raise DeploymentError(f"unsupported runtime state paths: {sorted(unexpected)}")
+
+
+def _validate_new_layout(
+    runtime_root: Path, config: AppConfig, policies: dict[str, RatePolicy]
+) -> tuple[RateRegistry, DeploymentLease]:
+    runtime_root = Path(runtime_root)
+    required = set(_RUNTIME_DURABLE_NAMES)
+    expected = required | {path.name for path in runtime_root.glob("scope-*.json")}
+    _assert_no_unknown_runtime_entries(runtime_root, expected)
+    missing = sorted(name for name in required if not (runtime_root / name).is_file())
+    if missing:
+        raise DeploymentError(f"partial deployment state is missing durable files: {missing}")
+    registry = _validate_existing_state(runtime_root, config, policies)
+    lease = read_lease(runtime_root / LEASE_FILENAME)
+    read_checkpoint(runtime_root / CHECKPOINT_FILENAME)
+    return registry, lease
+
+
+def _legacy_paths(root: Path, registry: RateRegistry) -> tuple[Path, ...]:
+    return (
+        root / PERSISTENCE_MARKER,
+        root / REGISTRY_FILENAME,
+        *(
+            root / registry.scope_path(scope_id).name
+            for scope_id in registry.registered_scope_ids()
+        ),
+        root / LEASE_FILENAME,
+    )
+
+
+def _checkpoint_from_latest(product_root: Path) -> FeedCheckpoint:
+    latest_path = Path(product_root) / "latest.json"
+    if not latest_path.exists():
+        return FeedCheckpoint(previous_success=None)
+    if not latest_path.is_file():
+        raise DeploymentError("legacy latest Feed is not a regular file")
+    try:
+        raw = load_canonical_json(latest_path.read_bytes(), where="legacy latest.json")
+        if not isinstance(raw, dict):
+            raise DeploymentError("legacy latest Feed must be an object")
+        validate_feed(raw)
+        assert_feed_identity(raw)
+        if raw.get("pipeline", {}).get("status") not in {"healthy", "degraded"}:
+            raise DeploymentError("legacy latest Feed is not a successful Feed")
+        cutoff = raw.get("evidence_cutoff_at")
+        run_id = raw.get("run_id")
+        if not isinstance(cutoff, str) or not isinstance(run_id, str):
+            raise DeploymentError("legacy latest Feed identity is incomplete")
+        return FeedCheckpoint(
+            previous_success=PreviousSuccess(
+                evidence_cutoff_at=cutoff,
+                run_id=run_id,
+            )
+        )
+    except (OSError, SchemaError, TypeError, ValueError, DeploymentError) as exc:
+        if isinstance(exc, DeploymentError):
+            raise
+        raise DeploymentError("legacy latest Feed is invalid") from exc
+
+
+def _validate_legacy_layout(
+    product_root: Path, config: AppConfig, policies: dict[str, RatePolicy]
+) -> tuple[RateRegistry, DeploymentLease]:
+    registry = _validate_existing_state(product_root, config, policies)
+    if (product_root / CHECKPOINT_FILENAME).exists():
+        raise DeploymentError("legacy runtime state contains unsupported checkpoint")
+    lease = read_lease(product_root / LEASE_FILENAME)
+    _checkpoint_from_latest(product_root)
+    return registry, lease
+
+
+def classify_layout(
+    product_root: Path,
+    runtime_state_root: Path,
+    config: AppConfig,
+) -> str:
+    """Classify repository runtime state without creating or changing files."""
+    product_root = Path(product_root)
+    runtime_state_root = Path(runtime_state_root)
+    if product_root.resolve() == runtime_state_root.resolve():
+        raise DeploymentError("Feed product and runtime-state roots must be distinct")
+    policies = _scope_policies(config)
+    state_entries = _runtime_entries(runtime_state_root)
+    legacy_entries = _runtime_entries(product_root)
+    state_names = {path.name for path in state_entries}
+    legacy_names = {path.name for path in legacy_entries}
+    state_authoritative = bool(
+        state_names & _RUNTIME_DURABLE_NAMES
+        or any(name.startswith("scope-") and name.endswith(".json") for name in state_names)
+    )
+    legacy_authoritative = bool(
+        legacy_names & _RUNTIME_DURABLE_NAMES
+        or any(name.startswith("scope-") and name.endswith(".json") for name in legacy_names)
+    )
+    state_unknown = [
+        path.name
+        for path in state_entries
+        if not _is_transient_runtime_path(path)
+        and path.name not in _RUNTIME_DURABLE_NAMES
+        and not (path.name.startswith("scope-") and path.name.endswith(".json"))
+    ]
+    if state_unknown:
+        raise DeploymentError(f"unsupported or partial runtime state layout: {state_unknown}")
+    if state_authoritative and legacy_authoritative:
+        raise DeploymentError("mixed old and new runtime layouts are not accepted")
+    if state_authoritative:
+        _validate_new_layout(runtime_state_root, config, policies)
+        return _LAYOUT_NEW
+    if legacy_authoritative:
+        _validate_legacy_layout(product_root, config, policies)
+        return _LAYOUT_LEGACY
+    if any(not _is_transient_runtime_path(path) for path in state_entries):
+        raise DeploymentError("unsupported or partial runtime state layout")
+    return _LAYOUT_EMPTY
+
+
+def _copy_exact(source: Path, target: Path) -> None:
+    try:
+        _atomic_write(target, source.read_bytes(), no_replace=True)
+    except (OSError, RateStateError) as exc:
+        raise DeploymentError(f"cannot relocate {source} to {target}") from exc
+
+
+def migrate_legacy_state(
+    product_root: Path,
+    runtime_state_root: Path,
+    config: AppConfig,
+) -> tuple[Path, ...]:
+    """Relocate one validated legacy runtime layout without network access."""
+    product_root = Path(product_root)
+    runtime_state_root = Path(runtime_state_root)
+    policies = _scope_policies(config)
+    registry, _lease = _validate_legacy_layout(product_root, config, policies)
+    legacy_paths = _legacy_paths(product_root, registry)
+    checkpoint = _checkpoint_from_latest(product_root)
+    runtime_state_root.mkdir(parents=True, exist_ok=True)
+
+    _copy_exact(product_root / PERSISTENCE_MARKER, runtime_state_root / PERSISTENCE_MARKER)
+    try:
+        registry_payload = load_canonical_json(
+            (product_root / REGISTRY_FILENAME).read_bytes(), where="legacy rate registry"
+        )
+        if not isinstance(registry_payload, dict):
+            raise DeploymentError("legacy rate registry must be an object")
+        registry_payload["root_identity"] = str(runtime_state_root.resolve())
+        _atomic_write(
+            runtime_state_root / REGISTRY_FILENAME,
+            json.dumps(registry_payload, sort_keys=True).encode("utf-8"),
+            no_replace=True,
+        )
+    except (OSError, RateStateError, TypeError, ValueError) as exc:
+        raise DeploymentError("cannot relocate legacy rate registry") from exc
+    for scope_id in registry.registered_scope_ids():
+        _copy_exact(
+            registry.scope_path(scope_id),
+            runtime_state_root / registry.scope_path(scope_id).name,
+        )
+    _copy_exact(product_root / LEASE_FILENAME, runtime_state_root / LEASE_FILENAME)
+    try:
+        write_checkpoint(runtime_state_root / CHECKPOINT_FILENAME, checkpoint)
+    except (OSError, ValueError) as exc:
+        raise DeploymentError("cannot seed relocated Feed checkpoint") from exc
+
+    new_registry, _new_lease = _validate_new_layout(runtime_state_root, config, policies)
+    new_paths = _durable_paths(runtime_state_root, new_registry)
+    new_paths += (runtime_state_root / CHECKPOINT_FILENAME,)
+    for path in legacy_paths:
+        try:
+            path.unlink()
+        except OSError as exc:
+            raise DeploymentError(f"cannot remove legacy runtime path {path}") from exc
+    return new_paths + legacy_paths
 
 
 def _durable_paths(root: Path, registry: RateRegistry) -> tuple[Path, ...]:
@@ -248,11 +484,14 @@ def _durable_paths(root: Path, registry: RateRegistry) -> tuple[Path, ...]:
     scope_ids = registry.registered_scope_ids()
     for scope_id in scope_ids:
         registry.read_active_scope(scope_id)
+    lease = root / LEASE_FILENAME
+    if not lease.is_file():
+        raise RateStateError("deployment lease is missing")
     return (
         marker,
         root / REGISTRY_FILENAME,
         *(registry.scope_path(scope_id) for scope_id in scope_ids),
-        root / LEASE_FILENAME,
+        lease,
     )
 
 
@@ -267,27 +506,24 @@ def allowlisted_paths(root: Path) -> tuple[Path, ...]:
 
 
 def prepare_deployment(
-    root: Path,
+    product_root: Path,
+    runtime_state_root: Path,
     config: AppConfig,
     *,
     deployment_run_id: str,
     now: Callable[[], datetime],
 ) -> DeploymentPreparation:
-    root = Path(root)
+    product_root = Path(product_root)
+    runtime_state_root = Path(runtime_state_root)
     current = _utc(now())
     _validate_deployment_compatibility(config)
     policies = _scope_policies(config)
     cooldown = _validate_recovery_envelope(config, policies.values())
-    lease_path = root / LEASE_FILENAME
-    registry_path = root / REGISTRY_FILENAME
-    marker_path = root / PERSISTENCE_MARKER
-    present = (lease_path.exists(), registry_path.exists(), marker_path.exists())
+    layout = classify_layout(product_root, runtime_state_root, config)
 
-    if not any(present):
-        if any(path.is_file() for path in root.glob("scope-*.json")):
-            raise DeploymentError("partial deployment state is not accepted")
-        root.mkdir(parents=True, exist_ok=True)
-        registry = RateRegistry(root)
+    if layout == _LAYOUT_EMPTY:
+        runtime_state_root.mkdir(parents=True, exist_ok=True)
+        registry = RateRegistry(runtime_state_root)
         try:
             registry.ensure_registry(now=now)
             for policy in policies.values():
@@ -309,15 +545,29 @@ def prepare_deployment(
             feed_start_not_after=None,
             recovery_not_before=current + timedelta(seconds=cooldown),
         )
-        write_lease(lease_path, lease)
-        return DeploymentPreparation("bootstrap", lease, _durable_paths(root, registry))
+        try:
+            write_lease(runtime_state_root / LEASE_FILENAME, lease)
+            write_checkpoint(
+                runtime_state_root / CHECKPOINT_FILENAME,
+                FeedCheckpoint(previous_success=None),
+            )
+        except (OSError, RateStateError, ValueError) as exc:
+            raise DeploymentError("cannot persist bootstrap deployment state") from exc
+        return DeploymentPreparation(
+            "bootstrap",
+            lease,
+            _durable_paths(runtime_state_root, registry)
+            + (runtime_state_root / CHECKPOINT_FILENAME,),
+        )
 
-    if not all(present):
-        raise DeploymentError("partial deployment state is not accepted")
-    lease = read_lease(lease_path)
+    if layout == _LAYOUT_LEGACY:
+        paths = migrate_legacy_state(product_root, runtime_state_root, config)
+        lease = read_lease(runtime_state_root / LEASE_FILENAME)
+        return DeploymentPreparation("migration", lease, paths)
+
+    registry, lease = _validate_new_layout(runtime_state_root, config, policies)
     if lease.deployment_run_id == deployment_run_id:
         raise DeploymentError("deployment_run_id has already been used")
-    registry = _validate_existing_state(root, config, policies)
     if lease.state in {"bootstrap", "in_progress"} and current < lease.recovery_not_before:
         raise DeploymentError("recovery_not_before has not elapsed")
 
@@ -346,8 +596,11 @@ def prepare_deployment(
         recovery_not_before=feed_start
         + timedelta(seconds=config.feed.pre_commit_deadline_seconds + cooldown),
     )
-    write_lease(lease_path, armed)
-    return DeploymentPreparation("armed", armed, _durable_paths(root, registry))
+    try:
+        write_lease(runtime_state_root / LEASE_FILENAME, armed)
+    except (OSError, RateStateError, ValueError) as exc:
+        raise DeploymentError("cannot persist armed deployment lease") from exc
+    return DeploymentPreparation("armed", armed, _durable_paths(runtime_state_root, registry))
 
 
 def assert_feed_admitted(
@@ -362,7 +615,7 @@ def assert_feed_admitted(
     return lease
 
 
-def _feed_paths(root: Path, status_path: Path) -> tuple[Path, ...]:
+def _read_success_status(status_path: Path) -> dict[str, Any]:
     try:
         raw = json.loads(Path(status_path).read_bytes())
     except (OSError, ValueError) as exc:
@@ -375,6 +628,10 @@ def _feed_paths(root: Path, status_path: Path) -> tuple[Path, ...]:
         or not isinstance(raw.get("evidence_cutoff_at"), str)
     ):
         raise DeploymentError("successful Feed status is invalid")
+    return raw
+
+
+def _feed_paths(product_root: Path, raw: dict[str, Any]) -> tuple[Path, ...]:
     try:
         cutoff = _utc(datetime.fromisoformat(raw["evidence_cutoff_at"]))
     except (DeploymentError, ValueError) as exc:
@@ -386,16 +643,31 @@ def _feed_paths(root: Path, status_path: Path) -> tuple[Path, ...]:
         "latest_relative_path": "latest.json",
     }
     paths: list[Path] = []
-    root_resolved = root.resolve()
+    root_resolved = product_root.resolve()
     for field in ("dated_relative_path", "latest_relative_path"):
         relative = raw.get(field)
         if relative != expected[field]:
             raise DeploymentError(f"Feed status {field} is invalid")
-        candidate = (root / relative).resolve()
+        candidate = (product_root / relative).resolve()
         if not candidate.is_relative_to(root_resolved) or not candidate.is_file():
             raise DeploymentError(f"Feed status {field} is outside or missing")
         if candidate.stat().st_size == 0:
             raise DeploymentError(f"Feed status {field} is empty")
+        try:
+            feed = load_canonical_json(candidate.read_bytes(), where=str(candidate))
+            if not isinstance(feed, dict):
+                raise DeploymentError(f"Feed product {field} is not an object")
+            validate_feed(feed)
+            assert_feed_identity(feed)
+            if (
+                feed.get("run_id") != raw["run_id"]
+                or feed.get("evidence_cutoff_at") != raw["evidence_cutoff_at"]
+            ):
+                raise DeploymentError(f"Feed product {field} does not match successful status")
+        except DeploymentError:
+            raise
+        except (OSError, SchemaError, TypeError, ValueError) as exc:
+            raise DeploymentError(f"Feed product {field} is invalid") from exc
         paths.append(candidate)
     if paths[0] == paths[1]:
         raise DeploymentError("Feed status paths must be distinct")
@@ -403,27 +675,44 @@ def _feed_paths(root: Path, status_path: Path) -> tuple[Path, ...]:
 
 
 def finalize_deployment(
-    root: Path,
+    product_root: Path,
+    runtime_state_root: Path,
     *,
     deployment_run_id: str,
     feed_succeeded: bool,
     status_path: Path,
     now: Callable[[], datetime],
 ) -> tuple[Path, ...]:
-    root = Path(root)
-    lease_path = root / LEASE_FILENAME
+    product_root = Path(product_root)
+    runtime_state_root = Path(runtime_state_root)
+    lease_path = runtime_state_root / LEASE_FILENAME
     lease = read_lease(lease_path, expected_run_id=deployment_run_id)
     if lease.state != "in_progress":
         raise DeploymentError("only an in_progress lease can be finalized")
-    feed_paths = _feed_paths(root, status_path) if feed_succeeded else ()
+    status = _read_success_status(status_path) if feed_succeeded else None
+    feed_paths = _feed_paths(product_root, status) if status is not None else ()
     finished_at = _utc(now())
     if finished_at < lease.armed_at:
         raise DeploymentError("finalization clock precedes lease arming")
-    registry = RateRegistry(root)
+    registry = RateRegistry(runtime_state_root)
     try:
-        durable = _durable_paths(root, registry)
+        durable = _durable_paths(runtime_state_root, registry)
     except RateStateError as exc:
         raise DeploymentError(str(exc)) from exc
+    checkpoint_path = runtime_state_root / CHECKPOINT_FILENAME
+    if feed_succeeded:
+        if status is None:
+            raise DeploymentError("successful Feed status is missing")
+        try:
+            checkpoint = read_checkpoint(checkpoint_path)
+        except (OSError, ValueError) as exc:
+            raise DeploymentError("successful Feed checkpoint is missing or corrupt") from exc
+        previous = checkpoint.previous_success
+        if previous is None or (
+            previous.run_id != status["run_id"]
+            or previous.evidence_cutoff_at != status["evidence_cutoff_at"]
+        ):
+            raise DeploymentError("successful Feed status and checkpoint do not match")
     terminal = DeploymentLease(
         version=LEASE_VERSION,
         deployment_run_id=lease.deployment_run_id,
@@ -433,8 +722,13 @@ def finalize_deployment(
         feed_start_not_after=lease.feed_start_not_after,
         recovery_not_before=lease.recovery_not_before,
     )
-    write_lease(lease_path, terminal)
-    return durable + feed_paths
+    try:
+        write_lease(lease_path, terminal)
+    except (OSError, RateStateError, ValueError) as exc:
+        raise DeploymentError("cannot persist terminal deployment lease") from exc
+    if feed_succeeded:
+        return durable + (checkpoint_path,) + feed_paths
+    return durable
 
 
 def _default_git(repo_root: Path) -> GitRunner:
@@ -642,7 +936,8 @@ def _command_prepare(args: argparse.Namespace) -> int:
     refresh_repository(Path(args.repo))
     config = _load_app_config(args.config)
     result = prepare_deployment(
-        Path(args.root),
+        Path(args.product_root),
+        Path(args.runtime_state_root),
         config,
         deployment_run_id=args.run_id,
         now=lambda: datetime.now(UTC),
@@ -651,14 +946,47 @@ def _command_prepare(args: argparse.Namespace) -> int:
     return 0
 
 
+def _bootstrap_allowlisted_paths(runtime_state_root: Path) -> tuple[Path, ...]:
+    runtime_state_root = Path(runtime_state_root)
+    return allowlisted_paths(runtime_state_root) + (runtime_state_root / CHECKPOINT_FILENAME,)
+
+
+def _migration_allowlisted_paths(product_root: Path, runtime_state_root: Path) -> tuple[Path, ...]:
+    runtime_state_root = Path(runtime_state_root)
+    product_root = Path(product_root)
+    registry = RateRegistry(runtime_state_root)
+    return (
+        allowlisted_paths(runtime_state_root)
+        + (runtime_state_root / CHECKPOINT_FILENAME,)
+        + _legacy_paths(product_root, registry)
+    )
+
+
 def _command_publish(args: argparse.Namespace) -> int:
-    lease = read_lease(Path(args.root) / LEASE_FILENAME, expected_run_id=args.run_id)
-    if lease.state not in {"bootstrap", "in_progress"}:
-        raise DeploymentError("pre-network publication requires bootstrap or in_progress lease")
+    product_root = Path(args.product_root)
+    runtime_state_root = Path(args.runtime_state_root)
+    mode = args.mode
+    if mode == "migration":
+        lease = read_lease(runtime_state_root / LEASE_FILENAME)
+        if lease.state not in LEASE_STATES:
+            raise DeploymentError("migration publication requires a preserved lease")
+        paths = _migration_allowlisted_paths(product_root, runtime_state_root)
+    elif mode == "bootstrap":
+        lease = read_lease(runtime_state_root / LEASE_FILENAME, expected_run_id=args.run_id)
+        if lease.state != "bootstrap":
+            raise DeploymentError("bootstrap publication requires a bootstrap lease")
+        paths = _bootstrap_allowlisted_paths(runtime_state_root)
+    elif mode == "armed":
+        lease = read_lease(runtime_state_root / LEASE_FILENAME, expected_run_id=args.run_id)
+        if lease.state != "in_progress":
+            raise DeploymentError("armed publication requires an in_progress lease")
+        paths = allowlisted_paths(runtime_state_root)
+    else:
+        raise DeploymentError(f"unsupported pre-network publication mode: {mode!r}")
     publish_generated_state(
         Path(args.repo),
-        allowlisted_paths(Path(args.root)),
-        message=f"feeds: {lease.state}",
+        paths,
+        message=f"feeds: {mode}",
     )
     return 0
 
@@ -670,11 +998,15 @@ def _command_collect(args: argparse.Namespace) -> int:
     exit_path = Path(args.exit_file) if args.exit_file else None
     try:
         assert_feed_admitted(
-            Path(args.root),
+            Path(args.runtime_state_root),
             deployment_run_id=args.run_id,
             now=lambda: datetime.now(UTC),
         )
-        result = run_feed(config_path=args.config, output_root=str(args.root))
+        result = run_feed(
+            config_path=args.config,
+            output_root=str(args.product_root),
+            runtime_state_root=str(args.runtime_state_root),
+        )
         _write_feed_status(status_path, result)
         code = result.exit_code
     except FeedInputError as exc:
@@ -690,7 +1022,8 @@ def _command_collect(args: argparse.Namespace) -> int:
 
 def _command_finalize(args: argparse.Namespace) -> int:
     paths = finalize_deployment(
-        Path(args.root),
+        Path(args.product_root),
+        Path(args.runtime_state_root),
         deployment_run_id=args.run_id,
         feed_succeeded=args.feed_succeeded == "true",
         status_path=Path(args.status_file),
@@ -714,17 +1047,21 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     prepare = subparsers.add_parser("prepare")
     prepare.add_argument("--repo", default=".")
-    prepare.add_argument("--root", default="feeds")
+    prepare.add_argument("--product-root", default="feeds")
+    prepare.add_argument("--runtime-state-root", default=".feed-state")
     prepare.add_argument("--config", default=None)
     prepare.add_argument("--run-id", required=True)
     prepare.add_argument("--output", default=None)
     subparsers.add_parser("publish").add_argument("--phase", choices=("pre",), required=True)
     publish = subparsers.choices["publish"]
     publish.add_argument("--repo", default=".")
-    publish.add_argument("--root", default="feeds")
+    publish.add_argument("--product-root", default="feeds")
+    publish.add_argument("--runtime-state-root", default=".feed-state")
+    publish.add_argument("--mode", choices=("bootstrap", "migration", "armed"), required=True)
     publish.add_argument("--run-id", required=True)
     collect = subparsers.add_parser("collect")
-    collect.add_argument("--root", default="feeds")
+    collect.add_argument("--product-root", default="feeds")
+    collect.add_argument("--runtime-state-root", default=".feed-state")
     collect.add_argument("--config", default=None)
     collect.add_argument("--run-id", required=True)
     collect.add_argument("--status-file", default="feed-status.json")
@@ -734,7 +1071,8 @@ def _build_parser() -> argparse.ArgumentParser:
     diagnostics.add_argument("--summary-file", default=None)
     finalize = subparsers.add_parser("finalize")
     finalize.add_argument("--repo", default=".")
-    finalize.add_argument("--root", default="feeds")
+    finalize.add_argument("--product-root", default="feeds")
+    finalize.add_argument("--runtime-state-root", default=".feed-state")
     finalize.add_argument("--run-id", required=True)
     finalize.add_argument("--status-file", default="feed-status.json")
     finalize.add_argument("--feed-succeeded", choices=("true", "false"), required=True)

@@ -13,12 +13,27 @@ from types import SimpleNamespace
 import pytest
 
 from follow_the_money.config import load_config
-from follow_the_money.feed.cli import FeedExecutionError, FeedInputError, FeedRunResult, run_feed
+from follow_the_money.feed.checkpoint import FeedCheckpoint, read_checkpoint, write_checkpoint
+from follow_the_money.feed.cli import (
+    FeedExecutionError,
+    FeedInputError,
+    FeedRunResult,
+)
+from follow_the_money.feed.cli import (
+    run_feed as _run_feed,
+)
 from follow_the_money.feed.validate import assert_feed_identity, validate_feed
 from follow_the_money.providers.http import FetchError
 from follow_the_money.providers.rate import RateStateError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def run_feed(**kwargs):
+    if "runtime_state_root" not in kwargs and kwargs.get("output_root") is not None:
+        output = Path(kwargs["output_root"])
+        kwargs["runtime_state_root"] = str(output.parent / f".{output.name}-state")
+    return _run_feed(**kwargs)
 
 
 def _empty_registry():
@@ -103,6 +118,20 @@ def test_invalid_config_is_input_error(tmp_path):
         )
 
 
+def test_feed_entry_rejects_one_path_used_as_both_product_and_runtime_root(tmp_path):
+    shared_root = tmp_path / "feeds"
+
+    with pytest.raises(FeedInputError, match="must be distinct"):
+        _run_feed(
+            output_root=str(shared_root),
+            runtime_state_root=str(shared_root),
+            cutoff=_cutoff(),
+            providers_fn=_empty_registry,
+        )
+
+    assert not shared_root.exists()
+
+
 def test_publication_failure_is_execution_error(tmp_path, monkeypatch):
     from follow_the_money.feed import cli as feed_cli
     from follow_the_money.feed.publish import PublishError
@@ -168,6 +197,193 @@ def _source_complete_cfg():
 
 def _planned_provider_ids(cfg) -> list[str]:
     return [provider.id for provider in cfg.providers if provider.enabled]
+
+
+def test_run_feed_separates_product_and_runtime_state_roots(tmp_path, monkeypatch):
+    from follow_the_money.feed import cli as feed_cli
+
+    cfg = _source_complete_cfg()
+    monkeypatch.setattr(feed_cli, "_load_app_config", lambda _path: cfg)
+    product_root = tmp_path / "products"
+    runtime_root = tmp_path / "runtime"
+    planned = _planned_provider_ids(cfg)
+    registry = {provider_id: _OutcomeAdapter() for provider_id in planned}
+
+    result = run_feed(
+        output_root=str(product_root),
+        runtime_state_root=str(runtime_root),
+        cutoff=_cutoff(),
+        providers_fn=lambda: registry,
+        enabled_provider_ids=planned,
+    )
+
+    assert result.status == "healthy"
+    assert (product_root / "latest.json").is_file()
+    assert list((product_root / "daily").rglob("*.json"))
+    assert (runtime_root / ".collection.lock").is_file()
+    assert (runtime_root / "rate-registry.json").is_file()
+    assert (runtime_root / "feed-checkpoint.json").is_file()
+    assert read_checkpoint(runtime_root / "feed-checkpoint.json").previous_success is not None
+    assert not (product_root / "rate-registry.json").exists()
+    assert not (product_root / "feed-checkpoint.json").exists()
+
+
+def _seed_checkpoint(path):
+    write_checkpoint(path, FeedCheckpoint(previous_success=None))
+
+
+def test_checkpoint_advances_after_accepted_publication_and_before_unlock(tmp_path, monkeypatch):
+    from follow_the_money.feed import cli as feed_cli
+
+    cfg = _source_complete_cfg()
+    monkeypatch.setattr(feed_cli, "_load_app_config", lambda _path: cfg)
+    product_root = tmp_path / "products"
+    runtime_root = tmp_path / "runtime"
+    checkpoint_path = runtime_root / "feed-checkpoint.json"
+    _seed_checkpoint(checkpoint_path)
+    planned = _planned_provider_ids(cfg)
+    registry = {provider_id: _OutcomeAdapter() for provider_id in planned}
+    events: list[str] = []
+    original_publish = feed_cli.publish_feed
+    original_write = feed_cli.write_checkpoint
+
+    def publish(**kwargs):
+        events.append("publish")
+        return original_publish(**kwargs)
+
+    def write(path, checkpoint):
+        events.append("checkpoint")
+        return original_write(path, checkpoint)
+
+    monkeypatch.setattr(feed_cli, "publish_feed", publish)
+    monkeypatch.setattr(feed_cli, "write_checkpoint", write)
+
+    result = run_feed(
+        output_root=str(product_root),
+        runtime_state_root=str(runtime_root),
+        cutoff=_cutoff(),
+        providers_fn=lambda: registry,
+        enabled_provider_ids=planned,
+    )
+
+    assert result.exit_code == 0
+    assert events == ["publish", "checkpoint"]
+    checkpoint = read_checkpoint(checkpoint_path)
+    assert checkpoint.previous_success is not None
+    assert checkpoint.previous_success.evidence_cutoff_at == result.feed["evidence_cutoff_at"]
+    assert checkpoint.previous_success.run_id == result.feed["run_id"]
+
+
+def test_accepted_degraded_publication_advances_checkpoint(tmp_path, monkeypatch):
+    from follow_the_money.feed import cli as feed_cli
+
+    cfg = _source_complete_cfg()
+    monkeypatch.setattr(feed_cli, "_load_app_config", lambda _path: cfg)
+    product_root = tmp_path / "products"
+    runtime_root = tmp_path / "runtime"
+    checkpoint_path = runtime_root / "feed-checkpoint.json"
+    _seed_checkpoint(checkpoint_path)
+    planned = _planned_provider_ids(cfg)
+    registry = {provider_id: _OutcomeAdapter() for provider_id in planned}
+    monkeypatch.setattr(feed_cli, "assess_pipeline", lambda **_kwargs: ("degraded", []))
+
+    result = run_feed(
+        output_root=str(product_root),
+        runtime_state_root=str(runtime_root),
+        cutoff=_cutoff(),
+        providers_fn=lambda: registry,
+        enabled_provider_ids=planned,
+    )
+
+    assert result.status == "degraded"
+    assert result.exit_code == 0
+    checkpoint = read_checkpoint(checkpoint_path)
+    assert checkpoint.previous_success is not None
+    assert checkpoint.previous_success.run_id == result.feed["run_id"]
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        "dry_run",
+        "source_failure",
+        "candidate_validation",
+        "publication_failure",
+        "durability_unknown",
+        "latest_not_replaced",
+    ],
+)
+def test_failed_or_dry_run_outcomes_do_not_advance_checkpoint(tmp_path, monkeypatch, outcome):
+    from follow_the_money.feed import cli as feed_cli
+
+    cfg = _source_complete_cfg()
+    monkeypatch.setattr(feed_cli, "_load_app_config", lambda _path: cfg)
+    product_root = tmp_path / "products"
+    runtime_root = tmp_path / "runtime"
+    checkpoint_path = runtime_root / "feed-checkpoint.json"
+    _seed_checkpoint(checkpoint_path)
+    before = checkpoint_path.read_bytes()
+    planned = _planned_provider_ids(cfg)
+    registry = {provider_id: _OutcomeAdapter() for provider_id in planned}
+    kwargs = {
+        "output_root": str(product_root),
+        "runtime_state_root": str(runtime_root),
+        "cutoff": _cutoff(),
+        "providers_fn": lambda: registry,
+        "enabled_provider_ids": planned,
+    }
+
+    if outcome == "dry_run":
+        kwargs["dry_run"] = True
+    elif outcome == "source_failure":
+        registry["bls"] = _OutcomeAdapter(error=RuntimeError("provider unavailable"))
+    elif outcome == "candidate_validation":
+        from follow_the_money.schema import SchemaError
+
+        monkeypatch.setattr(
+            feed_cli,
+            "validate_feed",
+            lambda _feed: (_ for _ in ()).throw(SchemaError("invalid candidate")),
+        )
+    else:
+        from follow_the_money.feed.publish import PublishError
+
+        if outcome == "publication_failure":
+            monkeypatch.setattr(
+                feed_cli,
+                "publish_feed",
+                lambda **_kwargs: (_ for _ in ()).throw(PublishError("publication failed")),
+            )
+        elif outcome == "durability_unknown":
+            monkeypatch.setattr(
+                feed_cli,
+                "publish_feed",
+                lambda **_kwargs: SimpleNamespace(
+                    commit_durability_unknown=True, latest_replaced=True
+                ),
+            )
+        else:
+            monkeypatch.setattr(
+                feed_cli,
+                "publish_feed",
+                lambda **_kwargs: SimpleNamespace(
+                    commit_durability_unknown=False, latest_replaced=False
+                ),
+            )
+
+    if outcome in {
+        "candidate_validation",
+        "publication_failure",
+        "durability_unknown",
+        "latest_not_replaced",
+    }:
+        with pytest.raises(FeedExecutionError):
+            run_feed(**kwargs)
+    else:
+        run_feed(**kwargs)
+
+    assert checkpoint_path.read_bytes() == before
+    assert not (product_root / "latest.json").exists()
 
 
 def _accepted_item(provider_id: str, item_id: str) -> dict:

@@ -11,7 +11,8 @@ from types import SimpleNamespace
 import pytest
 
 from follow_the_money.config import load_config
-from follow_the_money.feed.cli import run_feed
+from follow_the_money.feed.checkpoint import PreviousSuccess
+from follow_the_money.feed.cli import run_feed as _run_feed
 from follow_the_money.feed.plan import (
     FeedPlanError,
     ProviderOutcome,
@@ -26,6 +27,13 @@ DEFAULT_PROVIDERS = REPO_ROOT / "config" / "providers.yaml"
 DEFAULT_MANIFEST_ROOT = REPO_ROOT / "providers"
 
 
+def run_feed(**kwargs):
+    if "runtime_state_root" not in kwargs and kwargs.get("output_root") is not None:
+        output = Path(kwargs["output_root"])
+        kwargs["runtime_state_root"] = str(output.parent / f".{output.name}-state")
+    return _run_feed(**kwargs)
+
+
 def _cfg():
     return load_config(
         DEFAULT_CONFIG,
@@ -35,8 +43,9 @@ def _cfg():
     )
 
 
-def _latest(cutoff: datetime) -> dict:
-    return {"evidence_cutoff_at": cutoff.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"}
+def _previous_success(cutoff: datetime) -> PreviousSuccess:
+    cutoff_text = cutoff.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    return PreviousSuccess(cutoff_text, f"{cutoff_text}::" + "a" * 32)
 
 
 def _publication_bytes(cutoff: datetime, digest: str = "a" * 64) -> bytes:
@@ -52,87 +61,65 @@ def _publication_bytes(cutoff: datetime, digest: str = "a" * 64) -> bytes:
 # ---------------------------------------------------------------------------
 
 
-def test_first_run_bootstrap(tmp_path):
+def test_first_run_bootstrap():
     cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
-    plan = plan_window(cutoff=cutoff, latest_path=tmp_path / "missing.json")
+    plan = plan_window(cutoff=cutoff, previous_success=None)
     assert plan.bootstrap is True
     start = datetime.fromisoformat(plan.window_start)
     assert (cutoff - start).total_seconds() == 72 * 3600
 
 
-def test_invalid_latest_integrity(tmp_path):
+def test_invalid_checkpoint_integrity():
     cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
-    path = tmp_path / "latest.json"
-    path.write_bytes(b"{partial")
-    with pytest.raises(FeedPlanError, match="invalid_latest_integrity"):
-        plan_window(cutoff=cutoff, latest_path=path)
+    previous = PreviousSuccess("not-a-timestamp", "not-a-run-id")
+    with pytest.raises(FeedPlanError, match="invalid checkpoint cutoff"):
+        plan_window(cutoff=cutoff, previous_success=previous)
 
 
-def test_unreadable_latest_integrity(tmp_path):
-    cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
-    path = tmp_path / "latest.json"
-    path.write_bytes(b"{}")  # valid JSON but not a valid latest (no cutoff)
-    with pytest.raises(FeedPlanError, match="invalid_latest_integrity"):
-        plan_window(cutoff=cutoff, latest_path=path)
-
-
-def test_non_advancing_cutoff(tmp_path):
+def test_non_advancing_cutoff():
     latest_cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
-    path = tmp_path / "latest.json"
-    path.write_bytes(b"x")
     with pytest.raises(FeedPlanError, match="non_advancing_cutoff"):
         plan_window(
             cutoff=latest_cutoff,
-            latest_path=path,
-            validate_latest=lambda p: _latest(latest_cutoff),
+            previous_success=_previous_success(latest_cutoff),
         )
     # equal cutoff also fails
     with pytest.raises(FeedPlanError, match="non_advancing_cutoff"):
         plan_window(
             cutoff=latest_cutoff + timedelta(seconds=0),
-            latest_path=path,
-            validate_latest=lambda p: _latest(latest_cutoff),
+            previous_success=_previous_success(latest_cutoff),
         )
 
 
-def test_advancing_cutoff_starts_at_previous(tmp_path):
+def test_advancing_cutoff_starts_at_previous():
     latest_cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
     new_cutoff = latest_cutoff + timedelta(hours=24)
-    path = tmp_path / "latest.json"
-    path.write_bytes(b"x")
     plan = plan_window(
         cutoff=new_cutoff,
-        latest_path=path,
-        validate_latest=lambda p: _latest(latest_cutoff),
+        previous_success=_previous_success(latest_cutoff),
     )
     assert plan.window_start == latest_cutoff.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
     assert plan.bootstrap is False
     assert plan.gap_warning is None
 
 
-def test_gap_exactly_72h_no_warning(tmp_path):
+def test_gap_exactly_72h_no_warning():
     latest_cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
     new_cutoff = latest_cutoff + timedelta(hours=72)
-    path = tmp_path / "latest.json"
-    path.write_bytes(b"x")
     plan = plan_window(
         cutoff=new_cutoff,
-        latest_path=path,
-        validate_latest=lambda p: _latest(latest_cutoff),
+        previous_success=_previous_success(latest_cutoff),
     )
     assert plan.window_start == latest_cutoff.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
     assert plan.gap_warning is None
 
 
-def test_gap_over_72h_records_warning(tmp_path):
+def test_gap_over_72h_records_warning():
     latest_cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
     new_cutoff = latest_cutoff + timedelta(hours=73)
-    path = tmp_path / "latest.json"
-    path.write_bytes(b"x")
     plan = plan_window(
         cutoff=new_cutoff,
-        latest_path=path,
-        validate_latest=lambda p: _latest(latest_cutoff),
+        previous_success=_previous_success(latest_cutoff),
     )
     assert plan.gap_warning is not None
     uncovered_start, uncovered_end = plan.gap_warning

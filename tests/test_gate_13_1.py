@@ -18,7 +18,8 @@ from typing import Any
 
 import pytest
 
-from follow_the_money.feed.cli import FeedCliError, FeedExecutionError, run_feed
+from follow_the_money.feed.cli import FeedCliError, FeedExecutionError
+from follow_the_money.feed.cli import run_feed as _run_feed
 from follow_the_money.feed.validate import assert_feed_identity, validate_feed
 from follow_the_money.providers.adapters import (
     YahooMarketAdapter,
@@ -28,6 +29,14 @@ from follow_the_money.providers.http import FetchError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CUTOFF = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
+
+
+def run_feed(**kwargs):
+    if "runtime_state_root" not in kwargs and kwargs.get("output_root") is not None:
+        output = Path(kwargs["output_root"])
+        kwargs["runtime_state_root"] = str(output.parent / f".{output.name}-state")
+    return _run_feed(**kwargs)
+
 
 FIXTURE_BY_PROVIDER = {
     "federal_reserve": "providers/federal_reserve/fixtures/press_all.xml",
@@ -97,6 +106,7 @@ def test_all_mandatory_rows_verified_and_enabled():
 
 
 def test_fixture_backed_run_produces_valid_healthy_feed(tmp_path):
+    state = tmp_path / ".out-state"
     result = run_feed(
         output_root=str(tmp_path / "out"),
         cutoff=CUTOFF,
@@ -121,18 +131,19 @@ def test_fixture_backed_run_produces_valid_healthy_feed(tmp_path):
     assert any(dated.glob("*.json"))
     assert (tmp_path / "out" / "latest.json").exists()
     # Durable rate registry created.
-    assert (tmp_path / "out" / "rate-registry.json").exists()
+    assert (state / "rate-registry.json").exists()
 
 
 def test_fixture_backed_run_publishes_and_rate_debits(tmp_path):
     out = tmp_path / "out"
+    state_root = tmp_path / ".out-state"
     result = run_feed(output_root=str(out), cutoff=CUTOFF, providers_fn=_fixture_registry)
     assert result.exit_code == 0
-    registry = json.loads((out / "rate-registry.json").read_bytes())
+    registry = json.loads((state_root / "rate-registry.json").read_bytes())
     assert registry["version"] == "1"
     assert set(registry["scopes"]) >= {"us_gov", "sec_edgar", "china_gov", "yahoo_market"}
     # Scope states exist and were debited.
-    scopes = list(out.glob("scope-*.json"))
+    scopes = list(state_root.glob("scope-*.json"))
     assert len(scopes) == 4
     for scope_file in scopes:
         state = json.loads(scope_file.read_bytes())

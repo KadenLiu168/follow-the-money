@@ -10,21 +10,40 @@ from types import SimpleNamespace
 
 import pytest
 
+from follow_the_money.canonical import canonical_bytes
 from follow_the_money.config.model import RatePolicy
 from follow_the_money.feed import deployment
+from follow_the_money.feed.checkpoint import FeedCheckpoint, PreviousSuccess, write_checkpoint
 from follow_the_money.feed.cli import FeedExecutionError, FeedInputError, FeedRunResult
 from follow_the_money.feed.deployment import (
     DeploymentError,
     allowlisted_paths,
     assert_feed_admitted,
-    finalize_deployment,
-    prepare_deployment,
     publish_generated_state,
     read_lease,
 )
+from follow_the_money.feed.deployment import (
+    finalize_deployment as _finalize_deployment,
+)
+from follow_the_money.feed.deployment import (
+    prepare_deployment as _prepare_deployment,
+)
+from follow_the_money.feed.validate import recompute_feed_identity
 from follow_the_money.providers.rate import RateRegistry
 
 NOW = datetime(2026, 8, 29, 0, 0, tzinfo=UTC)
+
+
+def prepare_deployment(root: Path, config, **kwargs):
+    return _prepare_deployment(_product_root(root), root, config, **kwargs)
+
+
+def finalize_deployment(root: Path, **kwargs):
+    return _finalize_deployment(_product_root(root), root, **kwargs)
+
+
+def _product_root(root: Path) -> Path:
+    return root.parent / f"{root.name}-products"
 
 
 def _cfg(*policies: RatePolicy, cooldown_hours: int = 24):
@@ -50,6 +69,30 @@ def _policy(scope_id: str = "scope-a", **changes: int) -> RatePolicy:
 
 def _clock(value: datetime):
     return lambda: value
+
+
+def _healthy_feed() -> dict:
+    cutoff = "2026-08-30T00:20:00Z"
+    feed = {
+        "schema_version": 1,
+        "run_id": "",
+        "window": {"start": "2026-08-27T00:20:00Z", "end": cutoff},
+        "collection_started_at": "2026-08-30T00:19:00Z",
+        "evidence_cutoff_at": cutoff,
+        "collection_completed_at": "2026-08-30T00:21:00Z",
+        "generated_at": "2026-08-30T00:22:00Z",
+        "provider_outcomes": [],
+        "producer": {"package_version": "0.1.0", "files": [], "fingerprint": "a" * 64},
+        "feed_config": {"snapshot": {}, "hash": "b" * 64},
+        "feed_schema": {"path": "schemas/feed.schema.json", "sha256": "c" * 64},
+        "provider_contracts": [],
+        "git": None,
+        "content_digest": "",
+        "items": [],
+        "pipeline": {"status": "healthy", "warnings": []},
+    }
+    feed["content_digest"], feed["run_id"] = recompute_feed_identity(feed)
+    return feed
 
 
 def test_lease_parser_is_closed_and_versioned(tmp_path: Path):
@@ -123,7 +166,8 @@ def test_prepare_refreshes_repository_before_loading_authoritative_config(
             SimpleNamespace(
                 config=None,
                 repo=str(tmp_path),
-                root=str(tmp_path / "feeds"),
+                product_root=str(tmp_path / "feeds"),
+                runtime_state_root=str(tmp_path / ".feed-state"),
                 run_id="42-1",
                 output=None,
             )
@@ -287,21 +331,32 @@ def test_success_and_failure_finalization_keep_exact_paths(tmp_path: Path):
     prepare_deployment(tmp_path, _cfg(_policy()), deployment_run_id="42-1", now=_clock(NOW))
     armed_at = NOW + timedelta(days=1)
     prepare_deployment(tmp_path, _cfg(_policy()), deployment_run_id="43-1", now=_clock(armed_at))
-    (tmp_path / "daily/2026-08-30").mkdir(parents=True)
-    (tmp_path / "daily/2026-08-30/feed-1.json").write_bytes(b"dated")
-    (tmp_path / "latest.json").write_bytes(b"latest")
+    feed = _healthy_feed()
+    run_id = feed["run_id"]
+    (_product_root(tmp_path) / "daily/2026-08-30").mkdir(parents=True)
+    (_product_root(tmp_path) / f"daily/2026-08-30/{run_id}.json").write_bytes(canonical_bytes(feed))
+    (_product_root(tmp_path) / "latest.json").write_bytes(canonical_bytes(feed))
     status = tmp_path / "feed-status.json"
     status.write_text(
         json.dumps(
             {
                 "status": "healthy",
-                "run_id": "feed-1",
+                "run_id": run_id,
                 "evidence_cutoff_at": "2026-08-30T00:20:00Z",
-                "dated_relative_path": "daily/2026-08-30/feed-1.json",
+                "dated_relative_path": f"daily/2026-08-30/{run_id}.json",
                 "latest_relative_path": "latest.json",
             }
         ),
         encoding="utf-8",
+    )
+    write_checkpoint(
+        tmp_path / "feed-checkpoint.json",
+        FeedCheckpoint(
+            previous_success=PreviousSuccess(
+                evidence_cutoff_at="2026-08-30T00:20:00Z",
+                run_id=run_id,
+            )
+        ),
     )
     paths = finalize_deployment(
         tmp_path,
@@ -326,7 +381,7 @@ def test_success_and_failure_finalization_keep_exact_paths(tmp_path: Path):
         status_path=status,
         now=_clock(armed_at + timedelta(days=2, seconds=1)),
     )
-    assert all(path.name not in {"latest.json", "feed-1.json"} for path in failure_paths)
+    assert all(path.name not in {"latest.json", f"{run_id}.json"} for path in failure_paths)
     assert read_lease(tmp_path / "feed-run-lease.json").state == "failure"
 
 
@@ -368,16 +423,18 @@ def test_success_finalization_rejects_non_feed_status_paths(tmp_path: Path):
     scope_path = next(path for path in result.paths if path.name.startswith("scope-"))
     armed_at = NOW + timedelta(days=1)
     prepare_deployment(tmp_path, _cfg(_policy()), deployment_run_id="43-1", now=_clock(armed_at))
-    (tmp_path / "daily/2026-08-30").mkdir(parents=True)
-    (tmp_path / "daily/2026-08-30/feed-1.json").write_bytes(b"dated")
+    feed = _healthy_feed()
+    run_id = feed["run_id"]
+    (_product_root(tmp_path) / "daily/2026-08-30").mkdir(parents=True)
+    (_product_root(tmp_path) / f"daily/2026-08-30/{run_id}.json").write_bytes(canonical_bytes(feed))
     status = tmp_path / "feed-status.json"
     status.write_text(
         json.dumps(
             {
                 "status": "healthy",
-                "run_id": "feed-1",
+                "run_id": run_id,
                 "evidence_cutoff_at": "2026-08-30T00:20:00Z",
-                "dated_relative_path": "daily/2026-08-30/feed-1.json",
+                "dated_relative_path": f"daily/2026-08-30/{run_id}.json",
                 "latest_relative_path": scope_path.name,
             }
         ),
@@ -528,7 +585,8 @@ def test_typed_collect_failures_write_narrow_status_without_provider_facts(
 
     code = deployment._command_collect(
         SimpleNamespace(
-            root=str(tmp_path),
+            product_root=str(tmp_path / "products"),
+            runtime_state_root=str(tmp_path),
             config=None,
             run_id="run-1",
             status_file=str(status_path),

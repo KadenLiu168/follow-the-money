@@ -32,17 +32,22 @@ jobs:
           set -euo pipefail
           uv run python -m follow_the_money.feed.deployment prepare \
             --repo . \
-            --root feeds \
+            --product-root feeds \
+            --runtime-state-root .feed-state \
             --run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             --output "$GITHUB_OUTPUT"
 
       - name: Publish durable pre-network state
-        if: ${{ steps.prepare.outputs.mode == 'bootstrap' || steps.prepare.outputs.mode == 'armed' }}
+        if: ${{ steps.prepare.outputs.mode == 'bootstrap' || steps.prepare.outputs.mode == 'migration' || steps.prepare.outputs.mode == 'armed' }}
         run: |
           set -euo pipefail
           # The helper performs exactly: git push origin HEAD:main
           uv run python -m follow_the_money.feed.deployment publish --phase pre \
-            --repo . --root feeds --run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            --repo . \
+            --product-root feeds \
+            --runtime-state-root .feed-state \
+            --mode "${{ steps.prepare.outputs.mode }}" \
+            --run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       - name: Collect Feed after durable arming
         id: feed
@@ -50,7 +55,8 @@ jobs:
         run: |
           set -euo pipefail
           uv run python -m follow_the_money.feed.deployment collect \
-            --root feeds \
+            --product-root feeds \
+            --runtime-state-root .feed-state \
             --run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             --status-file feed-status.json \
             --exit-file .feed-exit-code
@@ -65,7 +71,8 @@ jobs:
           fi
           uv run python -m follow_the_money.feed.deployment finalize \
             --repo . \
-            --root feeds \
+            --product-root feeds \
+            --runtime-state-root .feed-state \
             --run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             --status-file feed-status.json \
             --feed-succeeded "$FEED_SUCCEEDED"

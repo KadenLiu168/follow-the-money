@@ -2,12 +2,12 @@
 
 The Feed command:
 
-1. loads explicit config and output root (never machine-global state),
-2. acquires the exclusive output-root collection lock (production path),
+1. loads explicit config and product/runtime-state roots (never machine-global state),
+2. acquires the exclusive runtime-state-root collection lock (production path),
 3. captures the real collection-start instant and one fixed
    ``evidence_cutoff_at`` after collection starts and before any provider
    request,
-4. plans the strictly advancing window from ``feeds/latest.json``,
+4. plans the strictly advancing window from the runtime checkpoint,
 5. runs enabled providers with the durable rate-state debit/reconcile
    lifecycle, bounded HTTP clients, global/per-host concurrency limits,
    and the 300-second pre-commit deadline + 15-second reserve,
@@ -47,10 +47,18 @@ from ..config.load import ConfigError
 from ..config.model import AppConfig
 from ..feed.validate import assert_feed_identity, recompute_feed_identity, validate_feed
 from ..providers.http import FetchError
-from ..providers.lock import CollectionLock, CollectionLockError
+from ..providers.lock import LOCK_FILENAME, CollectionLock, CollectionLockError
 from ..providers.manifest import ManifestError
 from ..providers.rate import RateRegistry, RateStateError, eligibility_delay, refill_tokens
 from ..schema import SchemaError
+from .checkpoint import (
+    CHECKPOINT_FILENAME,
+    CheckpointError,
+    FeedCheckpoint,
+    PreviousSuccess,
+    read_checkpoint,
+    write_checkpoint,
+)
 from .dedupe import deduplicate_items, deterministic_item_order
 from .plan import (
     FeedPlanError,
@@ -117,6 +125,7 @@ def run_feed(
     *,
     config_path: str | None = None,
     output_root: str | None = None,
+    runtime_state_root: str | None = None,
     dry_run: bool = False,
     cutoff: datetime | None = None,
     window_start: str | None = None,
@@ -130,7 +139,7 @@ def run_feed(
 
     Production path (``providers_fn is None``) uses the verified-enabled
     registry built from checked-in manifests, a bounded ``httpx`` client,
-    the exclusive output-root collection lock, the durable rate-state
+    the exclusive runtime-state-root collection lock, the durable rate-state
     debit/reconcile lifecycle, global 8 / per-host 2 concurrency, and the
     300-second pre-commit deadline. ``enabled_provider_ids`` overrides
     config enablement for fixtures.
@@ -163,12 +172,14 @@ def run_feed(
     deadline_started = monotonic()
     deadline_seconds = cfg.feed.pre_commit_deadline_seconds - cfg.feed.commit_reserve_seconds
     deadline_at = deadline_started + deadline_seconds
-    root = Path(output_root or cfg.output_root)
+    product_root = Path(output_root or cfg.output_root)
+    state_root = Path(runtime_state_root or cfg.runtime_state_root)
+    if product_root.resolve() == state_root.resolve():
+        raise FeedInputError("Feed product and runtime-state roots must be distinct")
     try:
-        root.mkdir(parents=True, exist_ok=True)
+        product_root.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        raise FeedExecutionError(f"cannot prepare output root {root}: {exc}") from exc
-    latest_path = root / "latest.json"
+        raise FeedExecutionError(f"cannot prepare product root {product_root}: {exc}") from exc
 
     # Coordinate every run that can use production adapters. Fixture-injected
     # dry runs cannot send a real request and remain write-light and
@@ -178,8 +189,9 @@ def run_feed(
     rate: RateRegistry | None = None
     if coordinates_run:
         try:
+            state_root.mkdir(parents=True, exist_ok=True)
             lock = CollectionLock(
-                root,
+                state_root,
                 timeout_seconds=min(
                     cfg.feed.lock_timeout_seconds,
                     max(0.0, deadline_at - monotonic()),
@@ -201,13 +213,30 @@ def run_feed(
             lock.release()
         raise FeedInputError("cutoff must be timezone-aware")
 
+    checkpoint_path = state_root / CHECKPOINT_FILENAME
+    if coordinates_run:
+        try:
+            if checkpoint_path.exists():
+                checkpoint = read_checkpoint(checkpoint_path)
+            else:
+                established = any(path.name != LOCK_FILENAME for path in state_root.iterdir())
+                if established:
+                    raise CheckpointError(f"missing checkpoint: {checkpoint_path}")
+                checkpoint = FeedCheckpoint(previous_success=None)
+                write_checkpoint(checkpoint_path, checkpoint)
+        except (OSError, CheckpointError) as exc:
+            if lock is not None:
+                lock.release()
+            raise FeedExecutionError(str(exc)) from exc
+    else:
+        checkpoint = FeedCheckpoint(previous_success=None)
+
     try:
         plan = plan_window(
             cutoff=cutoff,
-            latest_path=latest_path,
+            previous_success=checkpoint.previous_success,
             bootstrap_lookback_hours=cfg.feed.bootstrap_lookback_hours,
             gap_threshold_hours=cfg.feed.gap_threshold_hours,
-            validate_latest=_validate_latest if latest_path.exists() else None,
         )
     except FeedPlanError as exc:
         if lock is not None:
@@ -218,7 +247,7 @@ def run_feed(
     # an invalid latest makes zero writes beyond the lock file itself.
     if coordinates_run:
         try:
-            rate = RateRegistry(root)
+            rate = RateRegistry(state_root)
             rate.ensure_registry(now=now_fn)
         except (OSError, RateStateError) as exc:
             if lock is not None:
@@ -488,7 +517,7 @@ def run_feed(
             raise FeedExecutionError("Feed candidate is not its canonical byte representation")
         try:
             publication = publish_feed(
-                output_root=root,
+                output_root=product_root,
                 cutoff=cutoff,
                 run_id=feed["run_id"],
                 feed_bytes=feed_bytes,
@@ -506,6 +535,19 @@ def run_feed(
             raise FeedExecutionError(
                 "Feed dated artifact committed but latest.json was not updated"
             )
+
+        try:
+            write_checkpoint(
+                checkpoint_path,
+                FeedCheckpoint(
+                    previous_success=PreviousSuccess(
+                        evidence_cutoff_at=feed["evidence_cutoff_at"],
+                        run_id=feed["run_id"],
+                    )
+                ),
+            )
+        except CheckpointError as exc:
+            raise FeedExecutionError(f"checkpoint persistence failed: {exc}") from exc
 
         code = 0 if status in ("healthy", "degraded") else 1
         return FeedRunResult(status=status, exit_code=code, feed=feed, warnings=warnings)
@@ -822,18 +864,6 @@ class _Semaphore:
         self._sem.release()
 
 
-def _validate_latest(path: Path) -> dict[str, Any]:
-    """Validate a present latest Feed; raises on any integrity failure."""
-    try:
-        raw = path.read_bytes()
-        feed = load_canonical_json(raw, where="latest.json")
-        validate_feed(feed)
-        assert_feed_identity(feed)
-        return feed
-    except Exception as exc:
-        raise FeedPlanError(f"invalid_latest_integrity: {exc}") from exc
-
-
 def _schema_descriptor(rel: str) -> dict[str, str]:
     path = SCHEMA_ROOT / rel
     try:
@@ -1033,9 +1063,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--config", default=None, help="Explicit config file path (default: repo default)."
     )
-    parser.add_argument(
-        "--output-root", default=None, help="Explicit output root for feeds/ and rate state."
-    )
+    parser.add_argument("--output-root", default=None, help="Explicit Feed product root.")
+    parser.add_argument("--runtime-state-root", default=None, help="Explicit runtime-state root.")
     parser.add_argument(
         "--dry-run", action="store_true", help="Validate and report without publishing."
     )
@@ -1076,6 +1105,7 @@ def main(argv: list[str] | None = None) -> int:
         result = run_feed(
             config_path=args.config,
             output_root=args.output_root,
+            runtime_state_root=args.runtime_state_root,
             dry_run=args.dry_run,
             cutoff=cutoff,
             window_start=args.window_start,

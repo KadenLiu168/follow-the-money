@@ -365,7 +365,7 @@ class SafetyLexicon:
 
 @dataclass(frozen=True)
 class RateRegistry:
-    """Persistent output-root rate-state registry contract."""
+    """Persistent runtime-state-root rate-state registry contract."""
 
     version: str = "1"
     crash_cooldown_hours: int = 24
@@ -391,6 +391,7 @@ class AppConfig:
     calendar: CalendarPolicy
     safety_lexicon: SafetyLexicon
     rate_registry: RateRegistry
+    runtime_state_root: str
     output_root: str = "feeds"
     runs_root: str = "runs"
     timezone: str = "Asia/Shanghai"

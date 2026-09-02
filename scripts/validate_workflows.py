@@ -9,10 +9,11 @@ from typing import Any
 import yaml
 
 GENERATED_PATHS = [
-    "feeds/.follow-the-money-persistent",
-    "feeds/rate-registry.json",
-    "feeds/scope-*.json",
-    "feeds/feed-run-lease.json",
+    ".feed-state/.follow-the-money-persistent",
+    ".feed-state/feed-checkpoint.json",
+    ".feed-state/rate-registry.json",
+    ".feed-state/scope-*.json",
+    ".feed-state/feed-run-lease.json",
     "feeds/latest.json",
     "feeds/daily/**/*.json",
 ]
@@ -94,6 +95,27 @@ def validate_repository_workflows(
     steps = job.get("steps")
     if not isinstance(steps, list):
         raise TypeError("Feed workflow steps must be a list")
+
+    def step_named(name: str) -> dict[str, Any]:
+        for step in steps:
+            if isinstance(step, dict) and step.get("name") == name:
+                return step
+        raise ValueError(f"Feed workflow is missing {name!r} step")
+
+    publish_step = step_named("Publish durable pre-network state")
+    if publish_step.get("if") != (
+        "${{ steps.prepare.outputs.mode == 'bootstrap' || "
+        "steps.prepare.outputs.mode == 'migration' || steps.prepare.outputs.mode == 'armed' }}"
+    ):
+        raise ValueError(
+            "Feed pre-network publication must include migration/bootstrap/armed modes"
+        )
+    collect_step = step_named("Collect Feed after durable arming")
+    if collect_step.get("if") != "${{ steps.prepare.outputs.mode == 'armed' }}":
+        raise ValueError("Feed collection must be armed-only")
+    finalize_step = step_named("Finalize exact deployment state")
+    if finalize_step.get("if") != "${{ always() && steps.prepare.outputs.mode == 'armed' }}":
+        raise ValueError("Feed finalization must follow the armed collection path")
     diagnostics = [
         step
         for step in steps
@@ -131,8 +153,9 @@ def validate_repository_workflows(
         raise ValueError("Feed workflow staging must use an explicit allowlist")
     if "deployment publish --phase pre" not in feed_text and "git add ." in feed_text:
         raise ValueError("Feed workflow staging must use an explicit allowlist")
-    if "--root feeds" not in feed_text:
-        raise ValueError("Feed workflow must execute directly against feeds/")
+    for value in ("--product-root feeds", "--runtime-state-root .feed-state"):
+        if value not in feed_text:
+            raise ValueError(f"Feed workflow must pass explicit {value}")
     _require_order(
         feed_text,
         "actions/checkout",

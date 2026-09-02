@@ -25,13 +25,23 @@ from follow_the_money.feed.cli import (
     FeedExecutionError,
     FeedInputError,
     FeedRunResult,
-    run_feed,
+)
+from follow_the_money.feed.cli import (
+    run_feed as _run_feed,
 )
 from follow_the_money.feed.validate import assert_feed_identity, validate_feed
 from follow_the_money.schema import validate_against
 from tests.test_gate_13_1 import CUTOFF, _fixture_registry
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def run_feed(**kwargs):
+    if "runtime_state_root" not in kwargs and kwargs.get("output_root") is not None:
+        output = Path(kwargs["output_root"])
+        kwargs["runtime_state_root"] = str(output.parent / f".{output.name}-state")
+    return _run_feed(**kwargs)
+
 
 # Modules that existed under the embedded LLM runtime / old four-pass contract.
 REMOVED_MODULES = (

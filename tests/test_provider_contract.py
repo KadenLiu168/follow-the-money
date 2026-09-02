@@ -235,6 +235,16 @@ def test_new_root_registry_created_once(rate_root):
     assert data["version"] == "1"
 
 
+def test_registry_root_identity_fails_closed_after_relocation(tmp_path):
+    original = RateRegistry(tmp_path / "original")
+    original.ensure_registry(now=_clock(0))
+    relocated = RateRegistry(tmp_path / "relocated")
+    relocated.root.mkdir()
+    relocated.registry_path.write_bytes(original.registry_path.read_bytes())
+    with pytest.raises(RateStateError, match="root_identity"):
+        relocated.ensure_registry(now=_clock(1))
+
+
 def test_initialize_scope_two_phase(rate_root):
     reg = RateRegistry(rate_root)
     reg.ensure_registry(now=_clock(0))

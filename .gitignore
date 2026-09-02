@@ -1,17 +1,12 @@
 # Local run bundles (audit evidence, never committed)
 runs/
 
-# Generated Feed state: workflow staging remains an explicit allowlist.
+# Consumer Feed products.
 feeds/*
-!feeds/.follow-the-money-persistent
-!feeds/rate-registry.json
-!feeds/scope-*.json
-!feeds/feed-run-lease.json
 !feeds/latest.json
 !feeds/daily/
 !feeds/daily/*/
 !feeds/daily/*/*.json
-feeds/.collection.lock
 feeds/feed-status.json
 feeds/staging/
 feeds/tmp/
@@ -20,6 +15,27 @@ feeds/bundles/
 feeds/debug/
 feeds/failure/
 feeds/*.tmp-*
+
+# Repository-backed runtime state; only exact durable files are trackable.
+.feed-state/*
+!.feed-state/.follow-the-money-persistent
+!.feed-state/feed-checkpoint.json
+!.feed-state/rate-registry.json
+!.feed-state/scope-*.json
+!.feed-state/feed-run-lease.json
+.feed-state/.collection.lock
+.feed-state/feed-status.json
+.feed-state/.feed-exit-code
+.feed-state/staging/
+.feed-state/tmp/
+.feed-state/runs/
+.feed-state/bundles/
+.feed-state/debug/
+.feed-state/failure/
+.feed-state/*.tmp-*
+
+# Pi local agent metadata
+.pi/
 
 # Python
 __pycache__/

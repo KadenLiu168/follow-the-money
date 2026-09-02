@@ -11,6 +11,7 @@ name: follow-the-money
 
 timezone: Asia/Shanghai
 output_root: feeds
+runtime_state_root: .feed-state
 runs_root: runs
 freshness_limit_minutes: 30
 normal_lag_hours: 2

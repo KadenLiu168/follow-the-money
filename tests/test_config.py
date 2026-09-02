@@ -116,6 +116,81 @@ def test_shipped_defaults_pass_strict_enablement_after_verification():
         assert len(enabled) >= row.minimum, f"{row.group}: {row.minimum} enabled required"
 
 
+def test_runtime_state_root_is_required(tmp_path):
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config.pop("runtime_state_root", None)
+    _write_yaml(config_path, config)
+    with pytest.raises(ConfigError, match="missing required keys.*runtime_state_root"):
+        load_config(
+            config_path,
+            providers_path,
+            manifest_root=manifest_root,
+            require_verified_enabled=False,
+        )
+
+
+def test_runtime_state_root_unknown_field_is_rejected(tmp_path):
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["runtime_state_rooot"] = ".feed-state"
+    _write_yaml(config_path, config)
+    with pytest.raises(ConfigError, match="unknown"):
+        load_config(
+            config_path,
+            providers_path,
+            manifest_root=manifest_root,
+            require_verified_enabled=False,
+        )
+
+
+def test_product_and_runtime_state_roots_resolve_explicitly(tmp_path):
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["output_root"] = "custom-feeds"
+    config["runtime_state_root"] = "custom-feed-state"
+    _write_yaml(config_path, config)
+
+    loaded = load_config(
+        config_path,
+        providers_path,
+        manifest_root=manifest_root,
+        require_verified_enabled=False,
+    )
+
+    assert loaded.output_root == "custom-feeds"
+    assert loaded.runtime_state_root == "custom-feed-state"
+
+
+def test_feed_config_snapshot_excludes_runtime_state_root(tmp_path):
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    config = _read_yaml(config_path)
+    config["runtime_state_root"] = ".feed-state-a"
+    _write_yaml(config_path, config)
+    first = load_config(
+        config_path,
+        providers_path,
+        manifest_root=manifest_root,
+        require_verified_enabled=False,
+    )
+
+    config["runtime_state_root"] = ".feed-state-b"
+    _write_yaml(config_path, config)
+    second = load_config(
+        config_path,
+        providers_path,
+        manifest_root=manifest_root,
+        require_verified_enabled=False,
+    )
+
+    from follow_the_money.feed.cli import _feed_config_snapshot
+
+    first_snapshot = _feed_config_snapshot(first)
+    second_snapshot = _feed_config_snapshot(second)
+    assert "runtime_state_root" not in first_snapshot["snapshot"]
+    assert first_snapshot == second_snapshot
+
+
 # ---------------------------------------------------------------------------
 # Negative: strict UTF-8 and lone surrogates
 # ---------------------------------------------------------------------------

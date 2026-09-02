@@ -37,10 +37,11 @@ def test_test_workflow_offline_only_and_generated_push_boundary():
     assert "openai" not in text
     assert "pytest" in text
     assert _on(data)["push"]["paths-ignore"] == [
-        "feeds/.follow-the-money-persistent",
-        "feeds/rate-registry.json",
-        "feeds/scope-*.json",
-        "feeds/feed-run-lease.json",
+        ".feed-state/.follow-the-money-persistent",
+        ".feed-state/feed-checkpoint.json",
+        ".feed-state/rate-registry.json",
+        ".feed-state/scope-*.json",
+        ".feed-state/feed-run-lease.json",
         "feeds/latest.json",
         "feeds/daily/**/*.json",
     ]
@@ -71,14 +72,28 @@ def test_feed_workflow_has_no_external_root_or_opt_in_contract():
 
 
 def test_feed_workflow_orders_static_preflight_lease_push_feed_and_finalization():
+    data = _load("generate-feed.yml")
     text = (WORKFLOWS / "generate-feed.yml").read_text(encoding="utf-8")
     assert "follow_the_money.feed.deployment prepare" in text
-    assert "--root feeds" in text
+    assert "--product-root feeds" in text
+    assert "--runtime-state-root .feed-state" in text
+    assert '--mode "${{ steps.prepare.outputs.mode }}"' in text
     assert "git push origin HEAD:main" in text
     assert "--force" not in text
     assert "git reset" not in text
     assert "always()" in text
     assert "steps.feed.outcome" in text
+    steps = data["jobs"]["generate"]["steps"]
+    publish = next(
+        step for step in steps if step.get("name") == "Publish durable pre-network state"
+    )
+    collect = next(
+        step for step in steps if step.get("name") == "Collect Feed after durable arming"
+    )
+    finalize = next(step for step in steps if step.get("name") == "Finalize exact deployment state")
+    assert "steps.prepare.outputs.mode == 'migration'" in publish["if"]
+    assert collect["if"] == "${{ steps.prepare.outputs.mode == 'armed' }}"
+    assert finalize["if"] == "${{ always() && steps.prepare.outputs.mode == 'armed' }}"
     assert text.index("actions/checkout") < text.index("deployment prepare")
     assert text.index("deployment prepare") < text.index("git push origin HEAD:main")
     assert text.index("git push origin HEAD:main") < text.index("deployment collect")
@@ -115,13 +130,21 @@ def test_feed_workflow_stages_only_generated_state():
 
 def test_rate_scope_state_is_trackable_by_generated_state_commits():
     result = subprocess.run(
-        ["git", "check-ignore", "--no-index", "feeds/scope-0123456789abcdef.json"],
+        ["git", "check-ignore", "--no-index", ".feed-state/scope-0123456789abcdef.json"],
         cwd=REPO_ROOT,
         check=False,
         capture_output=True,
         text=True,
     )
     assert result.returncode == 1, result.stdout
+    legacy = subprocess.run(
+        ["git", "check-ignore", "--no-index", "feeds/scope-0123456789abcdef.json"],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert legacy.returncode == 0, legacy.stdout
 
 
 def test_entry_points_referenced_exist():

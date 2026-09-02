@@ -27,7 +27,7 @@ import pytest
 from follow_the_money.canonical import canonical_bytes, canonical_digest
 from follow_the_money.config import load_config
 from follow_the_money.config.model import FetchRule
-from follow_the_money.feed.cli import run_feed
+from follow_the_money.feed.cli import run_feed as _run_feed
 from follow_the_money.feed.dedupe import deduplicate_items, deterministic_item_order
 from follow_the_money.feed.plan import FeedPlan, ProviderOutcome
 from follow_the_money.feed.publish import PublishError, publish_feed
@@ -43,6 +43,15 @@ from follow_the_money.schema import SchemaError
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO_ROOT / "config" / "config.yaml"
 DEFAULT_PROVIDERS = REPO_ROOT / "config" / "providers.yaml"
+
+
+def run_feed(**kwargs):
+    if "runtime_state_root" not in kwargs and kwargs.get("output_root") is not None:
+        output = Path(kwargs["output_root"])
+        kwargs["runtime_state_root"] = str(output.parent / f".{output.name}-state")
+    return _run_feed(**kwargs)
+
+
 DEFAULT_MANIFEST_ROOT = REPO_ROOT / "providers"
 
 T0 = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
