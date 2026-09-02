@@ -126,10 +126,9 @@ def test_fixture_backed_run_produces_valid_healthy_feed(tmp_path):
     assert feed["feed_config"]["hash"] != "0" * 64
     assert feed["feed_schema"]["sha256"] != "0" * 64
     assert len(feed["provider_contracts"]) == 8
-    # Dated + latest published.
-    dated = tmp_path / "out" / "daily" / "2026-08-11"
-    assert any(dated.glob("*.json"))
+    # Latest is the only Feed product.
     assert (tmp_path / "out" / "latest.json").exists()
+    assert not (tmp_path / "out" / "daily").exists()
     # Durable rate registry created.
     assert (state / "rate-registry.json").exists()
 

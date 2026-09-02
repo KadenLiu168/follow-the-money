@@ -219,7 +219,7 @@ def test_run_feed_separates_product_and_runtime_state_roots(tmp_path, monkeypatc
 
     assert result.status == "healthy"
     assert (product_root / "latest.json").is_file()
-    assert list((product_root / "daily").rglob("*.json"))
+    assert not (product_root / "daily").exists()
     assert (runtime_root / ".collection.lock").is_file()
     assert (runtime_root / "rate-registry.json").is_file()
     assert (runtime_root / "feed-checkpoint.json").is_file()
@@ -359,7 +359,7 @@ def test_failed_or_dry_run_outcomes_do_not_advance_checkpoint(tmp_path, monkeypa
                 feed_cli,
                 "publish_feed",
                 lambda **_kwargs: SimpleNamespace(
-                    commit_durability_unknown=True, latest_replaced=True
+                    commit_durability_unknown=True, latest_replaced=True, idempotent=False
                 ),
             )
         else:
@@ -367,7 +367,7 @@ def test_failed_or_dry_run_outcomes_do_not_advance_checkpoint(tmp_path, monkeypa
                 feed_cli,
                 "publish_feed",
                 lambda **_kwargs: SimpleNamespace(
-                    commit_durability_unknown=False, latest_replaced=False
+                    commit_durability_unknown=False, latest_replaced=False, idempotent=False
                 ),
             )
 
@@ -665,9 +665,7 @@ def test_source_complete_empty_feed_publishes_and_advances_window(tmp_path, monk
     assert_feed_identity(latest)
     assert latest["evidence_cutoff_at"] == first.feed["evidence_cutoff_at"]
     assert latest["provider_outcomes"]
-    dated = out / "daily" / "2026-08-11" / f"{latest['run_id']}.json"
-    assert dated.is_file()
-    assert dated.read_bytes() == latest_path.read_bytes()
+    assert not (out / "daily").exists()
 
     second = run_feed(
         output_root=str(out),
@@ -699,7 +697,7 @@ def test_source_incomplete_run_keeps_latest_and_reports_provider_diagnostics(tmp
     )
     assert baseline.status == "healthy"
     previous_latest = (out / "latest.json").read_bytes()
-    previous_dated = sorted((out / "daily").rglob("*.json"))
+    assert not (out / "daily").exists()
 
     registry = {
         provider_id: _OutcomeAdapter(
@@ -727,7 +725,7 @@ def test_source_incomplete_run_keeps_latest_and_reports_provider_diagnostics(tmp
     assert result.exit_code == 1
     assert not published
     assert (out / "latest.json").read_bytes() == previous_latest
-    assert sorted((out / "daily").rglob("*.json")) == previous_dated
+    assert not (out / "daily").exists()
     assert "bls" in diagnostics
     assert "failed" in diagnostics
     assert "provider unavailable" in diagnostics
@@ -837,7 +835,7 @@ def test_dry_run_publishes_nothing(tmp_path):
         enabled_provider_ids=["federal_reserve"],
     )
     # The one-provider fixture leaves mandatory groups incomplete, but
-    # dry-run still publishes no dated/latest artifact.
+    # dry-run still publishes no latest artifact.
     assert not (out / "latest.json").exists()
     assert not list((out / "daily").glob("**/*.json")) if (out / "daily").exists() else True
     assert not (out / "rate-registry.json").exists()

@@ -2,8 +2,8 @@
 
 Design section 5:
 
-- The daily Skill consumes only ``feeds/latest.json``; historical daily Feeds
-  and run bundles are never inputs.
+- The daily Skill consumes only ``feeds/latest.json``; runtime continuity is
+  owned by checkpoint state, not by additional Feed products.
 - V1 stale boundary: lag > 30 minutes is stale; normal mode refuses lag > 2
   hours. ``brief_generated_at < evidence_cutoff_at`` or ``< feed.generated_at``
   fails closed with ``clock_before_feed``.

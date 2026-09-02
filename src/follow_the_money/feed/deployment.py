@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from ..canonical import load_canonical_json
 from ..config.model import AppConfig, RatePolicy
@@ -632,46 +631,35 @@ def _read_success_status(status_path: Path) -> dict[str, Any]:
 
 
 def _feed_paths(product_root: Path, raw: dict[str, Any]) -> tuple[Path, ...]:
-    try:
-        cutoff = _utc(datetime.fromisoformat(raw["evidence_cutoff_at"]))
-    except (DeploymentError, ValueError) as exc:
-        raise DeploymentError("successful Feed evidence_cutoff_at is invalid") from exc
-    expected = {
-        "dated_relative_path": (
-            f"daily/{cutoff.astimezone(ZoneInfo('Asia/Shanghai')):%Y-%m-%d}/{raw['run_id']}.json"
-        ),
-        "latest_relative_path": "latest.json",
-    }
-    paths: list[Path] = []
+    if "dated_relative_path" in raw:
+        raise DeploymentError("Feed status dated_relative_path is unsupported")
+    relative = raw.get("latest_relative_path")
+    if relative != "latest.json":
+        raise DeploymentError("Feed status latest_relative_path is invalid")
     root_resolved = product_root.resolve()
-    for field in ("dated_relative_path", "latest_relative_path"):
-        relative = raw.get(field)
-        if relative != expected[field]:
-            raise DeploymentError(f"Feed status {field} is invalid")
-        candidate = (product_root / relative).resolve()
-        if not candidate.is_relative_to(root_resolved) or not candidate.is_file():
-            raise DeploymentError(f"Feed status {field} is outside or missing")
-        if candidate.stat().st_size == 0:
-            raise DeploymentError(f"Feed status {field} is empty")
-        try:
-            feed = load_canonical_json(candidate.read_bytes(), where=str(candidate))
-            if not isinstance(feed, dict):
-                raise DeploymentError(f"Feed product {field} is not an object")
-            validate_feed(feed)
-            assert_feed_identity(feed)
-            if (
-                feed.get("run_id") != raw["run_id"]
-                or feed.get("evidence_cutoff_at") != raw["evidence_cutoff_at"]
-            ):
-                raise DeploymentError(f"Feed product {field} does not match successful status")
-        except DeploymentError:
-            raise
-        except (OSError, SchemaError, TypeError, ValueError) as exc:
-            raise DeploymentError(f"Feed product {field} is invalid") from exc
-        paths.append(candidate)
-    if paths[0] == paths[1]:
-        raise DeploymentError("Feed status paths must be distinct")
-    return tuple(paths)
+    candidate = (product_root / relative).resolve()
+    if not candidate.is_relative_to(root_resolved) or not candidate.is_file():
+        raise DeploymentError("Feed status latest_relative_path is outside or missing")
+    if candidate.stat().st_size == 0:
+        raise DeploymentError("Feed status latest_relative_path is empty")
+    try:
+        feed = load_canonical_json(candidate.read_bytes(), where=str(candidate))
+        if not isinstance(feed, dict):
+            raise DeploymentError("Feed product latest_relative_path is not an object")
+        validate_feed(feed)
+        assert_feed_identity(feed)
+        if (
+            feed.get("run_id") != raw["run_id"]
+            or feed.get("evidence_cutoff_at") != raw["evidence_cutoff_at"]
+        ):
+            raise DeploymentError(
+                "Feed product latest_relative_path does not match successful status"
+            )
+    except DeploymentError:
+        raise
+    except (OSError, SchemaError, TypeError, ValueError) as exc:
+        raise DeploymentError("Feed product latest_relative_path is invalid") from exc
+    return (candidate,)
 
 
 def finalize_deployment(
@@ -805,13 +793,10 @@ def _write_feed_status(path: Path, result: Any) -> None:
             if isinstance(provider_outcomes, list):
                 status["provider_outcomes"] = provider_outcomes
     elif result.feed is not None and result.status in {"healthy", "degraded"}:
-        cutoff = datetime.fromisoformat(result.feed["evidence_cutoff_at"])
-        day = cutoff.astimezone(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
         status.update(
             {
                 "run_id": result.feed["run_id"],
                 "evidence_cutoff_at": result.feed["evidence_cutoff_at"],
-                "dated_relative_path": f"daily/{day}/{result.feed['run_id']}.json",
                 "latest_relative_path": "latest.json",
             }
         )

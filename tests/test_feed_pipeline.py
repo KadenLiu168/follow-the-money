@@ -533,7 +533,7 @@ def test_all_rejected_provider_is_failed_not_empty(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_publish_dated_then_latest(tmp_path):
+def test_publish_latest_only(tmp_path):
     root = tmp_path / "out"
     root.mkdir()
     cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
@@ -545,10 +545,8 @@ def test_publish_dated_then_latest(tmp_path):
         feed_bytes=feed,
         latest_bytes=feed,
     )
-    dated = root / "daily" / "2026-08-11" / "run_1.json"
-    assert dated.exists()
-    assert dated.read_bytes() == feed
     assert (root / "latest.json").read_bytes() == feed
+    assert not (root / "daily").exists()
     assert result.latest_replaced
 
 
@@ -566,7 +564,7 @@ def test_publish_idempotent_same_run(tmp_path):
     assert result.idempotent
 
 
-def test_publish_same_path_incompatible_fails(tmp_path):
+def test_publish_equal_owner_incompatible_fails(tmp_path):
     root = tmp_path / "out"
     root.mkdir()
     cutoff = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
@@ -574,8 +572,16 @@ def test_publish_same_path_incompatible_fails(tmp_path):
     publish_feed(
         output_root=root, cutoff=cutoff, run_id="run_1", feed_bytes=feed, latest_bytes=feed
     )
-    incompatible = _publication_bytes(cutoff, "b" * 64)
-    with pytest.raises(PublishError, match="incompatible content"):
+    incompatible = json.dumps(
+        {
+            "content_digest": "a" * 64,
+            "evidence_cutoff_at": cutoff.isoformat().replace("+00:00", "Z"),
+            "marker": "different",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    with pytest.raises(PublishError, match="equal ownership"):
         publish_feed(
             output_root=root,
             cutoff=cutoff,
@@ -614,7 +620,7 @@ def test_publish_latest_ownership_mismatch_rejected(tmp_path):
         )
 
 
-def test_dated_path_uses_asia_shanghai_cutoff_date(tmp_path):
+def test_cutoff_timezone_does_not_create_dated_product(tmp_path):
     root = tmp_path / "out"
     root.mkdir()
     cutoff = datetime(2026, 8, 10, 20, 30, 0, tzinfo=UTC)
@@ -628,7 +634,6 @@ def test_dated_path_uses_asia_shanghai_cutoff_date(tmp_path):
         latest_bytes=feed,
     )
 
-    expected = root / "daily" / "2026-08-11" / "run_1.json"
-    assert result.dated_path == expected
-    assert expected.read_bytes() == feed
-    assert not (root / "daily" / "2026-08-10").exists()
+    assert result.latest_replaced
+    assert (root / "latest.json").read_bytes() == feed
+    assert not (root / "daily").exists()

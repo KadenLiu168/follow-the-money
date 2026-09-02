@@ -46,9 +46,10 @@ one identity.
 Identity is therefore a *semantic* identity, not a whole-file checksum.
 Consumers reconstruct the projection, recompute both values, and fail
 closed on any mismatch. Validation additionally attempts the former
-whole-envelope projection for an already-published schema-v1 artifact so
-pre-change `latest.json` and dated artifacts remain readable; newly produced
-Feeds always use the semantic projection.
+whole-envelope projection for an already-published schema-v1 `latest.json`;
+newly produced Feeds always use the semantic projection. Runtime continuity is
+checkpoint-owned, and Git history is repository-level history rather than a
+Feed archive or historical query API.
 
 ## Cutoff / time model
 
@@ -111,7 +112,7 @@ observations not source-available at cutoff are rejected.
   `failure`, retains Provider diagnostics, and does not replace the last valid
   `latest.json`.
 - A source-complete Feed with `items: []` remains a normal successful Feed and
-  advances the evidence window through the usual dated/latest publication.
+  advances the evidence window through the usual latest publication.
 - Existing `degraded` semantics remain available for accepted non-source
   conditions.
 - Intelligence fields (importance, direction, price-in, regime, impact,
@@ -119,26 +120,21 @@ observations not source-available at cutoff are rejected.
 
 ## Publication
 
-- Create-only `feeds/daily/YYYY-MM-DD/<run_id>.json` (date = cutoff in
-  Asia/Shanghai) before atomic replacement of `feeds/latest.json`.
-- Unpredictable same-parent/same-device staging, create-only writes,
-  file/staging-directory `fsync`, platform atomic no-replace dated rename,
-  same-directory atomic latest replace, and parent-directory `fsync` after
-  each rename.
-- Every dated/latest byte sequence passed to publication is the shared
+- `feeds/latest.json` is the only Feed product. Publication uses unpredictable
+  same-parent/same-device staging, create-only writes, file and parent-directory
+  `fsync`, ownership validation immediately before commit, and same-directory
+  atomic replacement followed by parent-directory `fsync`.
+- Every latest byte sequence passed to publication is the shared
   `canonical_bytes()` serialization of its validated Feed object; no
   module-local JSON serializer settings are used for Feed artifacts.
-- A rerun of an existing dated path is idempotent when the stored artifact
-  validates as a canonical Feed and its semantic `run_id`/`content_digest`
-  match the candidate at the same cutoff — even when excluded audit bytes
-  differ. The first immutable dated artifact is retained as the audit record
-  for that semantic run, and any `latest.json` repair or replacement uses
-  those retained bytes, preserving byte equality between the dated and
-  latest views. Invalid existing content or a same-path semantic mismatch
-  fails closed without overwriting.
+- A valid current latest with the candidate's semantic `run_id`,
+  `content_digest`, and cutoff is an idempotent accepted owner; its existing
+  canonical bytes are retained even when excluded audit bytes differ. A stale
+  candidate or incompatible equal owner fails closed without creating another
+  Feed product.
 - Rename success followed by parent-`fsync` failure returns
-  `commit_durability_unknown`; recovery re-applies the maximum
-  `(evidence_cutoff_at, content_digest)` tuple rule.
+  `commit_durability_unknown`; the product remains visible but checkpoint
+  advancement is refused because durability is uncertain.
 - The scheduled GitHub workflow runs on GitHub-hosted `ubuntu-latest` at
   `20 0 * * *` (08:20 Asia/Shanghai), uses `feeds/` for Feed products and
   `.feed-state/` for repository-backed runtime state, and publishes only
@@ -151,8 +147,8 @@ observations not source-available at cutoff are rejected.
   `scripts/feed/follow-the-money-feed`) supports explicit config/product/
   runtime-state roots, `--dry-run`, fixture clocks/windows, and deterministic exit codes
   (0 healthy/degraded, 1 generation/publication failure, 2 usage/config).
-- `--dry-run` publishes nothing but real sends still lock and durably
-  debit/reconcile rate state; an explicit no-send fixture dry run may leave
-  rate state unchanged.
+- `--dry-run` publishes no `latest.json` and advances no checkpoint, but real
+  sends still lock and durably debit/reconcile rate state; an explicit no-send
+  fixture dry run may leave rate state unchanged.
 - There is no LLM adapter anywhere: the Feed pipeline is fully deterministic
   and credential-free, and no public user-facing CLI product form exists.

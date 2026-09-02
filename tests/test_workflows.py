@@ -43,7 +43,6 @@ def test_test_workflow_offline_only_and_generated_push_boundary():
         ".feed-state/scope-*.json",
         ".feed-state/feed-run-lease.json",
         "feeds/latest.json",
-        "feeds/daily/**/*.json",
     ]
     assert "pull_request" in _on(data)
 

@@ -9,7 +9,6 @@ on:
       - .feed-state/scope-*.json
       - .feed-state/feed-run-lease.json
       - feeds/latest.json
-      - feeds/daily/**/*.json
   pull_request:
 
 # Hosted credential-free CI: clean install, offline-only tests, no secrets.

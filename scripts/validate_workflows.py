@@ -15,7 +15,6 @@ GENERATED_PATHS = [
     ".feed-state/scope-*.json",
     ".feed-state/feed-run-lease.json",
     "feeds/latest.json",
-    "feeds/daily/**/*.json",
 ]
 
 

@@ -49,7 +49,7 @@ def test_workflow_validator_rejects_collection_for_migration_mode(tmp_path: Path
 def test_workflow_validator_rejects_broad_generated_ci_ignore(tmp_path: Path):
     workflow = REPO_ROOT / ".github/workflows/ci-quality-gate.yml"
     altered = tmp_path / "test.yml"
-    text = workflow.read_text(encoding="utf-8").replace("- feeds/daily/**/*.json", "- feeds/**")
+    text = workflow.read_text(encoding="utf-8").replace("- feeds/latest.json", "- feeds/**")
     altered.write_text(text, encoding="utf-8")
     with pytest.raises(ValueError, match="paths-ignore"):
         validate_repository_workflows(REPO_ROOT, test_workflow_path=altered)

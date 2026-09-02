@@ -83,7 +83,7 @@ providers/       provider 契约 manifest 与 fixture 来源记录
 schemas/         JSON Schema 2020-12 契约（Feed 与 Agent invocation）
 src/follow_the_money/  live Feed/Audit/Event 路径与保留的确定性库
 scripts/feed/    最小内部 Feed 入口：follow-the-money-feed
-feeds/           consumer Feed 发布产物（daily/<date>/<run_id>.json、latest.json）
+feeds/           当前 consumer Feed 产物（latest.json）
 .feed-state/     仓库持久化的 lock、RateRegistry、lease 与 checkpoint
 tests/           pytest 测试套件（无需凭据）
 docs/            架构、契约、runbook
@@ -118,8 +118,9 @@ GitHub Actions 使用 `ubuntu-latest` 在 `20 0 * * *`（Asia/Shanghai 08:20）
 `.feed-state/` 保存仓库持久 runtime state。首次 invocation 可能执行零 Provider
 请求的 legacy migration 或 bootstrap；正常 arming 与未完成运行恢复使用记录的
 checkpoint 和 lease 保守边界。`evidence_cutoff_at` 取实际运行时刻，不取名义调度时刻。
-在宣称部署可运行前，必须验证 Actions `contents: write` 与分支策略；Host Agent
-对 Feed 的消费和推理仍是之后独立的动作。
+checkpoint 负责 runtime continuity；Git history 只是仓库历史，不是 Feed archive 或
+historical query API。在宣称部署可运行前，必须验证 Actions `contents: write` 与分支策略；
+Host Agent 对 Feed 的消费和推理仍是之后独立的动作。
 
 ## 文档
 

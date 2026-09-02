@@ -94,7 +94,7 @@ providers/        provider contract manifests and fixture provenance
 schemas/          JSON Schema 2020-12 contracts (Feed plus Agent invocation)
 src/follow_the_money/  live Feed/Audit/Event paths plus retained deterministic libraries
 scripts/feed/     minimal internal Feed entry: follow-the-money-feed
-feeds/            consumer Feed products (daily/<date>/<run_id>.json, latest.json)
+feeds/            current consumer Feed product (latest.json)
 .feed-state/      repository-backed lock, RateRegistry, lease, and checkpoint
 tests/            pytest suite (credential-free)
 docs/             architecture, contracts, runbooks
@@ -126,13 +126,14 @@ There is no public user-facing CLI product form: `brief`, `eval`, and
 
 GitHub Actions runs the credential-free Feed on `ubuntu-latest` at `20 0 * * *`
 (08:20 Asia/Shanghai), or through `workflow_dispatch`. It uses `feeds/` only
-for consumer products and `.feed-state/` for repository-backed runtime state.
-The first invocation may perform a zero-Provider legacy migration or bootstrap;
-normal arming and incomplete-run recovery use the recorded checkpoint and
-conservative lease boundary. `evidence_cutoff_at` is captured from actual
-runtime, not from the nominal schedule. Verify Actions `contents: write` and
-branch policy before calling deployment operational; Host-Agent consumption and
-reasoning remain a separate later action.
+for the current consumer product and `.feed-state/` for repository-backed
+runtime state. The first invocation may perform a zero-Provider legacy migration
+or bootstrap; normal arming and incomplete-run recovery use the recorded
+checkpoint and conservative lease boundary. `evidence_cutoff_at` is captured
+from actual runtime, not from the nominal schedule. Checkpoint state owns runtime
+continuity; Git history is repository history, not a Feed archive or query API.
+Verify Actions `contents: write` and branch policy before calling deployment
+operational; Host-Agent consumption and reasoning remain a separate later action.
 
 ## Documentation
 

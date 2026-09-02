@@ -333,8 +333,7 @@ def test_success_and_failure_finalization_keep_exact_paths(tmp_path: Path):
     prepare_deployment(tmp_path, _cfg(_policy()), deployment_run_id="43-1", now=_clock(armed_at))
     feed = _healthy_feed()
     run_id = feed["run_id"]
-    (_product_root(tmp_path) / "daily/2026-08-30").mkdir(parents=True)
-    (_product_root(tmp_path) / f"daily/2026-08-30/{run_id}.json").write_bytes(canonical_bytes(feed))
+    _product_root(tmp_path).mkdir(parents=True)
     (_product_root(tmp_path) / "latest.json").write_bytes(canonical_bytes(feed))
     status = tmp_path / "feed-status.json"
     status.write_text(
@@ -343,7 +342,6 @@ def test_success_and_failure_finalization_keep_exact_paths(tmp_path: Path):
                 "status": "healthy",
                 "run_id": run_id,
                 "evidence_cutoff_at": "2026-08-30T00:20:00Z",
-                "dated_relative_path": f"daily/2026-08-30/{run_id}.json",
                 "latest_relative_path": "latest.json",
             }
         ),
@@ -425,8 +423,8 @@ def test_success_finalization_rejects_non_feed_status_paths(tmp_path: Path):
     prepare_deployment(tmp_path, _cfg(_policy()), deployment_run_id="43-1", now=_clock(armed_at))
     feed = _healthy_feed()
     run_id = feed["run_id"]
-    (_product_root(tmp_path) / "daily/2026-08-30").mkdir(parents=True)
-    (_product_root(tmp_path) / f"daily/2026-08-30/{run_id}.json").write_bytes(canonical_bytes(feed))
+    _product_root(tmp_path).mkdir(parents=True)
+    (_product_root(tmp_path) / "latest.json").write_bytes(canonical_bytes(feed))
     status = tmp_path / "feed-status.json"
     status.write_text(
         json.dumps(
@@ -434,7 +432,6 @@ def test_success_finalization_rejects_non_feed_status_paths(tmp_path: Path):
                 "status": "healthy",
                 "run_id": run_id,
                 "evidence_cutoff_at": "2026-08-30T00:20:00Z",
-                "dated_relative_path": f"daily/2026-08-30/{run_id}.json",
                 "latest_relative_path": scope_path.name,
             }
         ),

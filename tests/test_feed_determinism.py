@@ -10,7 +10,7 @@ Covers the deterministic Feed contract:
   projection; runtime audit metadata never participates, every semantic
   member does, and the legacy whole-envelope read path stays exact (1.4).
 - Published Feed bytes are the shared canonical serialization and repeated
-  semantic publication retains the first immutable artifact (1.5).
+  semantic publication retains the current latest artifact (1.5).
 """
 
 from __future__ import annotations
@@ -726,8 +726,7 @@ def test_published_bytes_are_canonical_bytes(tmp_path, monkeypatch):
     feed = result.feed
     expected = canonical_bytes(feed)
     assert (out / "latest.json").read_bytes() == expected
-    dated = next((out / "daily").rglob("*.json"))
-    assert dated.read_bytes() == expected
+    assert not (out / "daily").exists()
     # Canonical round-trip: parsing and re-serializing reproduces the bytes.
     parsed = json.loads(expected.decode("utf-8"))
     assert canonical_bytes(parsed) == expected
@@ -758,6 +757,7 @@ def _semantic_publication_bytes(
 
 def test_same_semantic_identity_with_different_audit_timing_is_idempotent(tmp_path):
     root = tmp_path / "out"
+    root.mkdir()
     items = [_news_item("i1", "federal_reserve", knowledge=T0 - timedelta(hours=1))]
     bytes_1, run_id = _semantic_publication_bytes(
         started=T0 - timedelta(minutes=5),
@@ -785,13 +785,13 @@ def test_same_semantic_identity_with_different_audit_timing_is_idempotent(tmp_pa
     )
     assert second.idempotent
     assert not second.latest_replaced
-    dated = root / "daily" / "2026-08-11" / f"{run_id}.json"
-    assert dated.read_bytes() == bytes_1  # first immutable artifact retained
+    assert not (root / "daily").exists()
     assert (root / "latest.json").read_bytes() == bytes_1
 
 
-def test_idempotent_recovery_repairs_latest_from_retained_dated_bytes(tmp_path):
+def test_idempotent_duplicate_accepts_current_latest_without_an_archive(tmp_path):
     root = tmp_path / "out"
+    root.mkdir()
     items = [_news_item("i1", "federal_reserve", knowledge=T0 - timedelta(hours=1))]
     bytes_1, run_id = _semantic_publication_bytes(
         started=T0 - timedelta(minutes=5),
@@ -807,56 +807,44 @@ def test_idempotent_recovery_repairs_latest_from_retained_dated_bytes(tmp_path):
         generated=T0 + timedelta(minutes=7),
         items=items,
     )
-    # Crash state: dated committed, latest absent.
-    date_dir = root / "daily" / "2026-08-11"
-    date_dir.mkdir(parents=True)
-    (date_dir / f"{run_id}.json").write_bytes(bytes_1)
+    publish_feed(output_root=root, cutoff=T0, run_id=run_id, feed_bytes=bytes_1)
 
-    result = publish_feed(
-        output_root=root, cutoff=T0, run_id=run_id, feed_bytes=bytes_2, latest_bytes=bytes_2
-    )
+    result = publish_feed(output_root=root, cutoff=T0, run_id=run_id, feed_bytes=bytes_2)
+
     assert result.idempotent
-    assert result.latest_replaced
-    # latest is repaired from the retained dated bytes, not the later envelope.
+    assert not result.latest_replaced
+    assert not (root / "daily").exists()
     assert (root / "latest.json").read_bytes() == bytes_1
-    assert (date_dir / f"{run_id}.json").read_bytes() == bytes_1
 
 
-def test_same_path_semantic_mismatch_fails_closed(tmp_path):
+def test_current_latest_with_incompatible_equal_ownership_fails_closed(tmp_path):
     root = tmp_path / "out"
-    items = [_news_item("i1", "federal_reserve", knowledge=T0 - timedelta(hours=1))]
-    bytes_1, run_id = _semantic_publication_bytes(
-        started=T0 - timedelta(minutes=5),
-        retrieved=T0 + timedelta(minutes=1),
-        completed=T0 + timedelta(minutes=3),
-        generated=T0 + timedelta(minutes=4),
-        items=items,
-    )
+    root.mkdir()
+    first = _identity_feed(cutoff=T0)
     publish_feed(
-        output_root=root, cutoff=T0, run_id=run_id, feed_bytes=bytes_1, latest_bytes=bytes_1
+        output_root=root,
+        cutoff=T0,
+        run_id=first["run_id"],
+        feed_bytes=canonical_bytes(first),
     )
-    # Different semantic evidence (different items => different digest).
-    different = _semantic_publication_bytes(
-        started=T0 - timedelta(minutes=5),
-        retrieved=T0 + timedelta(minutes=1),
-        completed=T0 + timedelta(minutes=3),
-        generated=T0 + timedelta(minutes=4),
-        items=[_news_item("i-other", "federal_reserve", knowledge=T0 - timedelta(hours=2))],
-    )[0]
-    with pytest.raises(PublishError, match="incompatible content"):
+
+    incompatible = deepcopy(first)
+    incompatible["run_id"] = "incompatible-run"
+    candidate = canonical_bytes(incompatible)
+    with pytest.raises(PublishError, match="incompatible equal ownership"):
         publish_feed(
             output_root=root,
             cutoff=T0,
-            run_id=run_id,
-            feed_bytes=different,
-            latest_bytes=different,
+            run_id="incompatible-run",
+            feed_bytes=candidate,
         )
-    dated = root / "daily" / "2026-08-11" / f"{run_id}.json"
-    assert dated.read_bytes() == bytes_1  # immutable artifact untouched
+    assert (root / "latest.json").read_bytes() == canonical_bytes(first)
+    assert not (root / "daily").exists()
 
 
-def test_invalid_existing_dated_bytes_fail_closed(tmp_path):
+def test_invalid_existing_latest_bytes_fail_closed(tmp_path):
     root = tmp_path / "out"
+    root.mkdir()
     items = [_news_item("i1", "federal_reserve", knowledge=T0 - timedelta(hours=1))]
     bytes_2, run_id = _semantic_publication_bytes(
         started=T0 - timedelta(minutes=1),
@@ -865,15 +853,32 @@ def test_invalid_existing_dated_bytes_fail_closed(tmp_path):
         generated=T0 + timedelta(minutes=7),
         items=items,
     )
-    date_dir = root / "daily" / "2026-08-11"
-    date_dir.mkdir(parents=True)
-    (date_dir / f"{run_id}.json").write_bytes(b"{corrupt")
+    (root / "latest.json").write_bytes(b"{corrupt")
 
-    with pytest.raises(PublishError, match="incompatible content"):
-        publish_feed(
-            output_root=root, cutoff=T0, run_id=run_id, feed_bytes=bytes_2, latest_bytes=bytes_2
-        )
-    assert (date_dir / f"{run_id}.json").read_bytes() == b"{corrupt"
+    with pytest.raises(PublishError, match="current latest Feed ownership key invalid"):
+        publish_feed(output_root=root, cutoff=T0, run_id=run_id, feed_bytes=bytes_2)
+    assert (root / "latest.json").read_bytes() == b"{corrupt"
+
+
+def test_schema_invalid_current_latest_cannot_claim_idempotent_ownership(tmp_path):
+    root = tmp_path / "out"
+    root.mkdir()
+    items = [_news_item("i1", "federal_reserve", knowledge=T0 - timedelta(hours=1))]
+    candidate, run_id = _semantic_publication_bytes(
+        started=T0 - timedelta(minutes=1),
+        retrieved=T0 + timedelta(minutes=2),
+        completed=T0 + timedelta(minutes=6),
+        generated=T0 + timedelta(minutes=7),
+        items=items,
+    )
+    invalid_current = json.loads(candidate)
+    invalid_current["unexpected"] = True
+    invalid_bytes = canonical_bytes(invalid_current)
+    (root / "latest.json").write_bytes(invalid_bytes)
+
+    with pytest.raises(PublishError, match="current latest Feed is invalid"):
+        publish_feed(output_root=root, cutoff=T0, run_id=run_id, feed_bytes=candidate)
+    assert (root / "latest.json").read_bytes() == invalid_bytes
 
 
 def test_non_canonical_candidate_bytes_rejected(tmp_path):

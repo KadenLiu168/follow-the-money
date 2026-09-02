@@ -406,9 +406,7 @@ def test_success_finalization_requires_and_publishes_matching_checkpoint(tmp_pat
         product_root, state_root, cfg, deployment_run_id="second", now=lambda: armed_at
     )
     feed = _healthy_feed()
-    dated = product_root / f"daily/2026-08-28/{feed['run_id']}.json"
-    dated.parent.mkdir(parents=True)
-    dated.write_bytes(canonical_bytes(feed))
+    product_root.mkdir(parents=True)
     latest = product_root / "latest.json"
     latest.write_bytes(canonical_bytes(feed))
     status = tmp_path / "feed-status.json"
@@ -418,7 +416,6 @@ def test_success_finalization_requires_and_publishes_matching_checkpoint(tmp_pat
                 "status": "healthy",
                 "run_id": feed["run_id"],
                 "evidence_cutoff_at": feed["evidence_cutoff_at"],
-                "dated_relative_path": f"daily/2026-08-28/{feed['run_id']}.json",
                 "latest_relative_path": "latest.json",
             }
         ),
@@ -445,12 +442,12 @@ def test_success_finalization_requires_and_publishes_matching_checkpoint(tmp_pat
     )
 
     assert checkpoint in paths
-    assert dated in paths
-    assert latest in paths
+    assert paths.count(latest) == 1
+    assert all(path.parent != product_root / "daily" for path in paths)
     assert read_lease(state_root / "feed-run-lease.json").state == "success"
 
 
-def test_success_finalization_rejects_product_bytes_that_do_not_match_status(tmp_path: Path):
+def test_success_finalization_rejects_invalid_latest_product(tmp_path: Path):
     product_root = tmp_path / "feeds"
     state_root = tmp_path / ".feed-state"
     cfg = _cfg(_policy())
@@ -460,10 +457,8 @@ def test_success_finalization_rejects_product_bytes_that_do_not_match_status(tmp
         product_root, state_root, cfg, deployment_run_id="second", now=lambda: armed_at
     )
     feed = _healthy_feed()
-    dated = product_root / f"daily/2026-08-28/{feed['run_id']}.json"
-    dated.parent.mkdir(parents=True)
-    dated.write_bytes(b"not a Feed")
-    (product_root / "latest.json").write_bytes(canonical_bytes(feed))
+    product_root.mkdir(parents=True)
+    (product_root / "latest.json").write_bytes(b"not a Feed")
     status = tmp_path / "feed-status.json"
     status.write_text(
         json.dumps(
@@ -471,7 +466,6 @@ def test_success_finalization_rejects_product_bytes_that_do_not_match_status(tmp
                 "status": "healthy",
                 "run_id": feed["run_id"],
                 "evidence_cutoff_at": feed["evidence_cutoff_at"],
-                "dated_relative_path": f"daily/2026-08-28/{feed['run_id']}.json",
                 "latest_relative_path": "latest.json",
             }
         ),

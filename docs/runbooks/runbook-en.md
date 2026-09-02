@@ -70,10 +70,11 @@ Only these paths may be published by the deployment helper:
 - `.feed-state/feed-checkpoint.json` for bootstrap/migration and success finalization
 - the exact `.feed-state/scope-<digest>.json` files named by the registry
 - `.feed-state/feed-run-lease.json`
-- `feeds/latest.json` and a successful dated `feeds/daily/<date>/<run_id>.json`
+- `feeds/latest.json` (the only successful Feed product)
 
-Locks, status files, staging, temporary files, bundles, and debug/failure
-workspaces remain ignored and are never staged. To roll back, use GitHub's
+Locks, status files, staging, temporary files, bundles, legacy product files,
+and debug/failure workspaces remain outside the allowlist and are never staged.
+To roll back, use GitHub's
 native workflow-disable control and preserve the last remote lease and rate
 state; do not reset generated state or restart an external scheduler from an
 uncertain run.

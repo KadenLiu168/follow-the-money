@@ -18,9 +18,9 @@ The Feed command:
 7. normalizes/dedupes (stable ``(knowledge_available_at, id)`` total order),
    validates the Feed schema/semantic-digest identity, and serializes
    published bytes with the shared ``canonical_bytes()``,
-8. publishes dated (no-replace) then latest (atomic replace) — or dry-runs;
-   an existing dated artifact with the same semantic ``run_id``/
-   ``content_digest`` is an idempotent no-op that retains the stored bytes.
+8. atomically publishes ``latest.json`` — or dry-runs; an existing latest
+   artifact with the same semantic ``run_id``/``content_digest`` is an
+   idempotent no-op that retains the stored bytes.
 
 Exit contract: 0 healthy/degraded success; 1 generation/publication failure;
 2 usage/config/startup-capability errors.
@@ -521,7 +521,6 @@ def run_feed(
                 cutoff=cutoff,
                 run_id=feed["run_id"],
                 feed_bytes=feed_bytes,
-                latest_bytes=feed_bytes,
                 monotonic_now=monotonic,
                 deadline_at=deadline_at,
             )
@@ -531,10 +530,8 @@ def run_feed(
             raise FeedExecutionError(
                 "commit_durability_unknown: Feed publication durability is unknown"
             )
-        if not publication.latest_replaced:
-            raise FeedExecutionError(
-                "Feed dated artifact committed but latest.json was not updated"
-            )
+        if not (publication.latest_replaced or publication.idempotent):
+            raise FeedExecutionError("Feed latest.json ownership was not accepted")
 
         try:
             write_checkpoint(
@@ -1119,16 +1116,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.status_file:
         status = {"status": result.status, "warnings": result.warnings}
         if result.feed is not None and result.status in ("healthy", "degraded"):
-            from datetime import datetime
-            from zoneinfo import ZoneInfo
-
-            cutoff = datetime.fromisoformat(result.feed["evidence_cutoff_at"])
-            asia_date = cutoff.astimezone(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
             status.update(
                 {
                     "run_id": result.feed["run_id"],
                     "evidence_cutoff_at": result.feed["evidence_cutoff_at"],
-                    "dated_relative_path": f"daily/{asia_date}/{result.feed['run_id']}.json",
                     "latest_relative_path": "latest.json",
                 }
             )

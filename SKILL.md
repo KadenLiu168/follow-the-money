@@ -144,13 +144,14 @@ scripts/feed/follow-the-money-feed      # evidence-only Feed, deterministic,
 
 ## Daily flow (scheduled or /money)
 
-1. **Feed**: GitHub Actions publishes `feeds/latest.json` and the dated Feed,
-   or run `scripts/feed/follow-the-money-feed` locally. Exit 0 with healthy or
-   degraded Feed; warnings are on stderr and in status. A Feed failure means
-   no digest should be produced from it.
-2. **Evidence**: read `feeds/latest.json` (or the dated
-   `feeds/daily/<date>/<run_id>.json`). Every item carries source provenance;
-   the window, cutoff, and run identity are authoritative.
+1. **Feed**: GitHub Actions publishes the current `feeds/latest.json`, or run
+   `scripts/feed/follow-the-money-feed` locally. Exit 0 with healthy or degraded
+   Feed; warnings are on stderr and in status. A Feed failure means no digest
+   should be produced from it.
+2. **Evidence**: read `feeds/latest.json`. Every item carries source provenance;
+   the window, cutoff, and run identity are authoritative. Runtime continuity is
+   owned by the checkpoint; Git history is repository history only, not a
+   historical Feed query API.
 3. **Analysis**: the host Agent analyzes the evidence and writes the digest,
    citing the relevant Feed items. The private boundary is available only when
    the Host Agent explicitly addresses `audit.text`, `audit.claims`, or

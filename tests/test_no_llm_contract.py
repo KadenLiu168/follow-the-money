@@ -226,7 +226,7 @@ def test_minimal_entry_status_file_and_exit_contract(tmp_path, monkeypatch, caps
     assert payload["run_id"] == result.feed["run_id"]
     assert payload["evidence_cutoff_at"] == result.feed["evidence_cutoff_at"]
     assert payload["latest_relative_path"] == "latest.json"
-    assert payload["dated_relative_path"].startswith("daily/2026-08-11/")
+    assert "dated_relative_path" not in payload
 
     # Warnings surface on stderr.
     warned = FeedRunResult(

@@ -1,24 +1,4 @@
-"""Auditable Feed publication (atomic, monotonic, serialized).
-
-Design sections 2/4:
-
-- Each validated run writes a create-only ``feeds/daily/YYYY-MM-DD/<run_id>.json``
-  (date = cutoff in Asia/Shanghai) before atomically replacing
-  ``feeds/latest.json``.
-- Staging is an unpredictable sibling under the final parent on the same
-  device; bytes are written create-only, flushed and file-``fsync``ed; the
-  staging directory is ``fsync``ed.
-- Dated artifacts commit with a platform atomic no-replace primitive; latest
-  commits from a same-directory temp by atomic replace only after ownership
-  validation; each rename is followed by parent-directory ``fsync``.
-- Candidates must be the shared ``canonical_bytes()`` serialization of their
-  validated Feed.
-- Byte-identical reruns and runs whose semantic ``run_id``/``content_digest``
-  match an existing valid dated artifact are idempotent no-ops: the first
-  immutable dated bytes are retained and any ``latest.json`` repair or
-  replacement uses those retained bytes. Same-path semantic mismatches and
-  invalid existing artifacts fail closed.
-"""
+"""Auditable latest Feed publication (atomic, monotonic, serialized)."""
 
 from __future__ import annotations
 
@@ -29,7 +9,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from ..canonical import canonical_bytes, canonical_sha256, load_canonical_json
 from .validate import assert_feed_identity, validate_feed
@@ -41,7 +20,6 @@ class PublishError(ValueError):
 
 @dataclass
 class PublishResult:
-    dated_path: Path | None
     latest_replaced: bool
     commit_durability_unknown: bool = False
     idempotent: bool = False
@@ -90,8 +68,7 @@ def _stage_bytes(parent: Path, data: bytes) -> Path:
 
 
 def _assert_canonical_feed_bytes(data: bytes, *, where: str) -> None:
-    """Require ``data`` to be exactly the canonical serialization of its
-    decoded Feed object (the only bytes Feed artifacts may publish)."""
+    """Require bytes to equal the shared canonical JSON serialization."""
     try:
         parsed = load_canonical_json(data, where=where)
         if not isinstance(parsed, dict):
@@ -105,7 +82,7 @@ def _assert_canonical_feed_bytes(data: bytes, *, where: str) -> None:
 
 
 def _ownership_key(data: bytes, *, where: str) -> tuple[datetime, str]:
-    """Read the validated Feed ownership tuple from canonical JSON bytes."""
+    """Read the Feed ownership tuple from canonical JSON bytes."""
     try:
         feed = load_canonical_json(data, where=where)
         if not isinstance(feed, dict):
@@ -126,10 +103,18 @@ def _ownership_key(data: bytes, *, where: str) -> tuple[datetime, str]:
         raise PublishError(f"{where} ownership key invalid: {exc}") from exc
 
 
+def _semantic_identity(data: bytes) -> tuple[str, datetime, str] | None:
+    parsed = load_canonical_json(data, where="Feed")
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("run_id"), str):
+        return None
+    cutoff, digest = _ownership_key(data, where="Feed")
+    return parsed["run_id"], cutoff, digest
+
+
 def atomic_no_replace_rename(src: Path, dst: Path) -> None:
     """Create-only rename: refuse to overwrite an existing target."""
     try:
-        os.link(src, dst)  # atomic no-replace via hard link (POSIX)
+        os.link(src, dst)
         src.unlink()
     except FileExistsError as exc:
         raise PublishError(f"refusing to overwrite existing {dst}") from exc
@@ -141,39 +126,37 @@ def publish_feed(
     cutoff: datetime,
     run_id: str,
     feed_bytes: bytes,
-    latest_bytes: bytes,
+    latest_bytes: bytes | None = None,
     existing_latest_sha256: str | None = None,
     monotonic_now: Callable[[], float] | None = None,
     deadline_at: float | None = None,
 ) -> PublishResult:
-    """Serialize dated (no-replace) then latest (atomic replace) publication.
+    """Atomically publish one canonical candidate as ``latest.json``.
 
-    ``cutoff`` must be timezone-aware UTC; the dated path uses the cutoff date
-    in Asia/Shanghai.
-
-    Durability contract: a rename that has already committed is never rolled
-    back. If the dated directory cannot be fsynced after its commit, the
-    dated artifact is retained, ``latest`` is not updated, and the result is
-    typed ``commit_durability_unknown``. A failure after latest replacement
-    likewise retains both artifacts without making a false durability claim.
+    ``latest_bytes`` remains an optional compatibility alias for callers that
+    already pass the candidate twice; it is never a second product.
     """
-    candidate_key = _ownership_key(feed_bytes, where="candidate Feed")
-    latest_key = _ownership_key(latest_bytes, where="latest Feed")
-    if candidate_key != latest_key or feed_bytes != latest_bytes:
+    if latest_bytes is not None and latest_bytes != feed_bytes:
         raise PublishError("candidate/latest Feed bytes have incompatible ownership")
     _assert_canonical_feed_bytes(feed_bytes, where="candidate Feed")
-    _assert_canonical_feed_bytes(latest_bytes, where="latest Feed")
+    candidate_key = _ownership_key(feed_bytes, where="candidate Feed")
+    if cutoff.tzinfo is None:
+        raise PublishError("cutoff must be timezone-aware")
+    if candidate_key[0] != cutoff.astimezone(UTC):
+        raise PublishError("candidate Feed cutoff does not match publication cutoff")
+    candidate = load_canonical_json(feed_bytes, where="candidate Feed")
+    if isinstance(candidate, dict) and "run_id" in candidate and candidate.get("run_id") != run_id:
+        raise PublishError("candidate Feed run_id does not match publication run")
 
-    digest = canonical_sha256(feed_bytes)
     monotonic = monotonic_now or time.monotonic
-    asia = cutoff.astimezone(ZoneInfo("Asia/Shanghai"))
-    date_dir = output_root / "daily" / asia.strftime("%Y-%m-%d")
-    date_dir.mkdir(parents=True, exist_ok=True)
-    dated = date_dir / f"{run_id}.json"
+    latest_path = Path(output_root) / "latest.json"
+    candidate_identity = _semantic_identity(feed_bytes)
 
-    def latest_action(latest_path: Path, candidate_bytes: bytes) -> str:
-        """Return replace, retain, or same for the serialized latest owner."""
-        candidate_owner = _ownership_key(candidate_bytes, where="latest Feed")
+    def admit_commit() -> None:
+        if deadline_at is not None and monotonic() >= deadline_at:
+            raise PublishError("pre_commit_deadline_exceeded: commit admission refused")
+
+    def latest_action() -> str:
         if existing_latest_sha256 is not None:
             if not latest_path.exists():
                 raise PublishError(
@@ -185,130 +168,54 @@ def publish_feed(
             return "replace"
         current_bytes = latest_path.read_bytes()
         current_key = _ownership_key(current_bytes, where="current latest Feed")
-        if current_key > candidate_owner:
+        _assert_canonical_feed_bytes(current_bytes, where="current latest Feed")
+        if candidate_identity is not None:
+            try:
+                current = load_canonical_json(current_bytes, where="current latest Feed")
+                validate_feed(current)
+                assert_feed_identity(current)
+            except Exception as exc:
+                raise PublishError(f"current latest Feed is invalid: {exc}") from exc
+        if current_key > candidate_key:
             return "retain"
-        if current_key == candidate_owner:
-            if current_bytes != candidate_bytes:
+        if current_key == candidate_key:
+            current_identity = _semantic_identity(current_bytes)
+            if (
+                candidate_identity is not None
+                and current_identity is not None
+                and current_identity == candidate_identity
+            ):
+                return "idempotent"
+            if current_bytes != feed_bytes:
                 raise PublishError("incompatible equal ownership in latest.json")
-            return "same"
+            return "idempotent"
         return "replace"
 
-    def admit_commit() -> None:
-        if deadline_at is not None and monotonic() >= deadline_at:
-            raise PublishError("pre_commit_deadline_exceeded: commit admission refused")
+    action = latest_action()
+    if action == "retain":
+        return PublishResult(latest_replaced=False)
+    if action == "idempotent":
+        return PublishResult(latest_replaced=False, idempotent=True)
 
-    def recover_latest(retained: bytes) -> PublishResult:
-        """Complete or repair latest from the retained immutable dated bytes.
-
-        Used for both byte-identical reruns and semantic-identity idempotent
-        reruns after a crash where the dated commit exists but latest is
-        absent or owned by an older identity.
-        """
-        latest_path = output_root / "latest.json"
-        latest_replaced = False
-        durability_unknown = False
-        action = latest_action(latest_path, retained)
-        if action == "replace":
-            recovery_stage = _stage_bytes(output_root, retained)
-            try:
-                _fsync_dir(output_root)
-                admit_commit()
-                os.replace(recovery_stage, latest_path)
-                try:
-                    _fsync_dir(output_root)
-                except OSError:
-                    durability_unknown = True
-            finally:
-                if recovery_stage.exists():
-                    recovery_stage.unlink()
-            latest_replaced = True
-        return PublishResult(
-            dated_path=dated,
-            latest_replaced=latest_replaced,
-            commit_durability_unknown=durability_unknown,
-            idempotent=True,
-        )
-
-    def same_semantic_identity(existing: bytes) -> bool:
-        """Whether the existing dated bytes are a valid canonical Feed with
-        the candidate's semantic ``run_id``/``content_digest`` at the same
-        cutoff. Invalid or mismatched existing content returns False (the
-        caller fails closed); it never overwrites the immutable artifact."""
-        try:
-            feed = load_canonical_json(existing, where="existing dated Feed")
-            if not isinstance(feed, dict):
-                return False
-            validate_feed(feed)
-            assert_feed_identity(feed)
-            if feed.get("run_id") != run_id:
-                return False
-            if feed.get("content_digest") != candidate_key[1]:
-                return False
-            existing_cutoff = datetime.fromisoformat(feed["evidence_cutoff_at"])
-            if existing_cutoff.tzinfo is None:
-                return False
-            return existing_cutoff.astimezone(UTC) == candidate_key[0]
-        except (TypeError, ValueError, KeyError):
-            return False
-
-    if dated.exists():
-        existing = dated.read_bytes()
-        if canonical_sha256(existing) == digest:
-            # Same run ID + digest: idempotent. After a crash the dated commit
-            # may exist while latest is absent/stale; complete latest without
-            # re-publishing the dated artifact.
-            return recover_latest(existing)
-        if same_semantic_identity(existing):
-            # Same semantic identity with different excluded audit bytes:
-            # the first immutable dated artifact is the audit record for this
-            # semantic run; retain it and use its bytes for latest repair.
-            return recover_latest(existing)
-        raise PublishError(f"existing dated path {dated} has incompatible content")
-
-    # Stage both artifacts as unpredictable siblings.
-    feed_stage: Path | None = None
-    latest_stage: Path | None = None
-    durability_unknown = False
+    stage = _stage_bytes(Path(output_root), feed_bytes)
     try:
-        feed_stage = _stage_bytes(date_dir, feed_bytes)
-        latest_stage = _stage_bytes(output_root, latest_bytes)
-        _fsync_dir(date_dir)
-        _fsync_dir(output_root)
+        _fsync_dir(Path(output_root))
         admit_commit()
-        # Dated: atomic no-replace. After the rename commits, a parent fsync
-        # failure is durability-unknown, never a rollback.
-        atomic_no_replace_rename(feed_stage, dated)
+        # Re-check ownership immediately before the non-cancellable replace.
+        action = latest_action()
+        if action == "retain":
+            return PublishResult(latest_replaced=False)
+        if action == "idempotent":
+            return PublishResult(latest_replaced=False, idempotent=True)
+        os.replace(stage, latest_path)
         try:
-            _fsync_dir(date_dir)
+            _fsync_dir(Path(output_root))
         except OSError:
-            durability_unknown = True
             return PublishResult(
-                dated_path=dated,
-                latest_replaced=False,
+                latest_replaced=True,
                 commit_durability_unknown=True,
             )
-        # Latest: ownership validation then atomic replace.
-        action = latest_action(output_root / "latest.json", latest_bytes)
-        latest_replaced = False
-        if action == "replace":
-            os.replace(latest_stage, output_root / "latest.json")
-            latest_replaced = True
-            try:
-                _fsync_dir(output_root)
-            except OSError:
-                durability_unknown = True
-    except PublishError:
-        for p in (feed_stage, latest_stage):
-            if p is not None and p.exists():
-                p.unlink()
-        raise
+        return PublishResult(latest_replaced=True)
     finally:
-        for p in (feed_stage, latest_stage):
-            if p is not None and p.exists():
-                p.unlink()
-    return PublishResult(
-        dated_path=dated,
-        latest_replaced=latest_replaced,
-        commit_durability_unknown=durability_unknown,
-        idempotent=action == "same",
-    )
+        if stage.exists():
+            stage.unlink()
