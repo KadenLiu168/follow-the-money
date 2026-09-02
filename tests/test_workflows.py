@@ -23,14 +23,14 @@ def _on(data: dict) -> dict:
 
 
 def test_workflow_yaml_valid():
-    for name in ("test.yml", "generate-feed.yml"):
+    for name in ("ci-quality-gate.yml", "generate-feed.yml"):
         data = _load(name)
         assert data["name"]
         assert "jobs" in data
 
 
 def test_test_workflow_offline_only_and_generated_push_boundary():
-    data = _load("test.yml")
+    data = _load("ci-quality-gate.yml")
     text = yaml.safe_dump(data)
     assert "secrets:" not in text
     assert "OPENAI_API_KEY" not in text
@@ -148,7 +148,7 @@ def test_rate_scope_state_is_trackable_by_generated_state_commits():
 
 
 def test_entry_points_referenced_exist():
-    data = _load("test.yml")
+    data = _load("ci-quality-gate.yml")
     text = yaml.safe_dump(data)
     assert "follow_the_money.feed.cli" in text
     from follow_the_money.feed.cli import _build_parser

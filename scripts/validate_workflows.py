@@ -55,7 +55,7 @@ def validate_repository_workflows(
     test_workflow_path: Path | None = None,
 ) -> None:
     repo_root = Path(repo_root)
-    test_path = test_workflow_path or repo_root / ".github" / "workflows" / "test.yml"
+    test_path = test_workflow_path or repo_root / ".github" / "workflows" / "ci-quality-gate.yml"
     feed_path = generate_feed_path or repo_root / ".github" / "workflows" / "generate-feed.yml"
     test_data, test_text = _load(test_path)
     feed_data, feed_text = _load(feed_path)
