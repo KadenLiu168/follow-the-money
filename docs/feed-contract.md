@@ -1,154 +1,120 @@
 # Feed Contract
 
-## Envelope
+## Manifest-led bundle
 
-`feed.schema.json` (JSON Schema 2020-12) defines the common envelope and a
-`oneOf` payload for `news`, `macro_release`, `policy`, `market_data`, `flow`,
-`positioning`, `filing`, and `calendar`. The envelope includes:
+New Feed production writes one authoritative `feeds/feed-manifest.json` and
+exactly one generation-qualified artifact for each closed payload domain, in
+this order:
 
-- `schema_version` (supported major; unknown/incompatible fails closed),
-- `run_id` derived from the fixed cutoff plus the semantic `content_digest`,
-- the half-open window `[window.start, evidence_cutoff_at)` (strictly
-  advancing),
-- truthful lifecycle timestamps and per-provider outcomes (exactly one
-  outcome per planned provider, ascending `provider_id`, including failed
-  and skipped outcomes),
-- mandatory producer provenance: the closed path/size/file-hash application
-  build descriptor, the canonical redacted resolved Feed-config snapshot and
-  hash, the Feed-schema descriptor, and a sorted canonical redacted closed
-  non-secret runtime-contract snapshot plus hash for every enabled provider,
-  with optional Git metadata,
-- `content_digest` — the canonical digest of the explicit semantic
-  projection, not a whole-envelope checksum (see below).
+1. `news`
+2. `macro_release`
+3. `policy`
+4. `market_data`
+5. `flow`
+6. `positioning`
+7. `filing`
+8. `calendar`
+
+Every artifact exists, including when its `items` array is empty. Its envelope
+contains only `schema_version`, `run_id`, `domain`, and `items`. Items retain
+the existing `feed.schema.json` payload shapes and are routed solely by
+`payload.type`; Provider identity does not affect routing.
+
+The manifest contains the logical Feed metadata, producer/configuration and
+Provider contract snapshots, Provider outcomes, pipeline result, logical
+`feed_schema` descriptor, physical `bundle_schemas` descriptors, and the exact
+artifact inventory (`domain`, safe `path`, `item_count`, `size_bytes`, and
+`sha256`). It contains no evidence item or financial interpretation.
+
+The physical contracts are:
+
+- `schemas/feed-manifest.schema.json`
+- `schemas/feed-artifact.schema.json`
+- `schemas/feed.schema.json` for the reconstructed logical identity and
+  manifest-absent legacy reads.
 
 ## Semantic identity
 
-`content_digest` is the SHA-256 of the canonical serialization of an
-explicit allowlisted semantic projection:
+`content_digest` remains the SHA-256 of the canonical serialization of the
+explicit logical projection:
 
 - `schema_version`, `window`, and `evidence_cutoff_at`;
-- semantic provider outcomes, ordered by `provider_id`, with the
-  execution-audit `retrieved_at` removed;
+- semantic Provider outcomes, ordered by `provider_id`, without
+  execution-audit `retrieved_at`;
 - `producer`, `feed_config`, `feed_schema`, and `provider_contracts`;
-- normalized items (stable `(source.knowledge_available_at, id)` total
-  order, including merged `source_lineage` in the same contributing order);
-- the pipeline semantic result: `status` and structured `coverage_gap`
-  (free-form warning text is execution reporting and never promotes into
-  identity).
+- globally ordered normalized items, including source lineage; and
+- pipeline `status` and structured `coverage_gap`.
 
-`collection_started_at`, `collection_completed_at`, `generated_at`, every
-provider `retrieved_at`, `git`, `content_digest`, `run_id`, and any
-undeclared execution metadata are excluded. `run_id` continues to derive
-from the fixed cutoff plus the digest (`{evidence_cutoff_at}::{digest[:32]}`),
-so equal semantic evidence with different truthful execution timing keeps
-one identity.
+Lifecycle timestamps, Provider `retrieved_at`, Git metadata, physical schema
+descriptors, artifact paths/sizes/checksums, `content_digest`, and `run_id` are
+outside the projection. `run_id` remains
+`{evidence_cutoff_at}::{content_digest[:32]}`. Splitting and reconstructing
+unchanged logical evidence therefore preserves identity.
 
-Identity is therefore a *semantic* identity, not a whole-file checksum.
-Consumers reconstruct the projection, recompute both values, and fail
-closed on any mismatch. Validation additionally attempts the former
-whole-envelope projection for an already-published schema-v1 `latest.json`;
-newly produced Feeds always use the semantic projection. Runtime continuity is
-checkpoint-owned, and Git history is repository-level history rather than a
-Feed archive or historical query API.
+## Validation and consumption
 
-## Cutoff / time model
+Bundle validation is fail-closed. It requires canonical UTF-8 JSON, supported
+schema majors, the exact eight-domain inventory in fixed order, safe
+repository-relative generation paths, matching bytes/size/SHA-256, shared
+`run_id`, matching domain/type, deterministic item order, unchanged
+provenance, and a reconstructed Feed whose digest and `run_id` recompute
+exactly. Missing, extra, duplicate, reordered, corrupt, mixed-generation,
+traversal, or identity-invalid state is not consumable.
 
-- The collection clock is injectable. The pipeline captures
-  `collection_started_at` at the actual collection phase entry, then one
-  injected wall-clock `evidence_cutoff_at` after collection starts and
-  before any provider request, all after acquiring the exclusive collection
-  lock (lock wait time never freezes a stale planning window).
-- `retrieved_at` is recorded when a provider response actually returns and
-  before normalization; failed or skipped work with no observed response
-  keeps `retrieved_at: null` — never a synthetic timestamp.
-- `collection_completed_at` is captured only after every provider outcome
-  reached a terminal or fenced state; `generated_at` is captured at the
-  final envelope-generation boundary before identity fields are attached.
-- The pipeline never derives audit timestamps by offsetting the cutoff,
-  copying another lifecycle timestamp, or otherwise synthesizing an
-  unobserved event.
-- The evidence window is `[window.start, evidence_cutoff_at)` and MUST
-  strictly advance. A captured cutoff equal to or earlier than the checkpoint
-  cutoff fails `non_advancing_cutoff` with zero provider calls and
-  zero artifacts.
-- An explicit null `.feed-state/feed-checkpoint.json` is the first-run
-  bootstrap with `window.start = cutoff - 72h`. Steady-state planning reads
-  only that checkpoint; a present but unreadable/partial/schema-invalid or
-  digest-invalid `feeds/latest.json` is rejected by the existing publication or
-  consumption boundary, not used as a continuity fallback.
-- A gap > 72h uses the bounded bootstrap start and records the uncovered
-  interval as a structured `coverage_gap` (plus a warning); an exact 72h gap
-  starts at the prior cutoff.
-- Collection timestamps satisfy `collection_started_at <= evidence_cutoff_at
-  <= each non-null retrieved_at <= collection_completed_at <= generated_at`.
-- The scheduled workflow starts near 08:20 Asia/Shanghai (00:20 UTC);
-  `Asia/Shanghai` is a display/schedule zone, all persisted instants are
-  RFC 3339 UTC.
+Consumers first check `feed-manifest.json`. If it exists, any manifest or
+artifact error is terminal and `latest.json` is never used as fallback. Only
+when the manifest is absent may a supported, fully validated legacy
+`latest.json` be read. Healthy bundles are accepted; degraded bundles are
+accepted with warnings; `pipeline.status: failure` is rejected. Freshness and
+calendar-horizon checks remain the existing engine boundary checks.
 
-## Payload time semantics
+## Cutoff, ordering, and health
 
-| Payload | Knowledge time | Effective/reference time |
-| --- | --- | --- |
-| `news` | `published_at` or later `updated_at` | `occurred_at` or publication |
-| `macro_release` | `released_at` | release instant; period is reference |
-| `policy` | `published_at`/`announced_at` | `effective_at` or announcement |
-| `filing` | acceptance/publication instant | acceptance/publication |
-| `flow` | publication/availability instant | measurement `as_of` |
-| `positioning` | report publication instant | report/measurement `as_of` |
-| `market_data` | `as_of` + availability lag | observation `as_of` |
-| `calendar` | announcement/update time | future `scheduled_at` |
+The evidence window is `[window.start, evidence_cutoff_at)` and must advance
+strictly. Persisted timestamps are RFC 3339 UTC. Items use the stable
+`(source.knowledge_available_at, id)` order, and the calendar snapshot covers
+the configured horizon. Source completeness, coverage/degradation semantics,
+provenance, numeric bounds, and the evidence-only boundary are unchanged.
 
-The v1 calendar snapshot covers `[evidence_cutoff_at, +26h)` and persists
-`calendar_horizon_end`. `retrieved_at` is audit metadata and never
-establishes cutoff eligibility. Post-cutoff publications/revisions and
-observations not source-available at cutoff are rejected.
+## Publication and continuity
 
-## Health and degradation
+Publication writes immutable `feed-<domain>-<sha256(run_id)[:32]>.json`
+candidates first, using create-only same-parent staging, file and directory
+`fsync`, then stages and atomically replaces `feed-manifest.json` as the sole
+activation point. Monotonic ownership is the maximum
+`(evidence_cutoff_at, content_digest)` tuple. Equal semantic identity with
+identical inventory integrity is idempotent; stale, conflicting, unsafe, or
+invalid candidates fail closed. A post-rename directory-`fsync` failure is
+durability uncertainty: no rollback is claimed and the checkpoint does not
+advance. Orphan and superseded files are cleanup state, never query history.
 
-- A planned Provider is complete for group counting only when it reaches
-  `healthy` or returns a contract-permitted `empty` result; accepted and
-  fetched item counts do not determine completeness.
-- An incomplete planned Provider or deficient mandatory coverage group is
-  `failure`, retains Provider diagnostics, and does not replace the last valid
-  `latest.json`.
-- A source-complete Feed with `items: []` remains a normal successful Feed and
-  advances the evidence window through the usual latest publication.
-- Existing `degraded` semantics remain available for accepted non-source
-  conditions.
-- Intelligence fields (importance, direction, price-in, regime, impact,
-  ranking) are rejected from Feed items.
+A successful status names `manifest_relative_path: "feed-manifest.json"` and
+its `run_id`/cutoff; when publication removed a superseded generation, it also
+carries those deleted relative artifact paths for exact Git staging. The
+unchanged versioned checkpoint advances only after
+accepted durable manifest ownership, and deployment validates it against that
+manifest. Dry-run builds and validates the same in-memory bundle without
+writing Feed products or advancing the checkpoint.
 
-## Publication
+## Current-state migration
 
-- `feeds/latest.json` is the only Feed product. Publication uses unpredictable
-  same-parent/same-device staging, create-only writes, file and parent-directory
-  `fsync`, ownership validation immediately before commit, and same-directory
-  atomic replacement followed by parent-directory `fsync`.
-- Every latest byte sequence passed to publication is the shared
-  `canonical_bytes()` serialization of its validated Feed object; no
-  module-local JSON serializer settings are used for Feed artifacts.
-- A valid current latest with the candidate's semantic `run_id`,
-  `content_digest`, and cutoff is an idempotent accepted owner; its existing
-  canonical bytes are retained even when excluded audit bytes differ. A stale
-  candidate or incompatible equal owner fails closed without creating another
-  Feed product.
-- Rename success followed by parent-`fsync` failure returns
-  `commit_durability_unknown`; the product remains visible but checkpoint
-  advancement is refused because durability is uncertain.
-- The scheduled GitHub workflow runs on GitHub-hosted `ubuntu-latest` at
-  `20 0 * * *` (08:20 Asia/Shanghai), uses `feeds/` for Feed products and
-  `.feed-state/` for repository-backed runtime state, and publishes only
-  through the durable migration/bootstrap/lease/finalization boundary. The
-  evidence cutoff remains runtime-derived rather than the nominal schedule.
+Deployment can split a valid current legacy `latest.json` into the equivalent
+bundle without Provider requests. It activates the manifest, keeps
+`latest.json` unchanged until the same generated-state commit stages its
+deletion, and leaves the legacy product intact when validation or publication
+fails. If a valid manifest already exists, migration treats it as the sole
+authority and does not reinterpret `latest.json`.
 
 ## Minimal internal Feed entry
 
-- The minimal internal entry (`python -m follow_the_money.feed.cli` behind
-  `scripts/feed/follow-the-money-feed`) supports explicit config/product/
-  runtime-state roots, `--dry-run`, fixture clocks/windows, and deterministic exit codes
-  (0 healthy/degraded, 1 generation/publication failure, 2 usage/config).
-- `--dry-run` publishes no `latest.json` and advances no checkpoint, but real
-  sends still lock and durably debit/reconcile rate state; an explicit no-send
-  fixture dry run may leave rate state unchanged.
-- There is no LLM adapter anywhere: the Feed pipeline is fully deterministic
-  and credential-free, and no public user-facing CLI product form exists.
+`python -m follow_the_money.feed.cli` (also
+`scripts/feed/follow-the-money-feed`) accepts explicit config/product/runtime
+roots, dry-run, and fixture clocks/windows. Exit codes remain:
+
+- `0` — healthy/degraded success;
+- `1` — generation, publication, schema, integrity, deadline, or runtime
+  failure;
+- `2` — usage, configuration, or startup-capability error.
+
+The Feed is deterministic, credential-free, and evidence-only. It does not
+contain an LLM/model path or Host Agent orchestration.

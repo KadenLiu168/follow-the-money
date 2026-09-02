@@ -13,6 +13,7 @@ import pytest
 from follow_the_money.canonical import canonical_bytes
 from follow_the_money.config.model import RatePolicy
 from follow_the_money.feed import deployment
+from follow_the_money.feed.bundle import build_bundle
 from follow_the_money.feed.checkpoint import (
     FeedCheckpoint,
     PreviousSuccess,
@@ -30,6 +31,7 @@ from follow_the_money.feed.deployment import (
     read_lease,
     write_lease,
 )
+from follow_the_money.feed.publish import publish_bundle
 from follow_the_money.feed.validate import recompute_feed_identity
 from follow_the_money.providers.rate import RateRegistry
 
@@ -189,6 +191,41 @@ def test_corrupt_established_registry_is_a_typed_preflight_failure(tmp_path: Pat
         )
 
 
+def test_new_runtime_legacy_product_uses_migration_only(tmp_path: Path):
+    product_root = tmp_path / "feeds"
+    state_root = tmp_path / ".feed-state"
+    cfg = _cfg(_policy())
+    prepare_deployment(
+        product_root, state_root, cfg, deployment_run_id="bootstrap", now=lambda: NOW
+    )
+    feed = _healthy_feed()
+    latest = product_root / "latest.json"
+    latest.parent.mkdir(parents=True, exist_ok=True)
+    latest.write_bytes(canonical_bytes(feed))
+    write_checkpoint(
+        state_root / "feed-checkpoint.json",
+        FeedCheckpoint(
+            previous_success=PreviousSuccess(
+                evidence_cutoff_at=feed["evidence_cutoff_at"], run_id=feed["run_id"]
+            )
+        ),
+    )
+    checkpoint_bytes = (state_root / "feed-checkpoint.json").read_bytes()
+
+    result = prepare_deployment(
+        product_root,
+        state_root,
+        cfg,
+        deployment_run_id="migration-run",
+        now=lambda: NOW + timedelta(days=2),
+    )
+
+    assert result.mode == "migration"
+    assert (product_root / "feed-manifest.json").is_file()
+    assert latest.read_bytes() == canonical_bytes(feed)
+    assert (state_root / "feed-checkpoint.json").read_bytes() == checkpoint_bytes
+
+
 def test_complete_legacy_migration_preserves_state_and_seeds_checkpoint(tmp_path: Path):
     product_root = tmp_path / "feeds"
     state_root = tmp_path / ".feed-state"
@@ -331,11 +368,14 @@ def test_migration_preserves_in_progress_recovery_bounds(tmp_path: Path):
         )
 
 
-def test_migration_publication_accepts_the_preserved_legacy_run_id(tmp_path: Path, monkeypatch):
+def test_migration_publication_stages_legacy_deletion_with_the_bundle(tmp_path: Path, monkeypatch):
     product_root = tmp_path / "feeds"
     state_root = tmp_path / ".feed-state"
     cfg = _cfg(_policy())
     _legacy_state(product_root, cfg, _lease(run_id="legacy-run"))
+    feed = _healthy_feed()
+    latest = product_root / "latest.json"
+    latest.write_bytes(canonical_bytes(feed))
     result = prepare_deployment(
         product_root,
         state_root,
@@ -343,7 +383,12 @@ def test_migration_publication_accepts_the_preserved_legacy_run_id(tmp_path: Pat
         deployment_run_id="current-run",
         now=lambda: NOW + timedelta(days=2),
     )
-    monkeypatch.setattr(deployment, "publish_generated_state", lambda *args, **kwargs: None)
+    published: list[Path] = []
+    monkeypatch.setattr(
+        deployment,
+        "publish_generated_state",
+        lambda _repo, paths, **_kwargs: published.extend(paths),
+    )
 
     assert (
         deployment._command_publish(
@@ -357,6 +402,9 @@ def test_migration_publication_accepts_the_preserved_legacy_run_id(tmp_path: Pat
         )
         == 0
     )
+    assert latest in published
+    assert not latest.exists()
+    assert product_root / "feed-manifest.json" in published
 
 
 def test_failure_finalization_excludes_checkpoint_and_products(tmp_path: Path):
@@ -407,8 +455,14 @@ def test_success_finalization_requires_and_publishes_matching_checkpoint(tmp_pat
     )
     feed = _healthy_feed()
     product_root.mkdir(parents=True)
-    latest = product_root / "latest.json"
-    latest.write_bytes(canonical_bytes(feed))
+    bundle = build_bundle(feed)
+    publish_bundle(
+        output_root=product_root,
+        bundle=bundle,
+        cutoff=datetime.fromisoformat(feed["evidence_cutoff_at"]),
+        run_id=feed["run_id"],
+    )
+    manifest = product_root / "feed-manifest.json"
     status = tmp_path / "feed-status.json"
     status.write_text(
         json.dumps(
@@ -416,7 +470,7 @@ def test_success_finalization_requires_and_publishes_matching_checkpoint(tmp_pat
                 "status": "healthy",
                 "run_id": feed["run_id"],
                 "evidence_cutoff_at": feed["evidence_cutoff_at"],
-                "latest_relative_path": "latest.json",
+                "manifest_relative_path": "feed-manifest.json",
             }
         ),
         encoding="utf-8",
@@ -442,7 +496,7 @@ def test_success_finalization_requires_and_publishes_matching_checkpoint(tmp_pat
     )
 
     assert checkpoint in paths
-    assert paths.count(latest) == 1
+    assert paths.count(manifest) == 1
     assert all(path.parent != product_root / "daily" for path in paths)
     assert read_lease(state_root / "feed-run-lease.json").state == "success"
 
@@ -466,7 +520,7 @@ def test_success_finalization_rejects_invalid_latest_product(tmp_path: Path):
                 "status": "healthy",
                 "run_id": feed["run_id"],
                 "evidence_cutoff_at": feed["evidence_cutoff_at"],
-                "latest_relative_path": "latest.json",
+                "manifest_relative_path": "feed-manifest.json",
             }
         ),
         encoding="utf-8",
@@ -480,7 +534,7 @@ def test_success_finalization_rejects_invalid_latest_product(tmp_path: Path):
         ),
     )
 
-    with pytest.raises(DeploymentError, match="Feed product"):
+    with pytest.raises(DeploymentError, match="manifest_relative_path"):
         finalize_deployment(
             product_root,
             state_root,

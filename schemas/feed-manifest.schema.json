@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://follow-the-money/schemas/feed-manifest.schema.json",
+  "title": "Follow the Money Feed bundle manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "run_id", "window", "collection_started_at",
+    "evidence_cutoff_at", "collection_completed_at", "generated_at",
+    "provider_outcomes", "producer", "feed_config", "feed_schema",
+    "provider_contracts", "content_digest", "pipeline", "bundle_schemas", "artifacts"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "run_id": {
+      "type": "string", "minLength": 1, "maxLength": 128
+    },
+    "window": { "$ref": "#/$defs/window" },
+    "collection_started_at": { "type": "string", "format": "date-time" },
+    "evidence_cutoff_at": { "type": "string", "format": "date-time" },
+    "collection_completed_at": { "type": "string", "format": "date-time" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "provider_outcomes": {
+      "type": "array",
+      "items": { "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/provider_outcome" }
+    },
+    "producer": { "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/application_build" },
+    "feed_config": { "$ref": "#/$defs/feed_config" },
+    "feed_schema": { "$ref": "#/$defs/schema_descriptor" },
+    "provider_contracts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/provider_contract" }
+    },
+    "git": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["sha", "dirty"],
+      "properties": { "sha": { "type": "string" }, "dirty": { "type": "boolean" } }
+    },
+    "content_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "calendar_horizon_end": { "type": ["string", "null"], "format": "date-time" },
+    "pipeline": { "$ref": "#/$defs/pipeline" },
+    "bundle_schemas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "artifact"],
+      "properties": {
+        "manifest": { "$ref": "#/$defs/schema_descriptor" },
+        "artifact": { "$ref": "#/$defs/schema_descriptor" }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/artifact_inventory" }
+    }
+  },
+  "$defs": {
+    "window": {
+      "type": "object", "additionalProperties": false, "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "string", "format": "date-time" },
+        "end": { "type": "string", "format": "date-time" }
+      }
+    },
+    "feed_config": {
+      "type": "object", "additionalProperties": false, "required": ["snapshot", "hash"],
+      "properties": { "snapshot": { "type": "object" }, "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+    },
+    "schema_descriptor": {
+      "type": "object", "additionalProperties": false, "required": ["path", "sha256"],
+      "properties": { "path": { "type": "string", "minLength": 1 }, "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+    },
+    "provider_contract": {
+      "type": "object", "additionalProperties": false, "required": ["provider_id", "snapshot", "hash"],
+      "properties": { "provider_id": { "type": "string" }, "snapshot": { "type": "object" }, "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+    },
+    "pipeline": {
+      "type": "object", "additionalProperties": false, "required": ["status", "warnings"],
+      "properties": {
+        "status": { "enum": ["healthy", "degraded", "failure"] },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "coverage_gap": {
+          "type": ["object", "null"], "additionalProperties": false,
+          "required": ["uncovered_start", "uncovered_end"],
+          "properties": {
+            "uncovered_start": { "type": "string", "format": "date-time" },
+            "uncovered_end": { "type": "string", "format": "date-time" }
+          }
+        }
+      }
+    },
+    "artifact_inventory": {
+      "type": "object", "additionalProperties": false,
+      "required": ["domain", "path", "item_count", "size_bytes", "sha256"],
+      "properties": {
+        "domain": { "enum": ["news", "macro_release", "policy", "market_data", "flow", "positioning", "filing", "calendar"] },
+        "path": { "type": "string", "minLength": 1 },
+        "item_count": { "type": "integer", "minimum": 0 },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    }
+  }
+}

@@ -2,13 +2,6 @@ name: CI Quality Gate
 
 on:
   push:
-    paths-ignore:
-      - .feed-state/.follow-the-money-persistent
-      - .feed-state/feed-checkpoint.json
-      - .feed-state/rate-registry.json
-      - .feed-state/scope-*.json
-      - .feed-state/feed-run-lease.json
-      - feeds/latest.json
   pull_request:
 
 # Hosted credential-free CI: clean install, offline-only tests, no secrets.
@@ -16,7 +9,29 @@ permissions:
   contents: read
 
 jobs:
+  classify_generated_state:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    outputs:
+      generated_only: ${{ steps.classify.outputs.generated_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.21"
+      - name: Validate closed generated-state path set
+        id: classify
+        run: |
+          set -euo pipefail
+          generated_only=$(uv run --frozen python scripts/validate_generated_state.py \
+            --repo . --head "${GITHUB_SHA}" --base "${{ github.event.before }}")
+          echo "generated_only=$generated_only" >> "$GITHUB_OUTPUT"
+
   test:
+    needs: classify_generated_state
+    if: ${{ always() && (github.event_name != 'push' || needs.classify_generated_state.outputs.generated_only != 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

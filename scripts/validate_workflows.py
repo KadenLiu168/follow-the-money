@@ -8,14 +8,12 @@ from typing import Any
 
 import yaml
 
-GENERATED_PATHS = [
+GENERATED_RUNTIME_FILES = {
     ".feed-state/.follow-the-money-persistent",
     ".feed-state/feed-checkpoint.json",
     ".feed-state/rate-registry.json",
-    ".feed-state/scope-*.json",
     ".feed-state/feed-run-lease.json",
-    "feeds/latest.json",
-]
+}
 
 
 def _load(path: Path) -> tuple[dict[str, Any], str]:
@@ -61,8 +59,19 @@ def validate_repository_workflows(
 
     test_on = _on(test_data)
     push = test_on.get("push")
-    if not isinstance(push, dict) or push.get("paths-ignore") != GENERATED_PATHS:
-        raise ValueError("test workflow paths-ignore must match generated-state allowlist")
+    if push is not None and not isinstance(push, dict):
+        raise ValueError("test workflow push trigger must be a mapping or null")
+    if isinstance(push, dict) and "paths-ignore" in push:
+        raise ValueError(
+            "test workflow must validate generated paths instead of broad paths-ignore"
+        )
+    classify = test_data.get("jobs", {}).get("classify_generated_state")
+    if (
+        not isinstance(classify, dict)
+        or "astral-sh/setup-uv" not in str(classify)
+        or "uv run --frozen python scripts/validate_generated_state.py" not in test_text
+    ):
+        raise ValueError("test workflow must validate the closed generated-state path set")
     if "pull_request" not in test_on:
         raise ValueError("test workflow must retain pull_request trigger")
     if "OPENAI_API_KEY" in test_text or "pytest" not in test_text:

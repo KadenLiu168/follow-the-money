@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import unicodedata
@@ -24,6 +25,16 @@ from ..providers.rate import (
     _atomic_write,
 )
 from ..schema import SchemaError
+from .bundle import (
+    DOMAINS,
+    LEGACY_FILENAME,
+    MANIFEST_FILENAME,
+    BundleError,
+    artifact_relative_path,
+    build_bundle,
+    load_feed,
+    validate_bundle,
+)
 from .checkpoint import (
     CHECKPOINT_FILENAME,
     FeedCheckpoint,
@@ -31,6 +42,7 @@ from .checkpoint import (
     read_checkpoint,
     write_checkpoint,
 )
+from .publish import publish_bundle
 from .validate import assert_feed_identity, validate_feed
 
 LEASE_FILENAME = "feed-run-lease.json"
@@ -304,8 +316,28 @@ def _assert_no_unknown_runtime_entries(root: Path, expected: set[str]) -> None:
         raise DeploymentError(f"unsupported runtime state paths: {sorted(unexpected)}")
 
 
+def _assert_no_partial_bundle(product_root: Path) -> None:
+    root = Path(product_root)
+    if not root.exists() or (root / MANIFEST_FILENAME).exists():
+        return
+    try:
+        partial = [
+            path.name
+            for path in root.iterdir()
+            if path.is_file() and re.fullmatch(r"feed-(?:[a-z_]+)-[0-9a-f]{32}\.json", path.name)
+        ]
+    except OSError as exc:
+        raise DeploymentError(f"cannot inspect Feed product root {root}") from exc
+    if partial:
+        raise DeploymentError("partial Feed bundle has artifacts without feed-manifest.json")
+
+
 def _validate_new_layout(
-    runtime_root: Path, config: AppConfig, policies: dict[str, RatePolicy]
+    runtime_root: Path,
+    config: AppConfig,
+    policies: dict[str, RatePolicy],
+    *,
+    product_root: Path | None = None,
 ) -> tuple[RateRegistry, DeploymentLease]:
     runtime_root = Path(runtime_root)
     required = set(_RUNTIME_DURABLE_NAMES)
@@ -317,6 +349,16 @@ def _validate_new_layout(
     registry = _validate_existing_state(runtime_root, config, policies)
     lease = read_lease(runtime_root / LEASE_FILENAME)
     read_checkpoint(runtime_root / CHECKPOINT_FILENAME)
+    # A present manifest is authoritative; otherwise validate the supported
+    # legacy product before allowing any future Provider work.
+    if product_root is not None:
+        product_root = Path(product_root)
+        _assert_no_partial_bundle(product_root)
+        if (product_root / MANIFEST_FILENAME).exists() or (product_root / LEGACY_FILENAME).exists():
+            try:
+                load_feed(product_root)
+            except BundleError as exc:
+                raise DeploymentError(str(exc)) from exc
     return registry, lease
 
 
@@ -333,38 +375,41 @@ def _legacy_paths(root: Path, registry: RateRegistry) -> tuple[Path, ...]:
 
 
 def _checkpoint_from_latest(product_root: Path) -> FeedCheckpoint:
-    latest_path = Path(product_root) / "latest.json"
-    if not latest_path.exists():
-        return FeedCheckpoint(previous_success=None)
-    if not latest_path.is_file():
-        raise DeploymentError("legacy latest Feed is not a regular file")
+    """Read current product identity, preferring the active manifest."""
+    root = Path(product_root)
+    manifest_path = root / MANIFEST_FILENAME
+    latest_path = root / LEGACY_FILENAME
     try:
-        raw = load_canonical_json(latest_path.read_bytes(), where="legacy latest.json")
-        if not isinstance(raw, dict):
-            raise DeploymentError("legacy latest Feed must be an object")
-        validate_feed(raw)
-        assert_feed_identity(raw)
+        if manifest_path.exists():
+            raw = validate_bundle(root)
+        elif latest_path.exists():
+            if not latest_path.is_file():
+                raise DeploymentError("legacy latest Feed is not a regular file")
+            raw = load_canonical_json(latest_path.read_bytes(), where="legacy latest.json")
+            if not isinstance(raw, dict):
+                raise DeploymentError("legacy latest Feed must be an object")
+            validate_feed(raw)
+            assert_feed_identity(raw)
+        else:
+            return FeedCheckpoint(previous_success=None)
         if raw.get("pipeline", {}).get("status") not in {"healthy", "degraded"}:
-            raise DeploymentError("legacy latest Feed is not a successful Feed")
+            raise DeploymentError("current Feed is not a successful Feed")
         cutoff = raw.get("evidence_cutoff_at")
         run_id = raw.get("run_id")
         if not isinstance(cutoff, str) or not isinstance(run_id, str):
-            raise DeploymentError("legacy latest Feed identity is incomplete")
-        return FeedCheckpoint(
-            previous_success=PreviousSuccess(
-                evidence_cutoff_at=cutoff,
-                run_id=run_id,
-            )
-        )
-    except (OSError, SchemaError, TypeError, ValueError, DeploymentError) as exc:
-        if isinstance(exc, DeploymentError):
-            raise
-        raise DeploymentError("legacy latest Feed is invalid") from exc
+            raise DeploymentError("current Feed identity is incomplete")
+        return FeedCheckpoint(previous_success=PreviousSuccess(cutoff, run_id))
+    except DeploymentError:
+        raise
+    except (OSError, SchemaError, BundleError, TypeError, ValueError) as exc:
+        label = "Feed manifest" if manifest_path.exists() else "legacy latest Feed"
+        raise DeploymentError(f"{label} is invalid") from exc
 
 
 def _validate_legacy_layout(
     product_root: Path, config: AppConfig, policies: dict[str, RatePolicy]
 ) -> tuple[RateRegistry, DeploymentLease]:
+    _assert_no_partial_bundle(product_root)
     registry = _validate_existing_state(product_root, config, policies)
     if (product_root / CHECKPOINT_FILENAME).exists():
         raise DeploymentError("legacy runtime state contains unsupported checkpoint")
@@ -425,6 +470,54 @@ def _copy_exact(source: Path, target: Path) -> None:
         raise DeploymentError(f"cannot relocate {source} to {target}") from exc
 
 
+def _assert_legacy_checkpoint_matches(product_root: Path, runtime_root: Path) -> None:
+    legacy_checkpoint = _checkpoint_from_latest(product_root)
+    checkpoint = read_checkpoint(Path(runtime_root) / CHECKPOINT_FILENAME)
+    if legacy_checkpoint.previous_success != checkpoint.previous_success:
+        raise DeploymentError("legacy latest Feed and checkpoint do not match")
+
+
+def migrate_legacy_feed(product_root: Path) -> tuple[Path, ...]:
+    """Split and activate legacy ``latest.json`` without Provider work."""
+    product_root = Path(product_root)
+    manifest_path = product_root / MANIFEST_FILENAME
+    if manifest_path.exists():
+        try:
+            validate_bundle(product_root)
+        except BundleError as exc:
+            raise DeploymentError(f"existing Feed manifest is invalid: {exc}") from exc
+        return (manifest_path,)
+    _assert_no_partial_bundle(product_root)
+    latest_path = product_root / LEGACY_FILENAME
+    if not latest_path.exists():
+        return ()
+    try:
+        raw = load_canonical_json(latest_path.read_bytes(), where="legacy latest.json")
+        if not isinstance(raw, dict):
+            raise DeploymentError("legacy latest Feed must be an object")
+        validate_feed(raw)
+        assert_feed_identity(raw)
+        bundle = build_bundle(raw)
+        cutoff = datetime.fromisoformat(bundle.cutoff)
+        publication = publish_bundle(
+            output_root=product_root,
+            bundle=bundle,
+            cutoff=cutoff,
+            run_id=bundle.run_id,
+        )
+        if publication.commit_durability_unknown:
+            raise DeploymentError("Feed bundle migration durability is unknown")
+        if not (publication.manifest_replaced or publication.idempotent):
+            raise DeploymentError("Feed bundle migration ownership was not accepted")
+    except DeploymentError:
+        raise
+    except (OSError, BundleError, SchemaError, TypeError, ValueError) as exc:
+        raise DeploymentError("legacy latest Feed migration failed") from exc
+    return (manifest_path,) + tuple(
+        product_root / artifact_relative_path(domain, bundle.run_id) for domain in DOMAINS
+    )
+
+
 def migrate_legacy_state(
     product_root: Path,
     runtime_state_root: Path,
@@ -465,7 +558,9 @@ def migrate_legacy_state(
     except (OSError, ValueError) as exc:
         raise DeploymentError("cannot seed relocated Feed checkpoint") from exc
 
-    new_registry, _new_lease = _validate_new_layout(runtime_state_root, config, policies)
+    new_registry, _new_lease = _validate_new_layout(
+        runtime_state_root, config, policies, product_root=product_root
+    )
     new_paths = _durable_paths(runtime_state_root, new_registry)
     new_paths += (runtime_state_root / CHECKPOINT_FILENAME,)
     for path in legacy_paths:
@@ -561,10 +656,27 @@ def prepare_deployment(
 
     if layout == _LAYOUT_LEGACY:
         paths = migrate_legacy_state(product_root, runtime_state_root, config)
+        # This is a zero-network migration-only step. Keep latest.json until
+        # the generated-state commit stages its deletion atomically with the
+        # newly activated bundle.
+        paths += migrate_legacy_feed(product_root)
         lease = read_lease(runtime_state_root / LEASE_FILENAME)
         return DeploymentPreparation("migration", lease, paths)
 
-    registry, lease = _validate_new_layout(runtime_state_root, config, policies)
+    registry, lease = _validate_new_layout(
+        runtime_state_root, config, policies, product_root=product_root
+    )
+    if (
+        not (product_root / MANIFEST_FILENAME).exists()
+        and (product_root / LEGACY_FILENAME).exists()
+    ):
+        _assert_legacy_checkpoint_matches(product_root, runtime_state_root)
+        migrate_legacy_feed(product_root)
+        return DeploymentPreparation(
+            "migration",
+            lease,
+            _migration_allowlisted_paths(product_root, runtime_state_root),
+        )
     if lease.deployment_run_id == deployment_run_id:
         raise DeploymentError("deployment_run_id has already been used")
     if lease.state in {"bootstrap", "in_progress"} and current < lease.recovery_not_before:
@@ -633,33 +745,56 @@ def _read_success_status(status_path: Path) -> dict[str, Any]:
 def _feed_paths(product_root: Path, raw: dict[str, Any]) -> tuple[Path, ...]:
     if "dated_relative_path" in raw:
         raise DeploymentError("Feed status dated_relative_path is unsupported")
-    relative = raw.get("latest_relative_path")
-    if relative != "latest.json":
-        raise DeploymentError("Feed status latest_relative_path is invalid")
+    relative = raw.get("manifest_relative_path")
+    if relative != MANIFEST_FILENAME:
+        raise DeploymentError("Feed status manifest_relative_path is invalid")
     root_resolved = product_root.resolve()
     candidate = (product_root / relative).resolve()
     if not candidate.is_relative_to(root_resolved) or not candidate.is_file():
-        raise DeploymentError("Feed status latest_relative_path is outside or missing")
+        raise DeploymentError("Feed status manifest_relative_path is outside or missing")
     if candidate.stat().st_size == 0:
-        raise DeploymentError("Feed status latest_relative_path is empty")
+        raise DeploymentError("Feed status manifest_relative_path is empty")
     try:
-        feed = load_canonical_json(candidate.read_bytes(), where=str(candidate))
-        if not isinstance(feed, dict):
-            raise DeploymentError("Feed product latest_relative_path is not an object")
-        validate_feed(feed)
-        assert_feed_identity(feed)
+        feed = validate_bundle(product_root)
         if (
             feed.get("run_id") != raw["run_id"]
             or feed.get("evidence_cutoff_at") != raw["evidence_cutoff_at"]
         ):
             raise DeploymentError(
-                "Feed product latest_relative_path does not match successful status"
+                "Feed product manifest_relative_path does not match successful status"
             )
+        manifest = load_canonical_json(candidate.read_bytes(), where=str(candidate))
+        paths = (candidate,) + tuple(
+            product_root / entry["path"] for entry in manifest["artifacts"]
+        )
+        for path in paths[1:]:
+            resolved = path.resolve()
+            if not resolved.is_relative_to(root_resolved) or not resolved.is_file():
+                raise DeploymentError("Feed artifact inventory contains an outside or missing path")
+        superseded = raw.get("superseded_relative_paths", [])
+        if not isinstance(superseded, list) or any(
+            not isinstance(relative, str) for relative in superseded
+        ):
+            raise DeploymentError("Feed status superseded_relative_paths is invalid")
+        active_names = {path.name for path in paths[1:]}
+        for relative in superseded:
+            relative_path = Path(relative)
+            if (
+                relative_path.name != relative
+                or "/" in relative
+                or "\\" in relative
+                or re.fullmatch(r"feed-(?:[a-z_]+)-[0-9a-f]{32}\.json", relative) is None
+                or relative in active_names
+            ):
+                raise DeploymentError("Feed status superseded_relative_paths is invalid")
+            superseded_path = (product_root / relative_path).resolve()
+            if not superseded_path.is_relative_to(root_resolved) or superseded_path.exists():
+                raise DeploymentError("superseded Feed artifact is not a deletion")
+        return paths + tuple(product_root / relative for relative in superseded)
     except DeploymentError:
         raise
-    except (OSError, SchemaError, TypeError, ValueError) as exc:
-        raise DeploymentError("Feed product latest_relative_path is invalid") from exc
-    return (candidate,)
+    except (OSError, BundleError, SchemaError, TypeError, ValueError, KeyError) as exc:
+        raise DeploymentError("Feed product manifest is invalid") from exc
 
 
 def finalize_deployment(
@@ -797,7 +932,8 @@ def _write_feed_status(path: Path, result: Any) -> None:
             {
                 "run_id": result.feed["run_id"],
                 "evidence_cutoff_at": result.feed["evidence_cutoff_at"],
-                "latest_relative_path": "latest.json",
+                "manifest_relative_path": MANIFEST_FILENAME,
+                "superseded_relative_paths": list(getattr(result, "superseded_paths", ())),
             }
         )
     Path(path).write_text(json.dumps(status), encoding="utf-8")
@@ -940,11 +1076,47 @@ def _migration_allowlisted_paths(product_root: Path, runtime_state_root: Path) -
     runtime_state_root = Path(runtime_state_root)
     product_root = Path(product_root)
     registry = RateRegistry(runtime_state_root)
+    product_paths: tuple[Path, ...] = ()
+    manifest_path = product_root / MANIFEST_FILENAME
+    if manifest_path.exists():
+        try:
+            manifest = load_canonical_json(manifest_path.read_bytes(), where="Feed manifest")
+            if not isinstance(manifest, dict):
+                raise DeploymentError("migration Feed manifest is not an object")
+            product_paths = (manifest_path,) + tuple(
+                product_root / entry["path"] for entry in manifest["artifacts"]
+            )
+        except (OSError, TypeError, ValueError, KeyError) as exc:
+            raise DeploymentError("migration Feed manifest is invalid") from exc
+    latest = product_root / LEGACY_FILENAME
+    if latest.exists():
+        product_paths += (latest,)
     return (
         allowlisted_paths(runtime_state_root)
         + (runtime_state_root / CHECKPOINT_FILENAME,)
+        + product_paths
         + _legacy_paths(product_root, registry)
     )
+
+
+def _remove_migrated_latest(product_root: Path) -> None:
+    latest = product_root / LEGACY_FILENAME
+    if not latest.exists():
+        return
+    try:
+        active = validate_bundle(product_root)
+        legacy = load_canonical_json(latest.read_bytes(), where="legacy latest.json")
+        if not isinstance(legacy, dict):
+            raise DeploymentError("legacy latest Feed must be an object")
+        validate_feed(legacy)
+        assert_feed_identity(legacy)
+        if active != legacy:
+            raise DeploymentError("migrated bundle does not match legacy latest Feed")
+        latest.unlink()
+    except DeploymentError:
+        raise
+    except (OSError, BundleError, SchemaError, TypeError, ValueError) as exc:
+        raise DeploymentError("cannot stage legacy latest Feed deletion") from exc
 
 
 def _command_publish(args: argparse.Namespace) -> int:
@@ -956,6 +1128,7 @@ def _command_publish(args: argparse.Namespace) -> int:
         if lease.state not in LEASE_STATES:
             raise DeploymentError("migration publication requires a preserved lease")
         paths = _migration_allowlisted_paths(product_root, runtime_state_root)
+        _remove_migrated_latest(product_root)
     elif mode == "bootstrap":
         lease = read_lease(runtime_state_root / LEASE_FILENAME, expected_run_id=args.run_id)
         if lease.state != "bootstrap":

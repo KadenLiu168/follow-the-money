@@ -63,8 +63,11 @@ supplied to deterministic processing.
 Boundary crossing and deterministic transformation do not upgrade provenance,
 verification, or authority.
 
-The Feed is the current serialized external contract: it is validated against
-`schemas/feed.schema.json` plus semantic, identity, and digest checks. Internal
+The Feed bundle is the current serialized external contract: the manifest and
+all eight typed artifacts are validated against `schemas/feed-manifest.schema.json`
+and `schemas/feed-artifact.schema.json`, then reconstructed and checked against
+`schemas/feed.schema.json` semantic identity. A manifest-absent `latest.json` is
+read-only migration compatibility. Internal
 structures such as the ledger, candidate Components/grouping, market
 snapshot/state, watchlist, scoring intermediates, and ranking inputs use typed
 Python interfaces, domain invariants/validation, and deterministic tests; they
@@ -93,9 +96,9 @@ registry entries, or callability for a retained capability.
 | Module | Responsibility |
 | --- | --- |
 | `config/` | Closed versioned YAML configuration and strict validation (no credentials) |
-| `schemas/` | JSON Schema 2020-12 contracts (Feed plus Agent invocation) |
+| `schemas/` | JSON Schema 2020-12 contracts (logical Feed, typed bundle, Agent invocation) |
 | `providers/` | Contract manifests, adapters, HTTP/rate/lock discipline |
-| `feed/` | Feed planning, deduplication, validation, publication, minimal entry |
+| `feed/` | Feed planning, typed bundle validation/publication, deduplication, minimal entry |
 | `engine/` | Retained entity resolution, candidate Components, and title similarity |
 | `events.py` | Canonical Event/family ID derivation |
 | `market/` | Decimal formulas, surprise, confidence |

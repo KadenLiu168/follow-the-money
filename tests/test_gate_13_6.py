@@ -49,9 +49,25 @@ def test_workflow_validator_rejects_collection_for_migration_mode(tmp_path: Path
 def test_workflow_validator_rejects_broad_generated_ci_ignore(tmp_path: Path):
     workflow = REPO_ROOT / ".github/workflows/ci-quality-gate.yml"
     altered = tmp_path / "test.yml"
-    text = workflow.read_text(encoding="utf-8").replace("- feeds/latest.json", "- feeds/**")
+    text = workflow.read_text(encoding="utf-8").replace(
+        "  push:\n  pull_request", "  push:\n    paths-ignore:\n      - feeds/**\n  pull_request"
+    )
     altered.write_text(text, encoding="utf-8")
     with pytest.raises(ValueError, match="paths-ignore"):
+        validate_repository_workflows(REPO_ROOT, test_workflow_path=altered)
+
+
+def test_workflow_validator_requires_installed_generated_state_classifier(tmp_path: Path):
+    workflow = REPO_ROOT / ".github/workflows/ci-quality-gate.yml"
+    altered = tmp_path / "test.yml"
+    altered.write_text(
+        workflow.read_text(encoding="utf-8").replace(
+            "uv run --frozen python scripts/validate_generated_state.py",
+            "python scripts/validate_generated_state.py",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="closed generated-state path set"):
         validate_repository_workflows(REPO_ROOT, test_workflow_path=altered)
 
 

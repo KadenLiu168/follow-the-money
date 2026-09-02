@@ -126,8 +126,8 @@ def test_fixture_backed_run_produces_valid_healthy_feed(tmp_path):
     assert feed["feed_config"]["hash"] != "0" * 64
     assert feed["feed_schema"]["sha256"] != "0" * 64
     assert len(feed["provider_contracts"]) == 8
-    # Latest is the only Feed product.
-    assert (tmp_path / "out" / "latest.json").exists()
+    # The manifest is the only active Feed entry point.
+    assert (tmp_path / "out" / "feed-manifest.json").exists()
     assert not (tmp_path / "out" / "daily").exists()
     # Durable rate registry created.
     assert (state / "rate-registry.json").exists()
@@ -304,7 +304,7 @@ def test_retry_after_beyond_deadline_is_not_admitted(tmp_path):
             ),
         )
     assert adapter.calls == 1
-    assert not (out / "latest.json").exists()
+    assert not (out / "feed-manifest.json").exists()
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 

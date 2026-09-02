@@ -144,11 +144,14 @@ scripts/feed/follow-the-money-feed      # evidence-only Feed, deterministic,
 
 ## Daily flow (scheduled or /money)
 
-1. **Feed**: GitHub Actions publishes the current `feeds/latest.json`, or run
+1. **Feed**: GitHub Actions publishes the current `feeds/feed-manifest.json`
+   and its eight typed artifacts, or run
    `scripts/feed/follow-the-money-feed` locally. Exit 0 with healthy or degraded
    Feed; warnings are on stderr and in status. A Feed failure means no digest
    should be produced from it.
-2. **Evidence**: read `feeds/latest.json`. Every item carries source provenance;
+2. **Evidence**: read and validate `feeds/feed-manifest.json`, then the
+   inventoried typed artifact. Only a manifest-absent migration state may use
+   `feeds/latest.json`. Every item carries source provenance;
    the window, cutoff, and run identity are authoritative. Runtime continuity is
    owned by the checkpoint; Git history is repository history only, not a
    historical Feed query API.

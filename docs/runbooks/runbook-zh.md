@@ -61,10 +61,11 @@ Provider 工作尚未开始；Provider 工作之后的最终发布冲突则保�
 - bootstrap/migration 与 success finalization 才纳入的 `.feed-state/feed-checkpoint.json`
 - registry 指名的精确 `.feed-state/scope-<digest>.json`
 - `.feed-state/feed-run-lease.json`
-- `feeds/latest.json`（唯一的成功 Feed product）
+- `feeds/feed-manifest.json` 与其指名的八个 generation-qualified artifacts（当前 Feed bundle）；`latest.json` 仅用于迁移期 legacy read compatibility
 
-锁、status、staging、临时文件、bundle、legacy product 文件、debug/failure workspace
-均在 allowlist 之外，绝不 staging。回滚使用 GitHub 原生 workflow-disable，保留最后远端
+锁、status、staging、临时文件、orphan bundle、debug/failure workspace
+均在 allowlist 之外，绝不 staging。finalization 只 staging active manifest inventory；
+migration 另 staging 删除 `feeds/latest.json`。回滚使用 GitHub 原生 workflow-disable，保留最后远端
 lease 与速率状态；不要
 reset 生成状态，也不要从不确定运行状态重启外部调度器。
 

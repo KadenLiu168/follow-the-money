@@ -10,9 +10,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from follow_the_money.canonical import canonical_bytes
 from follow_the_money.config.model import RatePolicy
 from follow_the_money.feed import deployment
+from follow_the_money.feed.bundle import build_bundle
 from follow_the_money.feed.checkpoint import FeedCheckpoint, PreviousSuccess, write_checkpoint
 from follow_the_money.feed.cli import FeedExecutionError, FeedInputError, FeedRunResult
 from follow_the_money.feed.deployment import (
@@ -28,6 +28,7 @@ from follow_the_money.feed.deployment import (
 from follow_the_money.feed.deployment import (
     prepare_deployment as _prepare_deployment,
 )
+from follow_the_money.feed.publish import publish_bundle
 from follow_the_money.feed.validate import recompute_feed_identity
 from follow_the_money.providers.rate import RateRegistry
 
@@ -334,7 +335,13 @@ def test_success_and_failure_finalization_keep_exact_paths(tmp_path: Path):
     feed = _healthy_feed()
     run_id = feed["run_id"]
     _product_root(tmp_path).mkdir(parents=True)
-    (_product_root(tmp_path) / "latest.json").write_bytes(canonical_bytes(feed))
+    bundle = build_bundle(feed)
+    publish_bundle(
+        output_root=_product_root(tmp_path),
+        bundle=bundle,
+        cutoff=datetime.fromisoformat(feed["evidence_cutoff_at"]),
+        run_id=run_id,
+    )
     status = tmp_path / "feed-status.json"
     status.write_text(
         json.dumps(
@@ -342,7 +349,7 @@ def test_success_and_failure_finalization_keep_exact_paths(tmp_path: Path):
                 "status": "healthy",
                 "run_id": run_id,
                 "evidence_cutoff_at": "2026-08-30T00:20:00Z",
-                "latest_relative_path": "latest.json",
+                "manifest_relative_path": "feed-manifest.json",
             }
         ),
         encoding="utf-8",
@@ -363,7 +370,7 @@ def test_success_and_failure_finalization_keep_exact_paths(tmp_path: Path):
         status_path=status,
         now=_clock(armed_at + timedelta(seconds=1)),
     )
-    assert {path.name for path in paths} >= {"feed-run-lease.json", "latest.json"}
+    assert {path.name for path in paths} >= {"feed-run-lease.json", "feed-manifest.json"}
     assert read_lease(tmp_path / "feed-run-lease.json").state == "success"
 
     prepare_deployment(
@@ -424,7 +431,6 @@ def test_success_finalization_rejects_non_feed_status_paths(tmp_path: Path):
     feed = _healthy_feed()
     run_id = feed["run_id"]
     _product_root(tmp_path).mkdir(parents=True)
-    (_product_root(tmp_path) / "latest.json").write_bytes(canonical_bytes(feed))
     status = tmp_path / "feed-status.json"
     status.write_text(
         json.dumps(
@@ -432,13 +438,13 @@ def test_success_finalization_rejects_non_feed_status_paths(tmp_path: Path):
                 "status": "healthy",
                 "run_id": run_id,
                 "evidence_cutoff_at": "2026-08-30T00:20:00Z",
-                "latest_relative_path": scope_path.name,
+                "manifest_relative_path": scope_path.name,
             }
         ),
         encoding="utf-8",
     )
 
-    with pytest.raises(DeploymentError, match="latest_relative_path"):
+    with pytest.raises(DeploymentError, match="manifest_relative_path"):
         finalize_deployment(
             tmp_path,
             deployment_run_id="43-1",

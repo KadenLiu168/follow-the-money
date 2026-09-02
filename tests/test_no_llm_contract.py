@@ -196,7 +196,7 @@ def test_minimal_entry_publishes_validating_feed(tmp_path):
     validate_feed(result.feed)
     assert_feed_identity(result.feed)
     validate_against("feed.schema.json", result.feed)
-    assert (out / "latest.json").exists()
+    assert (out / "feed-manifest.json").exists()
 
 
 def test_minimal_entry_status_file_and_exit_contract(tmp_path, monkeypatch, capsys):
@@ -225,7 +225,7 @@ def test_minimal_entry_status_file_and_exit_contract(tmp_path, monkeypatch, caps
     assert payload["status"] == "healthy"
     assert payload["run_id"] == result.feed["run_id"]
     assert payload["evidence_cutoff_at"] == result.feed["evidence_cutoff_at"]
-    assert payload["latest_relative_path"] == "latest.json"
+    assert payload["manifest_relative_path"] == "feed-manifest.json"
     assert "dated_relative_path" not in payload
 
     # Warnings surface on stderr.

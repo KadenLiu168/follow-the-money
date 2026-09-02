@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from follow_the_money.config import load_config
+from follow_the_money.feed.bundle import load_feed
 from follow_the_money.feed.checkpoint import FeedCheckpoint, read_checkpoint, write_checkpoint
 from follow_the_money.feed.cli import (
     FeedExecutionError,
@@ -151,7 +152,7 @@ def test_publication_failure_is_execution_error(tmp_path, monkeypatch):
         enabled_provider_ids=planned,
     )
     assert baseline.status == "healthy"
-    previous_latest = (out / "latest.json").read_bytes()
+    previous_manifest = (out / "feed-manifest.json").read_bytes()
 
     monkeypatch.setattr(feed_cli, "publish_feed", fail)
     with pytest.raises(FeedExecutionError):
@@ -161,7 +162,7 @@ def test_publication_failure_is_execution_error(tmp_path, monkeypatch):
             providers_fn=lambda: registry,
             enabled_provider_ids=planned,
         )
-    assert (out / "latest.json").read_bytes() == previous_latest
+    assert (out / "feed-manifest.json").read_bytes() == previous_manifest
 
 
 class _OutcomeAdapter:
@@ -218,7 +219,7 @@ def test_run_feed_separates_product_and_runtime_state_roots(tmp_path, monkeypatc
     )
 
     assert result.status == "healthy"
-    assert (product_root / "latest.json").is_file()
+    assert (product_root / "feed-manifest.json").is_file()
     assert not (product_root / "daily").exists()
     assert (runtime_root / ".collection.lock").is_file()
     assert (runtime_root / "rate-registry.json").is_file()
@@ -383,7 +384,7 @@ def test_failed_or_dry_run_outcomes_do_not_advance_checkpoint(tmp_path, monkeypa
         run_feed(**kwargs)
 
     assert checkpoint_path.read_bytes() == before
-    assert not (product_root / "latest.json").exists()
+    assert not (product_root / "feed-manifest.json").exists()
 
 
 def _accepted_item(provider_id: str, item_id: str) -> dict:
@@ -456,7 +457,7 @@ def test_dry_run_late_result_after_retained_evidence_is_execution_failure(tmp_pa
             monotonic_now=lambda: clock["now"],
         )
 
-    assert not (out / "latest.json").exists()
+    assert not (out / "feed-manifest.json").exists()
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
@@ -499,7 +500,7 @@ def test_dry_run_provider_start_after_global_deadline_is_execution_failure(tmp_p
             monotonic_now=monotonic,
         )
 
-    assert not (out / "latest.json").exists()
+    assert not (out / "feed-manifest.json").exists()
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
@@ -531,7 +532,7 @@ def test_rate_state_failure_remains_execution_error_with_other_accepted_evidence
             enabled_provider_ids=["federal_reserve", "yahoo_market"],
         )
 
-    assert not (out / "latest.json").exists()
+    assert not (out / "feed-manifest.json").exists()
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
@@ -559,7 +560,7 @@ def test_rate_wait_beyond_deadline_is_execution_failure_with_other_accepted_evid
             enabled_provider_ids=["federal_reserve", "yahoo_market"],
         )
 
-    assert not (out / "latest.json").exists()
+    assert not (out / "feed-manifest.json").exists()
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
@@ -582,7 +583,7 @@ def test_retry_wait_beyond_deadline_is_execution_failure_with_other_accepted_evi
             enabled_provider_ids=["federal_reserve", "yahoo_market"],
         )
 
-    assert not (out / "latest.json").exists()
+    assert not (out / "feed-manifest.json").exists()
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
@@ -616,7 +617,7 @@ def test_rate_reconcile_failure_is_not_retried_as_provider_degradation(tmp_path,
         )
 
     assert failed
-    assert not (out / "latest.json").exists()
+    assert not (out / "feed-manifest.json").exists()
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
@@ -631,7 +632,7 @@ def test_incomplete_single_empty_provider_is_failure_in_dry_run(tmp_path):
 
     assert result.status == "failure"
     assert result.exit_code == 1
-    assert not (tmp_path / "out" / "latest.json").exists()
+    assert not (tmp_path / "out" / "feed-manifest.json").exists()
     assert (
         not list((tmp_path / "out" / "daily").rglob("*.json"))
         if (tmp_path / "out" / "daily").exists()
@@ -659,8 +660,7 @@ def test_source_complete_empty_feed_publishes_and_advances_window(tmp_path, monk
     assert first.exit_code == 0
     assert first.feed is not None
     assert first.feed["items"] == []
-    latest_path = out / "latest.json"
-    latest = json.loads(latest_path.read_text(encoding="utf-8"))
+    latest = load_feed(out)
     validate_feed(latest)
     assert_feed_identity(latest)
     assert latest["evidence_cutoff_at"] == first.feed["evidence_cutoff_at"]
@@ -696,7 +696,7 @@ def test_source_incomplete_run_keeps_latest_and_reports_provider_diagnostics(tmp
         enabled_provider_ids=planned,
     )
     assert baseline.status == "healthy"
-    previous_latest = (out / "latest.json").read_bytes()
+    previous_manifest = (out / "feed-manifest.json").read_bytes()
     assert not (out / "daily").exists()
 
     registry = {
@@ -724,7 +724,7 @@ def test_source_incomplete_run_keeps_latest_and_reports_provider_diagnostics(tmp
     assert result.status == "failure"
     assert result.exit_code == 1
     assert not published
-    assert (out / "latest.json").read_bytes() == previous_latest
+    assert (out / "feed-manifest.json").read_bytes() == previous_manifest
     assert not (out / "daily").exists()
     assert "bls" in diagnostics
     assert "failed" in diagnostics
@@ -755,7 +755,7 @@ def test_failure_does_not_call_publication_or_replace_latest(tmp_path, monkeypat
     assert result.status == "failure"
     assert result.exit_code == 1
     assert not called
-    assert not (tmp_path / "out" / "latest.json").exists()
+    assert not (tmp_path / "out" / "feed-manifest.json").exists()
     assert (
         not list((tmp_path / "out" / "daily").rglob("*.json"))
         if (tmp_path / "out" / "daily").exists()
@@ -835,8 +835,8 @@ def test_dry_run_publishes_nothing(tmp_path):
         enabled_provider_ids=["federal_reserve"],
     )
     # The one-provider fixture leaves mandatory groups incomplete, but
-    # dry-run still publishes no latest artifact.
-    assert not (out / "latest.json").exists()
+    # dry-run still publishes no Feed bundle artifact.
+    assert not (out / "feed-manifest.json").exists()
     assert not list((out / "daily").glob("**/*.json")) if (out / "daily").exists() else True
     assert not (out / "rate-registry.json").exists()
     assert result.feed is not None

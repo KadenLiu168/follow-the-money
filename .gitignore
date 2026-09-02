@@ -1,9 +1,12 @@
 # Local run bundles (audit evidence, never committed)
 runs/
 
-# Consumer Feed products.
+# Consumer Feed products. The manifest and generation-qualified artifacts are
+# trackable; deployment still stages only the validated active inventory.
 feeds/*
 !feeds/latest.json
+!feeds/feed-manifest.json
+!feeds/feed-*.json
 !feeds/daily/
 !feeds/daily/*/
 !feeds/daily/*/*.json

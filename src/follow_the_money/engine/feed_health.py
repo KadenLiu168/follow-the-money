@@ -2,8 +2,8 @@
 
 Design section 5:
 
-- The daily Skill consumes only ``feeds/latest.json``; runtime continuity is
-  owned by checkpoint state, not by additional Feed products.
+- The daily Skill consumes the manifest-led ``feeds/feed-manifest.json``;
+  ``latest.json`` is read-only compatibility when the manifest is absent.
 - V1 stale boundary: lag > 30 minutes is stale; normal mode refuses lag > 2
   hours. ``brief_generated_at < evidence_cutoff_at`` or ``< feed.generated_at``
   fails closed with ``clock_before_feed``.
@@ -19,8 +19,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from ..canonical import load_canonical_json
-from ..feed.validate import assert_feed_identity, validate_feed
+from ..feed.bundle import BundleError, load_feed
 
 
 class FeedLoadError(ValueError):
@@ -40,16 +39,17 @@ def parse_utc(value: str) -> datetime:
 
 
 def load_latest_feed(path: Path) -> dict[str, Any]:
-    """Load and fully validate ``feeds/latest.json``."""
-    if not path.exists():
+    """Load the active bundle, or legacy ``latest.json`` if no manifest exists."""
+    path = Path(path)
+    root = path if path.is_dir() else path.parent
+    if not root.exists():
+        raise FeedLoadError(f"latest Feed not found: {path}")
+    if not (root / "feed-manifest.json").exists() and not (root / "latest.json").exists():
         raise FeedLoadError(f"latest Feed not found: {path}")
     try:
-        feed = load_canonical_json(path.read_bytes(), where="latest.json")
-        validate_feed(feed)
-        assert_feed_identity(feed)
-    except Exception as exc:
-        raise FeedLoadError(f"invalid latest Feed: {exc}") from exc
-    return feed
+        return load_feed(root)
+    except BundleError as exc:
+        raise FeedLoadError(f"invalid Feed product: {exc}") from exc
 
 
 def assess_health(

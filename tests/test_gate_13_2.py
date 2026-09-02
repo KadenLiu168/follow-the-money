@@ -19,6 +19,7 @@ from unittest import mock
 
 import pytest
 
+from follow_the_money.feed.bundle import load_feed
 from follow_the_money.feed.checkpoint import FeedCheckpoint, write_checkpoint
 from follow_the_money.feed.cli import FeedCliError, FeedExecutionError
 from follow_the_money.feed.cli import run_feed as _run_feed
@@ -397,7 +398,7 @@ def test_two_processes_serialized_lock_before_cutoff(tmp_path):
         enabled_provider_ids=_minimal_enabled_ids(),
     )
     assert r1.exit_code == 0
-    latest = json.loads((out / "latest.json").read_bytes())
+    latest = load_feed(out)
     assert latest["evidence_cutoff_at"] == _ts(T0)
 
     # Second process at T0 + 1h must re-read the advanced latest (planned from
@@ -409,7 +410,7 @@ def test_two_processes_serialized_lock_before_cutoff(tmp_path):
         enabled_provider_ids=_minimal_enabled_ids(),
     )
     assert r2.exit_code == 0
-    latest2 = json.loads((out / "latest.json").read_bytes())
+    latest2 = load_feed(out)
     assert latest2["window"]["start"] == _ts(T0)
     assert latest2["evidence_cutoff_at"] == _ts(T0 + timedelta(hours=1))
 
@@ -487,8 +488,8 @@ def test_deadline_reserve_blocks_publication(tmp_path):
             enabled_provider_ids=["federal_reserve"],
             monotonic_now=monotonic,
         )
-    # Zero mutation: no latest artifact after a deadline refusal.
-    assert not (out / "latest.json").exists()
+    # Zero mutation: no manifest artifact after a deadline refusal.
+    assert not (out / "feed-manifest.json").exists()
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
@@ -607,7 +608,7 @@ def test_production_dry_run_coordinates_and_reconciles_rate_state(tmp_path, monk
     assert Decimal(state["tokens"]) < Decimal(state["capacity"])
     assert state["last_dispatch_wall"] is not None
     assert state["cooldown_until"] is not None
-    assert not (out / "latest.json").exists()
+    assert not (out / "feed-manifest.json").exists()
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
@@ -633,7 +634,7 @@ def test_late_provider_result_is_not_normalized_or_added_to_feed(tmp_path):
         )
 
     adapter.normalize.assert_not_called()
-    assert not (out / "latest.json").exists()
+    assert not (out / "feed-manifest.json").exists()
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
@@ -644,19 +645,19 @@ def test_corrupt_latest_does_not_drive_steady_state_planning(tmp_path):
     (out / "latest.json").write_bytes(b"{corrupt")
     write_checkpoint(state_root / "feed-checkpoint.json", FeedCheckpoint(previous_success=None))
     checkpoint_bytes = (state_root / "feed-checkpoint.json").read_bytes()
-    with pytest.raises(FeedExecutionError, match="current latest Feed ownership key invalid"):
-        run_feed(
-            output_root=str(out),
-            runtime_state_root=str(state_root),
-            cutoff=T0 + timedelta(hours=1),
-            providers_fn=_minimal_registry,
-            enabled_provider_ids=_minimal_enabled_ids(),
-        )
-    # Planning is checkpoint-only; publication rejects the corrupt product
-    # latest without changing it or advancing the checkpoint.
+    result = run_feed(
+        output_root=str(out),
+        runtime_state_root=str(state_root),
+        cutoff=T0 + timedelta(hours=1),
+        providers_fn=_minimal_registry,
+        enabled_provider_ids=_minimal_enabled_ids(),
+    )
+    # New production does not read or replace legacy latest.json. The newly
+    # activated manifest is the sole consumer authority.
+    assert result.exit_code == 0
     assert (state_root / "rate-registry.json").exists()
-    assert (state_root / "feed-checkpoint.json").read_bytes() == checkpoint_bytes
-    assert not (out / "daily").exists()
+    assert (state_root / "feed-checkpoint.json").read_bytes() != checkpoint_bytes
+    assert (out / "feed-manifest.json").exists()
     assert (out / "latest.json").read_bytes() == b"{corrupt"
 
 
@@ -729,8 +730,8 @@ def test_two_os_processes_serialized_by_collection_lock(tmp_path):
         outcome = json.loads(Path(status_file).read_bytes())
         assert outcome["exit"] == 1
         assert "collection_lock_timeout" in outcome["error"]
-        # The timed-out runner wrote no latest artifact.
-        assert not (out / "latest.json").exists()
+        # The timed-out runner wrote no manifest artifact.
+        assert not (out / "feed-manifest.json").exists()
         assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
     finally:
         release.set()

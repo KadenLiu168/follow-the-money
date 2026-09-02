@@ -27,6 +27,7 @@ import pytest
 from follow_the_money.canonical import canonical_bytes, canonical_digest
 from follow_the_money.config import load_config
 from follow_the_money.config.model import FetchRule
+from follow_the_money.feed.bundle import load_feed
 from follow_the_money.feed.cli import run_feed as _run_feed
 from follow_the_money.feed.dedupe import deduplicate_items, deterministic_item_order
 from follow_the_money.feed.plan import FeedPlan, ProviderOutcome
@@ -724,13 +725,15 @@ def test_published_bytes_are_canonical_bytes(tmp_path, monkeypatch):
     )
     assert result.exit_code == 0
     feed = result.feed
-    expected = canonical_bytes(feed)
-    assert (out / "latest.json").read_bytes() == expected
+    bundle = result.bundle
+    assert bundle is not None
+    assert (out / "feed-manifest.json").read_bytes() == bundle.manifest_bytes
+    for domain, expected in bundle.artifact_bytes.items():
+        path = out / bundle.manifest["artifacts"][list(bundle.artifacts).index(domain)]["path"]
+        assert path.read_bytes() == expected
+        assert canonical_bytes(json.loads(expected.decode("utf-8"))) == expected
+    assert load_feed(out) == feed
     assert not (out / "daily").exists()
-    # Canonical round-trip: parsing and re-serializing reproduces the bytes.
-    parsed = json.loads(expected.decode("utf-8"))
-    assert canonical_bytes(parsed) == expected
-    assert parsed == feed
 
 
 def _semantic_publication_bytes(

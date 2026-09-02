@@ -80,10 +80,10 @@ Analytics and State、Confidence and Watchlist、Scoring and Ranking 仍 deferre
 ```
 config/          封闭的版本化 YAML 配置（v1 默认值，无任何密钥）
 providers/       provider 契约 manifest 与 fixture 来源记录
-schemas/         JSON Schema 2020-12 契约（Feed 与 Agent invocation）
+schemas/         JSON Schema 2020-12 契约（逻辑 Feed、typed bundle 与 Agent invocation）
 src/follow_the_money/  live Feed/Audit/Event 路径与保留的确定性库
 scripts/feed/    最小内部 Feed 入口：follow-the-money-feed
-feeds/           当前 consumer Feed 产物（latest.json）
+feeds/           当前 Feed bundle（feed-manifest.json 与八个 typed artifacts）
 .feed-state/     仓库持久化的 lock、RateRegistry、lease 与 checkpoint
 tests/           pytest 测试套件（无需凭据）
 docs/            架构、契约、runbook
@@ -114,8 +114,9 @@ uv run python -m follow_the_money.feed.cli --dry-run
 ## 定时 Feed 边界
 
 GitHub Actions 使用 `ubuntu-latest` 在 `20 0 * * *`（Asia/Shanghai 08:20）
-运行免凭据 Feed，也支持 `workflow_dispatch`。`feeds/` 只保存 consumer product，
-`.feed-state/` 保存仓库持久 runtime state。首次 invocation 可能执行零 Provider
+运行免凭据 Feed，也支持 `workflow_dispatch`。`feeds/` 只保存当前 consumer bundle，
+`.feed-state/` 保存仓库持久 runtime state。consumer 先发现并校验
+`feed-manifest.json`；迁移期间只有 manifest 缺失时才读取 legacy `latest.json`。首次 invocation 可能执行零 Provider
 请求的 legacy migration 或 bootstrap；正常 arming 与未完成运行恢复使用记录的
 checkpoint 和 lease 保守边界。`evidence_cutoff_at` 取实际运行时刻，不取名义调度时刻。
 checkpoint 负责 runtime continuity；Git history 只是仓库历史，不是 Feed archive 或

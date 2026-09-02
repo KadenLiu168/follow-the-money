@@ -5,6 +5,84 @@ Define the current credential-free provider-to-Feed collection, deterministic ev
 
 ## Requirements
 
+### Requirement: Typed Feed bundle has one authoritative manifest
+Every newly generated Feed SHALL consist of canonical `feed-manifest.json` bytes and exactly one canonical domain artifact for each existing Feed payload discriminator: `news`, `macro_release`, `policy`, `market_data`, `flow`, `positioning`, `filing`, and `calendar`. Each item SHALL occur in exactly one artifact selected solely by its `payload.type`; each required artifact SHALL exist even when its `items` array is empty. Grouping SHALL NOT depend on Provider identity and SHALL introduce no new evidence category.
+
+The manifest SHALL be the only authoritative bundle entry point and SHALL contain bundle identity, window and cutoff, truthful generation metadata, producer/configuration/Provider contracts, Provider outcomes, pipeline result, schema descriptors, and a complete artifact inventory. It SHALL contain no evidence item, duplicated evidence payload, analysis, ranking, signal, regime, impact, or recommendation. A domain artifact SHALL contain only its artifact schema version, bundle `run_id`, domain discriminator, and evidence items.
+
+#### Scenario: Mixed evidence is routed
+- **WHEN** normalized evidence contains items with different supported `payload.type` values
+- **THEN** each item appears once in the matching domain artifact and no Provider identity affects routing
+
+#### Scenario: A domain has no evidence
+- **WHEN** a valid run produces no item for one or more supported payload types
+- **THEN** the manifest inventories the corresponding required empty domain artifacts
+
+#### Scenario: Consumer discovers available evidence
+- **WHEN** a consumer reads a valid manifest
+- **THEN** its closed inventory identifies every required domain, canonical relative artifact path, item count, byte size, and SHA-256 digest without inspecting evidence payloads
+
+#### Scenario: Intelligence enters the bundle
+- **WHEN** the manifest or a domain item contains prohibited financial interpretation or investment intelligence
+- **THEN** bundle validation rejects the candidate before publication or consumption
+
+### Requirement: Feed bundle validation fails closed
+A Feed bundle SHALL validate its manifest and every inventoried artifact against their supported schema majors and semantic invariants before publication or use. Validation SHALL require the exact supported domain set once each in deterministic domain order; safe canonical repository-relative artifact paths; canonical bytes; matching declared byte sizes and SHA-256 digests; matching artifact schema versions, domains, and bundle `run_id`; deterministic item order; payload/domain agreement; and unchanged item provenance semantics. Validation SHALL reconstruct the logical Feed semantic projection from manifest metadata and domain items in the existing global `(source.knowledge_available_at, id)` order, recompute `content_digest` and cutoff-derived `run_id`, and reject missing, extra, corrupt, inconsistent, mixed-generation, or identity-invalid bundles.
+
+#### Scenario: Required artifact is missing
+- **WHEN** the manifest inventories a required artifact whose file is absent
+- **THEN** validation rejects the whole bundle and exposes no partial evidence as consumable
+
+#### Scenario: Artifact bytes are corrupted
+- **WHEN** an artifact's canonical bytes, declared size, or declared SHA-256 differ
+- **THEN** validation rejects the whole bundle
+
+#### Scenario: Generations are mixed
+- **WHEN** an artifact has another `run_id`, domain, schema version, or generation-qualified path
+- **THEN** validation rejects the whole bundle even if the artifact is otherwise valid
+
+#### Scenario: Inventory is incomplete or duplicated
+- **WHEN** a supported domain is missing, duplicated, reordered, or supplemented by an unknown domain
+- **THEN** the closed inventory fails validation
+
+#### Scenario: Provenance is changed during routing
+- **WHEN** reconstruction finds that an evidence item no longer satisfies existing source, lineage, time, identity, or payload semantics
+- **THEN** validation rejects the bundle rather than repairing or promoting the evidence
+
+### Requirement: Current single-file Feed has manifest-absent read compatibility
+During migration, a consumer SHALL first look for `feed-manifest.json`. When it exists, the consumer SHALL validate and use only that bundle and SHALL NOT fall back to `latest.json` after any manifest or artifact error. Only when the manifest is absent MAY the consumer load an existing supported-major `latest.json` through the legacy schema, semantic, provenance, identity, and health validation path. New production SHALL NOT create or replace `latest.json`.
+
+#### Scenario: Valid bundle is present with legacy latest
+- **WHEN** both `feed-manifest.json` and `latest.json` exist
+- **THEN** the consumer uses only the manifest-selected bundle
+
+#### Scenario: Present bundle is invalid
+- **WHEN** `feed-manifest.json` exists but the manifest or any required artifact is invalid
+- **THEN** consumption fails closed without falling back to `latest.json`
+
+#### Scenario: Only legacy latest exists
+- **WHEN** `feed-manifest.json` is absent and a supported valid `latest.json` exists
+- **THEN** the consumer may consume that legacy Feed with its existing health and warning semantics
+
+#### Scenario: New generation succeeds
+- **WHEN** a new producer publishes a Feed after this change
+- **THEN** it publishes the bundle contract and does not dual-write `latest.json`
+
+### Requirement: Current-state migration activates the first bundle without Provider work
+Repository deployment SHALL recognize a valid current `feeds/latest.json` with no manifest as pre-bundle product state. A migration-only invocation SHALL deterministically split that validated Feed into the typed bundle, preserve its semantic `content_digest`, `run_id`, evidence, provenance, cutoff, pipeline, and checkpoint identity, publish the first manifest-led bundle through the bundle publication boundary, remove `latest.json` in the same repository generated-state commit, perform zero Provider requests, and exit before collection. Missing or invalid required migration state SHALL fail closed without deleting the legacy product or advancing continuity.
+
+#### Scenario: Valid current latest is migrated
+- **WHEN** deployment finds a valid legacy latest, matching checkpoint, and no bundle manifest
+- **THEN** it publishes an equivalent validated bundle, removes `latest.json` in the same generated-state commit, performs zero Provider requests, and leaves checkpoint identity unchanged
+
+#### Scenario: Legacy product cannot be trusted
+- **WHEN** latest, checkpoint, schema, identity, provenance, or repository state is invalid or inconsistent
+- **THEN** migration makes zero Provider requests and does not partially create or activate a bundle
+
+#### Scenario: Bundle state already exists
+- **WHEN** a valid manifest-led bundle is present
+- **THEN** current-state migration does not reinterpret `latest.json` as another authority
+
 ### Requirement: Single authoritative production configuration
 Production configuration SHALL assign exactly one authoritative checked-in source to each normative field: application and deterministic-domain runtime fields to `config/config.yaml`, Provider-specific contract facts to the owning Provider manifest, and Provider activation plus coverage policy to `config/providers.yaml`. Static startup resolution SHALL require, parse, validate, and explicitly materialize every normative field from its authority without silently substituting a Python or loader default. A duplicated field retained for compatibility SHALL be validation-only, SHALL match its authority, and SHALL NOT independently affect runtime behavior. Coverage membership SHALL derive only from the coverage matrix and SHALL support one Provider belonging to multiple coverage groups without a Provider-level single-group authority.
 
@@ -26,7 +104,7 @@ Production configuration SHALL assign exactly one authoritative checked-in sourc
 
 #### Scenario: Static resolution fails before runtime mutation
 - **WHEN** configuration, manifest, version, identity, verification, or cross-source reference validation fails
-- **THEN** the Feed makes zero Provider network requests, performs no normal collection work, does not create or mutate rate-registry state, and does not publish or replace `feeds/latest.json`
+- **THEN** the Feed makes zero Provider network requests, performs no normal collection work, does not create or mutate rate-registry state, and does not publish or replace the active `feeds/feed-manifest.json` bundle
 
 ### Requirement: Credential-free verified provider contracts
 The Feed SHALL resolve every enabled Provider by strictly composing activation and coverage policy with that Provider's supported checked-in verified manifest before normal execution. The manifest SHALL be authoritative for Provider identity and contract version, verification and evidence metadata, authentication and protocol requirements, fetch and redirect hosts, evidence source-link rules, charset and content-type rules, request and response limits, rate policy, pagination, empty-window semantics, Provider-specific runtime behavior, mapping declarations already present in the manifest, and fixture provenance. The resulting single resolved Provider contract SHALL drive adapter construction and behavior, rate handling, empty-window decisions, host-concurrency planning, enablement, coverage assessment, and the embedded Feed `provider_contracts` snapshot; runtime consumers SHALL NOT re-read or independently reinterpret a second Provider contract after resolution. The shipped core Provider set SHALL require no paid financial-data key, and every accepted evidence URL SHALL be HTTPS, credential-free, canonicalized once under its owning resolved host/path/query policy, and validated before identity or publication.
@@ -89,7 +167,7 @@ Static resolution SHALL validate mapping provenance without making a network req
 - **THEN** static resolution fails closed and the compatibility declaration does not independently control execution
 
 ### Requirement: Verified mappings gate canonical Feed identity
-Production planning for an enabled market Provider SHALL create canonical market-role acquisition work only for mappings that passed the evidence-backed verification contract. An unverified mapping SHALL NOT emit a Feed item whose `market_data.instrument_id` asserts that canonical role identity, and SHALL NOT be made eligible by attaching an item-level unverified flag after acquisition. All mappings SHALL remain visible in deterministic order in the resolved Provider contract and corresponding Feed `provider_contracts` snapshot, including verification provenance for verified mappings and reasons for unverified mappings. The Feed schema SHALL remain unchanged.
+Production planning for an enabled market Provider SHALL create canonical market-role acquisition work only for mappings that passed the evidence-backed verification contract. An unverified mapping SHALL NOT emit a Feed item whose `market_data.instrument_id` asserts that canonical role identity, and SHALL NOT be made eligible by attaching an item-level unverified flag after acquisition. All mappings SHALL remain visible in deterministic order in the resolved Provider contract and corresponding Feed manifest `provider_contracts` snapshot, including verification provenance for verified mappings and reasons for unverified mappings. The evidence item payload schemas SHALL remain unchanged; only their typed bundle envelopes and bundle manifest SHALL change.
 
 #### Scenario: Production market adapters are planned
 - **WHEN** an enabled market Provider has both verified and unverified resolved role mappings
@@ -101,11 +179,11 @@ Production planning for an enabled market Provider SHALL create canonical market
 
 #### Scenario: Provider contract snapshot is built
 - **WHEN** the resolved Provider contract contains verified and unverified mappings
-- **THEN** its deterministic snapshot exposes every mapping with the verified provenance or unverified reason required by its state
+- **THEN** its deterministic manifest snapshot exposes every mapping with the verified provenance or unverified reason required by its state
 
 #### Scenario: Verification fails before runtime mutation
 - **WHEN** any mapping verification, evidence-reference, tuple-association, or mapping-parity check fails during static resolution
-- **THEN** the Feed makes zero Provider network requests, performs no normal collection work, does not create or mutate rate-registry state, and does not publish or replace `feeds/latest.json`
+- **THEN** the Feed makes zero Provider network requests, performs no normal collection work, does not create or mutate rate-registry state, and does not publish or replace the active Feed bundle
 
 ### Requirement: Market coverage is bounded by verified runnable capability
 Provider-level coverage policy SHALL claim no market capability broader than the enabled Provider's verified runnable mappings. Coverage SHALL NOT claim all configured roles, China/HK market support, or cross-asset completeness unless the verified runnable mappings establish that breadth. Unsupported claims SHALL be removed or narrowed within the existing Provider-level coverage model; no role-level coverage engine SHALL be introduced. An enabled market Provider with zero verified runnable mappings SHALL fail through the existing configuration/startup category unless registry policy explicitly disables it.
@@ -148,6 +226,7 @@ Before loading continuity state or capturing the cutoff, collection SHALL acquir
 #### Scenario: Product and runtime roots are distinct
 - **WHEN** production orchestration resolves configuration
 - **THEN** it explicitly materializes the Feed product root and runtime-state root independently so product validation cannot target runtime state and runtime-state validation cannot target Feed products
+
 ### Requirement: Bounded command deadline and non-cancellable commit
 The minimal Feed entry SHALL enforce the existing 300-second command-start monotonic deadline with an exact 15-second pre-commit reserve. Lock waits, rate waits, pagination, retries, request attempts, reversible processing, and staging `fsync` SHALL fit before second 285. Once a fully staged candidate is admitted to filesystem commit by second 285, rename and parent-directory `fsync` SHALL run to their normal result without cancellation or rollback; completion after second 300 MAY only add `commit_elapsed_overrun` to external status or stderr and SHALL NOT change the already hashed Feed bytes.
 
@@ -174,28 +253,16 @@ impact, ranking, or other analysis fields.
 - **WHEN** a normalized item contains a ranking, interpretation, recommendation, regime, or asset-impact field
 - **THEN** Feed validation rejects the candidate before publication
 
-### Requirement: Feed is the serialized external contract
-Every published Feed SHALL validate against the supported major version of
-`feed.schema.json` and its semantic invariants. It SHALL contain the fixed window
-and collection timestamps, provider outcomes, canonical redacted Feed configuration
-snapshot, Feed-schema descriptor, enabled-provider runtime-contract snapshots,
-producer application descriptor, canonical `content_digest`, cutoff-derived
-`run_id`, and exactly one supported typed payload per item. Validation SHALL
-recompute embedded aggregate identities, the canonical digest projection, and run
-identity from the Feed's embedded producer contracts rather than requiring equality
-with the current consumer build or manifests.
+### Requirement: Feed bundle is the serialized external contract
+Every published bundle SHALL validate against the supported major versions of its manifest and domain-artifact schemas and their semantic invariants. It SHALL retain the existing fixed window, truthful collection timestamps, Provider outcomes, canonical redacted Feed configuration snapshot, enabled-Provider contract snapshots, producer descriptor, canonical logical `content_digest`, cutoff-derived `run_id`, pipeline semantics, and exactly one supported typed payload per evidence item. Consumers SHALL validate from embedded producer contracts without requiring equality with the current consumer build or Provider manifests.
 
-#### Scenario: Feed identity is recomputed
-- **WHEN** a published or fixture Feed is consumed
-- **THEN** schema, semantic, embedded-contract, digest, and cutoff-derived run-ID validation all succeed or consumption fails closed
+#### Scenario: Producer and consumer builds differ
+- **WHEN** a valid bundle was produced by another build with supported schema majors
+- **THEN** the consumer validates it from the manifest and embedded producer descriptors without requiring current build or manifest hashes to match
 
-#### Scenario: Consumer build differs
-- **WHEN** a valid Feed was produced by another build with the same supported schema major
-- **THEN** the consumer validates it from embedded producer descriptors without requiring its current build or manifest hashes to match
-
-#### Scenario: Payload type and shape disagree
-- **WHEN** an item declares one supported type but supplies another type's payload
-- **THEN** closed-schema validation rejects the Feed
+#### Scenario: Payload type and artifact domain disagree
+- **WHEN** an item is stored outside the artifact matching its supported payload discriminator
+- **THEN** closed bundle validation rejects it
 
 ### Requirement: Bounded canonical evidence and conservative deduplication
 Normalized text SHALL use strict manifest-declared decoding, Unicode scalar values,
@@ -339,95 +406,65 @@ After acquiring the runtime-state collection lock, the run SHALL load and valida
 #### Scenario: Gap reaches or exceeds the configured threshold
 - **WHEN** the checkpoint cutoff produces a gap exactly at or beyond the configured maximum
 - **THEN** planning preserves the existing exact-threshold, bounded-gap/bootstrap, and coverage-gap behavior
-### Requirement: Durable monotonic publication
-Before publication, only a healthy or degraded candidate SHALL be admitted and SHALL pass Feed schema, semantic, provenance, identity, digest, and canonical-byte validation. A failure candidate SHALL NOT be passed to the publication subsystem. Publication SHALL stage only the candidate for `feeds/latest.json` as an unpredictable same-parent file, use create-only staging, file and directory `fsync`, validate current ownership immediately before commit, atomically replace `feeds/latest.json`, and `fsync` its parent directory. It SHALL use the maximum `(evidence_cutoff_at, content_digest)` tuple for latest ownership independently of candidate submission order, SHALL accept an already-current matching semantic identity idempotently while retaining its existing valid canonical bytes, and SHALL reject stale or conflicting ownership without changing the current product. It SHALL NOT create a `feeds/daily/**` artifact. Publication failure or durability uncertainty SHALL remain an execution failure and SHALL NOT be reported as degraded success or fabricate rollback guarantees.
+
+### Requirement: Durable monotonic Feed bundle publication
+Only a healthy or accepted degraded, fully validated candidate bundle SHALL be admitted. Publication SHALL place each artifact at a deterministic generation-qualified safe relative path, using unpredictable create-only same-parent staging, file and directory `fsync`, and no-replace installation; then it SHALL stage, revalidate ownership, and atomically replace `feed-manifest.json` as the sole activation point. Before that manifest replacement, failure SHALL leave the previous active manifest and all of its artifacts valid and unchanged. After replacement, parent-directory `fsync` failure SHALL report durability uncertainty without claiming rollback or advancing the checkpoint. Superseded or failed-candidate files SHALL never be discoverable through the active manifest and SHALL be removed as cleanup state rather than retained as a history or query product.
+
+Latest ownership SHALL use the maximum `(evidence_cutoff_at, content_digest)` tuple independently of submission order. A validated current bundle with the candidate's `run_id`, `content_digest`, cutoff, and identical artifact integrity SHALL be accepted idempotently without replacement. Stale, conflicting, unsafe-path, invalid-current, or incompatible equal-ownership candidates SHALL fail closed without changing the active manifest.
 
 #### Scenario: Valid candidate publishes
-- **WHEN** a healthy or degraded candidate passes validation and durable filesystem primitives are available
-- **THEN** `feeds/latest.json` is atomically replaced with the candidate's canonical bytes and no `feeds/daily/**` artifact is created
+- **WHEN** all required canonical artifacts and the manifest validate and durable filesystem primitives are available
+- **THEN** artifacts are installed first and `feed-manifest.json` is atomically activated last
 
-#### Scenario: Failure candidate is not admitted
-- **WHEN** pipeline assessment produces `failure`
-- **THEN** orchestration does not call the publication subsystem and leaves the previous valid `feeds/latest.json` unchanged
+#### Scenario: Artifact installation fails
+- **WHEN** any required artifact cannot be staged, synced, installed, or validated
+- **THEN** the previous active manifest remains unchanged and valid, and the candidate is not activated
 
-#### Scenario: Latest replacement fails
-- **WHEN** atomic replacement of `feeds/latest.json` fails
-- **THEN** the previous valid latest remains unchanged, no other Feed product is created, and the run exits `1` as a publication failure
+#### Scenario: Manifest replacement fails before commit
+- **WHEN** candidate manifest staging, validation, ownership checking, commit admission, or rename fails
+- **THEN** the previous active manifest and referenced artifacts remain unchanged and the run exits as publication failure
 
-#### Scenario: Publication fails before commit
-- **WHEN** a healthy or degraded candidate is admitted but publication fails before atomic replacement
-- **THEN** the run exits `1`, removes reversible staging files, and leaves the previous valid `feeds/latest.json` unchanged
+#### Scenario: Manifest durability becomes uncertain
+- **WHEN** manifest replacement succeeds but required parent-directory `fsync` fails
+- **THEN** execution reports durability uncertainty, claims no rollback, and does not advance the checkpoint
 
-#### Scenario: Publication fails before replacement
-- **WHEN** candidate staging, validation, ownership checking, commit admission, or rename fails before `feeds/latest.json` is replaced
-- **THEN** the run exits `1`, removes reversible staging files, and leaves the previous valid `feeds/latest.json` unchanged
+#### Scenario: Same semantic bundle is submitted again
+- **WHEN** the current valid bundle has the candidate's semantic identity and identical artifact inventory integrity
+- **THEN** publication retains current bytes and accepts idempotent ownership
 
-#### Scenario: Latest durability becomes uncertain after replacement
-- **WHEN** atomic replacement succeeds but the required parent-directory `fsync` fails
-- **THEN** the run exits `1`, does not claim rollback or durable success, and does not advance the checkpoint
+#### Scenario: Candidate order varies
+- **WHEN** valid candidates arrive in different orders
+- **THEN** the active manifest deterministically retains the maximum ownership tuple
 
-#### Scenario: Stale candidate reaches publication
-- **WHEN** an older valid externally prepared candidate is submitted after a newer `feeds/latest.json`
-- **THEN** publication rejects it without changing `feeds/latest.json` or creating another Feed product
+### Requirement: Minimal internal Feed entry reports bundle outcomes
+Exactly one minimal internal Feed entry SHALL preserve existing configuration, explicit product/runtime roots, deterministic clock/window injection, deadline, status, `--dry-run`, source-completeness, and typed exit behavior. A successful publication status SHALL expose `feed-manifest.json` as the product entry path and matching `run_id` and cutoff. Dry-run SHALL build and validate the same in-memory manifest and domain artifacts without writing bundle products or advancing the checkpoint. Existing Provider work, rate-state, lock, diagnostics, and exit-code semantics SHALL remain unchanged.
 
-#### Scenario: Equal-cutoff variants arrive in either order
-- **WHEN** two valid candidates have the same `evidence_cutoff_at`, different `content_digest` values, and are submitted in either order
-- **THEN** `feeds/latest.json` deterministically contains the candidate with the lexicographically greater canonical `content_digest`, and the losing submission creates no Feed product
+#### Scenario: Successful publication is reported
+- **WHEN** a healthy or accepted degraded bundle is durably activated
+- **THEN** the command exits `0` and status names `feed-manifest.json` with matching identity and cutoff
 
-### Requirement: Minimal internal Feed entry outcomes
-Exactly one minimal internal Feed entry SHALL expose configuration, explicit Feed product root, explicit runtime-state root, deterministic clock/window injection, status output, and `--dry-run`. Healthy or degraded success, including a source-complete Feed with zero accepted evidence, SHALL exit `0`. Planned source incompleteness and typed planning, collection, runtime, checkpoint, migration, validation, integrity, deadline, rate-state, filesystem, publication, or durability failure SHALL exit `1`; usage, configuration, invalid explicit input, or startup-capability rejection SHALL exit `2`. Expected exit categories SHALL derive from explicit types or typed outcomes, never message text. Dry-run SHALL execute the same fetch, normalize, validation, coverage, source-completeness, and pipeline-health decision as publication mode while omitting `feeds/latest.json` publication and checkpoint advancement.
+#### Scenario: Dry run succeeds
+- **WHEN** dry-run produces a valid healthy or degraded bundle candidate
+- **THEN** it exits `0`, reports the candidate, creates or replaces no bundle product, and does not advance the checkpoint
 
-For a source-completeness failure, existing transient status, command output, and workflow logs SHALL expose the responsible Provider's `provider_id`, terminal `state`, existing error or message when present, and relevant warnings by reusing the existing Provider outcome. A transient deployment status for a completed failed Feed SHALL preserve the existing result `message` and `warnings` plus the existing serialized Provider outcomes in their deterministic order, including `provider_id`, `state`, `error`, `attempted`, `fetched`, `accepted`, and `rejected` when available. A typed input or execution failure without completed Provider outcomes SHALL expose its existing message and deterministic warnings, if any, and SHALL NOT fabricate or infer Provider facts. This reporting SHALL NOT parse message or warning text to reconstruct structured outcomes, introduce a second Provider-failure domain model, add a Feed schema field, create a new tracked failure artifact, or add a transient path to the repository generated-state allowlist.
+#### Scenario: Source completeness fails
+- **WHEN** planned source work is incomplete
+- **THEN** the command preserves existing deterministic Provider diagnostics, exits `1`, and does not admit a bundle to publication
 
-#### Scenario: Degraded Feed succeeds
-- **WHEN** a degraded candidate remains valid for an existing condition unrelated to planned source acquisition completeness and dry-run or publication completes
-- **THEN** the entry exits `0` while machine-readable status and stderr identify the degradation
+### Requirement: Feed bundle consumption rejects invalid or failed products
+The consumer health boundary SHALL first validate the complete manifest inventory and artifact integrity, then reconstruct the logical Feed and apply existing structural, identity, freshness, pipeline, warning, and calendar-horizon semantics. It SHALL accept healthy bundles, accept degraded bundles while propagating warnings, and reject `pipeline.status = failure`. A consumer needing one domain MAY parse only that domain's evidence after validating hashes and required existence for the complete inventory.
 
-#### Scenario: Failure dry run exits nonzero
-- **WHEN** dry-run completes assessment with an incomplete planned Provider or deficient mandatory coverage and pipeline status `failure`
-- **THEN** the entry exits `1`, reports the failure status, responsible Provider outcomes, and warnings, and creates or replaces no `feeds/latest.json`
+#### Scenario: Healthy bundle is consumed
+- **WHEN** a complete valid bundle is healthy and fresh
+- **THEN** the consumer accepts it and can select evidence by manifest domain inventory
 
-#### Scenario: Failure publication run exits nonzero
-- **WHEN** publication mode completes assessment with pipeline status `failure`
-- **THEN** the entry exits `1` without invoking publication or exposing a success product path
+#### Scenario: Degraded bundle is consumed
+- **WHEN** a complete valid bundle is degraded and satisfies hard freshness checks
+- **THEN** the consumer accepts it and propagates manifest pipeline warnings
 
-#### Scenario: Input and execution errors use misleading words
-- **WHEN** typed input and execution failures contain arbitrary words associated with the opposite category
-- **THEN** their exits remain respectively `2` and `1` based only on type or typed outcome
-
-#### Scenario: Dry run is requested for usable evidence
-- **WHEN** `--dry-run` is set and assessment produces healthy or degraded status
-- **THEN** the entry validates and reports the candidate with exit `0` without changing `feeds/latest.json` or checkpoint state, while any real Provider sends still obey lock and durable rate-state contracts
-
-#### Scenario: Source-complete empty Feed publishes normally
-- **WHEN** every planned Provider is complete, mandatory coverage and existing hard-failure checks succeed, publication mode produces `items: []`, and durable publication succeeds
-- **THEN** the entry exits `0`, atomically replaces `feeds/latest.json`, advances the matching checkpoint, and retains the current cutoff, Provider outcomes, and normal deterministic identity metadata
-
-#### Scenario: Source failure diagnostics are transient
-- **WHEN** source completeness fails with Provider error details or warnings available in existing outcomes
-- **THEN** transient status preserves the existing failure message, warnings, and serialized Provider outcomes for command and hosted presentation without adding a repository-persisted failure or status artifact
-
-#### Scenario: Typed failure has no completed Provider outcomes
-- **WHEN** a typed input or execution failure occurs before a completed failed Feed result exists
-- **THEN** transient status preserves only the failure status, existing message, and deterministic warnings available at that boundary without fabricating Provider identity or outcomes
-### Requirement: Feed consumption rejects pipeline failure
-The Feed consumer health boundary SHALL distinguish structural validity from
-consumability. After schema and identity validation, it SHALL accept a healthy Feed,
-accept a degraded Feed while propagating its warnings, and reject a Feed whose
-`pipeline.status` is `failure`. Producer admission SHALL NOT be the sole protection
-against historical artifacts, manual writes, fixtures, or regressions.
-
-#### Scenario: Healthy Feed is consumable
-- **WHEN** a structurally and semantically valid Feed has pipeline status `healthy` and satisfies the existing freshness checks
-- **THEN** the consumer accepts it as healthy
-
-#### Scenario: Degraded Feed is consumable with context
-- **WHEN** a structurally and semantically valid Feed has pipeline status `degraded` and satisfies the existing hard freshness checks
-- **THEN** the consumer accepts it as degraded and propagates its pipeline warnings
-
-#### Scenario: Schema-valid failure Feed is rejected
-- **WHEN** a Feed passes schema and identity validation but has pipeline status `failure`
-- **THEN** the consumer raises a typed Feed load or health error and does not continue analysis
+#### Scenario: Structurally valid failure bundle is presented
+- **WHEN** bundle files pass structure and identity checks but pipeline status is `failure`
+- **THEN** the consumer rejects it as non-consumable
 
 ### Requirement: Deterministic Feed aggregation and normalization
 Provider work SHALL remain eligible for concurrent execution, but every Feed SHALL serialize one outcome for each provider represented by the collection plan in ascending `provider_id` order, including failed and skipped providers. Before duplicate comparison, duplicate-survivor selection, lineage merging, or final serialization, Feed items SHALL use the total order `(source.knowledge_available_at, id)`. Every merged `source_lineage` SHALL use the same contributing-item order, and no semantic result SHALL depend on provider completion order or input list order.
@@ -444,24 +481,20 @@ Provider work SHALL remain eligible for concurrent execution, but every Feed SHA
 - **WHEN** the same evidence items are supplied in different permutations
 - **THEN** duplicate survivors, dropped identities, merged lineage, final item order, and semantic identity are identical
 
-### Requirement: Feed semantic identity is separate from execution audit metadata
-`content_digest` SHALL be the canonical digest of an explicit semantic projection containing `schema_version`, `window`, `evidence_cutoff_at`, semantic provider outcomes, `producer`, `feed_config`, `feed_schema`, `provider_contracts`, `items`, and the pipeline semantic result. The semantic provider outcomes SHALL contain every serialized provider-outcome field except `retrieved_at`. The projection SHALL exclude `collection_started_at`, `collection_completed_at`, `generated_at`, provider `retrieved_at`, `content_digest`, `run_id`, and any undeclared top-level execution metadata. `run_id` SHALL continue to derive from the fixed cutoff and `content_digest`.
+### Requirement: Feed bundle semantic identity preserves the logical Feed projection
+`content_digest` SHALL remain the canonical digest of the existing explicit logical Feed projection containing `schema_version`, `window`, `evidence_cutoff_at`, semantic Provider outcomes, `producer`, `feed_config`, the logical `feed_schema` descriptor, `provider_contracts`, the globally ordered evidence items, and the pipeline semantic result. Execution-audit timestamps, Provider `retrieved_at`, Git metadata, free-form warnings, physical bundle schema descriptors, artifact paths, sizes, checksums, `content_digest`, and `run_id` SHALL remain outside that semantic projection. `run_id` SHALL continue to derive from the fixed cutoff and `content_digest`. Splitting or rejoining unchanged logical evidence SHALL NOT by itself change semantic identity.
+
+#### Scenario: Only physical bundle layout changes
+- **WHEN** identical logical evidence and metadata are represented by the required deterministic artifacts rather than the legacy mixed envelope
+- **THEN** reconstructed semantic identity remains stable
+
+#### Scenario: Artifact inventory or evidence is tampered with
+- **WHEN** physical integrity changes or reconstructed semantic evidence differs
+- **THEN** integrity validation fails or the recomputed semantic identity differs, and the bundle is rejected
 
 #### Scenario: Only execution timing changes
-- **WHEN** two valid Feed envelopes have the same semantic projection and cutoff but different collection duration, provider `retrieved_at`, or `generated_at` values
+- **WHEN** two bundles have the same logical semantic projection and cutoff but different truthful audit timestamps
 - **THEN** they have the same `content_digest` and `run_id`
-
-#### Scenario: Semantic evidence changes
-- **WHEN** an item, provider semantic outcome, embedded producer contract, Feed configuration, window, cutoff, or pipeline semantic result changes
-- **THEN** the recomputed `content_digest` changes
-
-#### Scenario: Identity is validated by a consumer
-- **WHEN** a Feed is consumed
-- **THEN** validation reconstructs the explicit semantic projection, recomputes `content_digest` and `run_id`, and fails closed on any mismatch
-
-#### Scenario: Existing supported-major Feed uses the legacy projection
-- **WHEN** a previously published schema-major-compatible Feed is read during migration and its identity validates only under the former whole-envelope projection
-- **THEN** the reader accepts that legacy artifact, while every newly produced Feed uses the semantic projection
 
 ### Requirement: Feed audit timestamps are truthful lifecycle observations
 The pipeline SHALL obtain `collection_started_at` from the actual start of collection, capture one `evidence_cutoff_at` after collection starts and before any provider request, obtain a non-null provider `retrieved_at` when that provider request actually returns, obtain `collection_completed_at` only after all provider work has reached a terminal or fenced state, and obtain `generated_at` when the Feed envelope is finalized. Failed or skipped work that never returns a provider response SHALL retain null `retrieved_at`. The pipeline SHALL NOT derive audit timestamps by offsetting the cutoff, copying another lifecycle timestamp, or otherwise synthesizing an unobserved event.
@@ -478,35 +511,12 @@ The pipeline SHALL obtain `collection_started_at` from the actual start of colle
 - **WHEN** a deterministic test clock supplies distinct instants at collection start, cutoff capture, provider return, collection completion, and envelope generation
 - **THEN** the Feed records those corresponding instants without fixed offsets or timestamp reuse
 
-### Requirement: Canonical serializer owns published Feed bytes
-Every `feeds/latest.json` byte sequence passed to publication SHALL equal the shared `canonical_bytes()` serialization of its validated Feed object. Feed-producing modules SHALL NOT use independent JSON serializer settings for published Feed bytes.
+### Requirement: Canonical serializer owns every published Feed bundle file
+Every byte sequence passed to bundle publication SHALL equal the shared canonical serialization of its validated manifest or domain-artifact object. The manifest inventory SHALL hash and size those exact canonical artifact bytes. Feed-producing modules SHALL NOT use independent JSON serializer settings for bundle products.
 
-#### Scenario: Feed is serialized for publication
-- **WHEN** a valid healthy or degraded Feed is admitted to publication
-- **THEN** its latest candidate bytes are produced by the shared canonical serializer and are byte-identical to `canonical_bytes(feed)`
-
-### Requirement: Publication is idempotent by semantic identity
-When `feeds/latest.json` already contains a valid canonical Feed with the candidate's semantic `run_id`, `content_digest`, and cutoff, publication SHALL retain the existing latest bytes and report accepted idempotent ownership even when excluded execution-audit metadata makes the candidate bytes differ. A byte-identical duplicate SHALL follow the same idempotent path. An invalid current latest, conflicting bytes under equal ownership, stale ownership, or a different semantic identity SHALL fail closed or follow deterministic monotonic ownership as applicable without creating another Feed product. Existing atomic latest replacement, monotonic ownership, canonical-byte, and `fsync` durability requirements SHALL remain unchanged.
-
-#### Scenario: Same semantic Feed runs with different audit timing
-- **WHEN** a later execution has the same semantic `run_id`, `content_digest`, and cutoff as the current valid `feeds/latest.json` but different truthful audit timestamps
-- **THEN** publication retains the current valid latest bytes and reports idempotent accepted ownership
-
-#### Scenario: Byte-identical Feed is submitted again
-- **WHEN** the exact canonical bytes already stored in `feeds/latest.json` are submitted again
-- **THEN** publication performs no replacement, reports idempotent accepted ownership, and creates no additional product
-
-#### Scenario: Idempotent recovery repairs latest
-- **WHEN** a duplicate semantic candidate reaches publication while the current valid `feeds/latest.json` already carries that identity
-- **THEN** publication accepts the existing latest as the recovered product owner without reading or creating a dated artifact
-
-#### Scenario: Same path carries different semantic identity
-- **WHEN** `feeds/latest.json` is invalid or claims the candidate's ownership tuple with incompatible semantic identity
-- **THEN** publication fails closed without overwriting the current file
-
-#### Scenario: Current latest has incompatible equal ownership
-- **WHEN** `feeds/latest.json` is invalid or claims the candidate's ownership tuple with incompatible semantic identity
-- **THEN** publication fails closed without overwriting the current file
+#### Scenario: Bundle files are serialized
+- **WHEN** a valid candidate is admitted to publication
+- **THEN** every manifest and artifact byte sequence is canonical and every inventory checksum and size matches the exact published artifact bytes
 
 ### Requirement: GitHub-hosted repository-native Feed deployment
 The repository SHALL define an active credential-free Feed job on GitHub-hosted `ubuntu-latest` for `workflow_dispatch` and daily cron `20 0 * * *` (08:20 Asia/Shanghai). The job SHALL use the checked-out repository's explicit `feeds/` Feed product root and `.feed-state/` runtime-state root, with the repository as durable cross-run authority, require only the built-in repository publication credential with `contents: write`, and use one non-cancelling concurrency group. It SHALL NOT require a self-hosted runner, external persistent filesystem, `FOLLOW_THE_MONEY_OUTPUT_ROOT`, or a custom mandatory default-off enable variable. The nominal schedule SHALL NOT determine `evidence_cutoff_at`; the existing Feed runtime SHALL capture the truthful cutoff after the job actually starts. Prepare, migration or arming publication, collection, finalization, diagnostics, and original-failure restoration SHALL remain explicitly ordered; migration-only mode SHALL end without collection. The job SHALL generate and publish deterministic evidence only and SHALL NOT invoke Host-Agent reasoning, Audit, Event Structuring, or retained market/scoring capabilities.
@@ -548,6 +558,7 @@ After exact deployment finalization, a failed Feed step SHALL trigger an `always
 #### Scenario: Migration-only invocation does not collect
 - **WHEN** prepare classifies complete legacy state and successfully publishes the migration allowlist
 - **THEN** that invocation exits before arming or Provider collection and a later invocation enters the normal lifecycle
+
 ### Requirement: Repository bootstrap and durable pre-network lease
 After checkout and before normal network-capable execution, deployment preflight SHALL load the authoritative checked-in configuration, explicitly resolve the product and runtime-state roots, classify repository state, and resolve enabled verified Provider contracts through the existing resolution boundary. Static resolution or state-classification failure SHALL make zero Provider requests and SHALL NOT create or mutate normal deployment or rate state. A genuinely new repository runtime-state root with no checkpoint, persistence marker, registry, scope files, or deployment lease SHALL use the existing RateRegistry first-use lifecycle to establish the registry, persistence marker, every currently enabled scope, a supported checkpoint with `previous_success: null`, and bootstrap recovery lease, fast-forward push that explicit state, perform zero Provider requests, and block collection until the configured crash-cooldown quiet boundary has elapsed. Any established or partial runtime state SHALL NOT use this bootstrap path.
 
@@ -580,6 +591,7 @@ For every later network-capable run, repository state SHALL contain a valid chec
 #### Scenario: Established state is missing its checkpoint
 - **WHEN** marker, registry, scope, or lease state proves the new runtime root is established but `feed-checkpoint.json` is absent
 - **THEN** preflight fails closed before Provider network and does not run clean bootstrap
+
 ### Requirement: Conservative incomplete-run recovery envelope
 An `in_progress` remote lease in either a validated legacy layout being migrated or the established runtime-state root SHALL mean that the previous ephemeral runner may have sent Provider requests whose exact resulting local RateRegistry state was lost. Its deterministic `recovery_not_before` SHALL conservatively include the latest workflow-permitted Feed start, the existing configured Feed command deadline, and the configured RateRegistry crash cooldown; lease creation time plus crash cooldown alone or an unenforced Provider-time estimate SHALL NOT establish recovery safety. Migration SHALL preserve the original lease state and bounds and SHALL NOT arm Provider work. Before that boundary, a later run SHALL make zero Provider requests and SHALL NOT reset or weaken the last committed registry state.
 
@@ -604,52 +616,37 @@ After the boundary, the run MAY reuse the last committed exact RateRegistry stat
 #### Scenario: Incomplete legacy lease is relocated
 - **WHEN** complete legacy state contains a `bootstrap` or `in_progress` lease
 - **THEN** migration preserves its original deployment run identity, Feed-start bound, and `recovery_not_before`, performs zero Provider requests, and leaves the next run subject to that boundary
-### Requirement: Exact allowlisted repository finalization
-The workflow SHALL execute safety-state finalization after any controlled Feed outcome and SHALL stage only explicitly resolved generated-state paths under the separately resolved roots. Runtime safety state SHALL consist only of the persistence marker, RateRegistry registry, registered scope files, and deployment lease; the checkpoint SHALL be separate successful-continuity state, and `feeds/latest.json` SHALL be the only successful Feed product state. On Feed success, finalization SHALL validate the successful status and `feeds/latest.json`, require checkpoint `previous_success.run_id` and `evidence_cutoff_at` to exactly match both, and make one non-force fast-forward commit containing exact resulting runtime safety state, terminal success lease, matching checkpoint, and `feeds/latest.json`. On controlled Feed failure after Provider work, finalization SHALL commit exact resulting RateRegistry files and terminal failure lease but SHALL NOT stage a changed checkpoint or any Feed product; the Feed failure SHALL remain the workflow result even when safety-state persistence succeeds.
 
-Ephemeral collection locks, temporary and staging files, `feed-status.json`, local run bundles, debug/failure workspaces, `feeds/daily/**`, and unrelated repository paths SHALL remain outside every generated-state allowlist. If final commit or push fails, conflicts, or the runner disappears, the remote `in_progress` lease SHALL remain the conservative recovery signal; the workflow SHALL NOT force push, destructively reset, or claim rollback of possibly sent requests or locally committed product/checkpoint state.
+### Requirement: Exact allowlisted repository bundle finalization
+After any controlled Feed outcome, deployment SHALL stage only explicitly resolved generated-state paths. On success, finalization SHALL validate status, checkpoint, active manifest, and every inventoried artifact; require their `run_id` and cutoff to match; and make one non-force fast-forward commit containing exact runtime safety state, terminal success lease, matching checkpoint, `feed-manifest.json`, exactly its closed artifact inventory, deletion of the superseded active generation, and deletion of migration-only `latest.json` when applicable. On controlled failure after Provider work, finalization SHALL preserve existing exact RateRegistry and terminal-failure behavior without staging a changed checkpoint, manifest, domain artifact, or candidate/superseded product. Transient stages, orphan candidates, status files, locks, history directories, and unrelated paths SHALL remain outside the allowlist.
 
-#### Scenario: Successful Feed finalization
-- **WHEN** Feed execution succeeds, checkpoint and status identity/cutoff match the valid `feeds/latest.json`, and exact local state can be fast-forward published
-- **THEN** one allowlisted final commit contains terminal success, exact RateRegistry state, the matching checkpoint, and `feeds/latest.json`, with no `feeds/daily/**` path staged
+#### Scenario: Successful bundle finalization
+- **WHEN** status, checkpoint, manifest, and all inventoried artifacts validate and match
+- **THEN** one generated-state commit contains exactly the active bundle and required durable state, with superseded product paths removed
 
-#### Scenario: Controlled Feed failure after Provider work
-- **WHEN** Feed execution fails after Provider work and the runner remains able to finalize
-- **THEN** one allowlisted final commit persists exact RateRegistry state and terminal failure without staging a locally changed checkpoint or adding or promoting a Feed product, and the workflow remains failed
-
-#### Scenario: Final publication fails or conflicts
-- **WHEN** the final generated-state commit cannot be fast-forward pushed
-- **THEN** the workflow fails and remote `in_progress` remains authoritative for conservative recovery
-
-#### Scenario: Runner disappears before finalization
-- **WHEN** the runner terminates after the durable lease and before terminal state reaches the remote repository
-- **THEN** the next invocation treats the remote lease as incomplete and follows its recovery boundary
-
-#### Scenario: Unrelated or transient files exist
-- **WHEN** finalization finds transient generated files, `feeds/daily/**`, or unrelated worktree changes
-- **THEN** it stages none of them and publishes only the explicit generated-state allowlist for that outcome
-
-#### Scenario: Success identity or cutoff does not match
-- **WHEN** successful status, checkpoint previous-success, or `feeds/latest.json` differ by `run_id` or `evidence_cutoff_at`
+#### Scenario: Bundle identity or inventory does not match
+- **WHEN** status, checkpoint, manifest, artifact set, digest, size, `run_id`, or cutoff differs
 - **THEN** finalization fails closed without publishing a success commit
-### Requirement: Generated-state commits avoid recursive full CI
-The normal CI workflow SHALL exclude pushes whose changed paths consist only of accepted `.feed-state/` durable generated state and `feeds/latest.json`. `feeds/daily/**/*.json` and legacy runtime paths under `feeds/` SHALL NOT remain steady-state CI exclusions. A push containing any other path, including code, configuration, Provider contracts, schemas, tests, workflows, OpenSpec, documentation, dated Feed paths, or unexpected runtime/transient state, SHALL remain eligible for the full normal CI suite. This distinction SHALL be path-based and SHALL NOT rely solely on commit-message conventions.
 
-#### Scenario: Generated-state-only push
-- **WHEN** a workflow commit changes only accepted `.feed-state/` durable files and `feeds/latest.json`
-- **THEN** that push does not recursively invoke the full normal CI workflow
+#### Scenario: Controlled Feed failure is finalized
+- **WHEN** Feed execution fails after Provider work
+- **THEN** exact rate state and terminal failure may be committed, but no Feed product or checkpoint change is staged
 
-#### Scenario: Mixed generated and source push
-- **WHEN** a push changes an accepted generated-state path and any non-generated path
-- **THEN** the full normal CI workflow remains eligible to run
+### Requirement: Generated-state commits avoid recursive full CI for the closed active bundle
+Normal CI SHALL exclude pushes whose changed paths consist only of accepted `.feed-state/` durable state and the closed Feed product set: `feeds/feed-manifest.json`, manifest-inventoried generation-qualified domain artifacts, deletion of the immediately superseded generation, and migration deletion of `feeds/latest.json`. A push containing code, configuration, Provider contracts, schemas, tests, workflows, OpenSpec, documentation, unreferenced Feed artifacts, history directories, unexpected runtime/transient state, or any other path SHALL remain eligible for full CI. This decision SHALL be path- and manifest-validation-based rather than commit-message-based.
 
-#### Scenario: Dated Feed path changes
-- **WHEN** a push adds, changes, or removes a path under `feeds/daily/**`
-- **THEN** the path is not treated as accepted steady-state generated output and the full normal CI workflow remains eligible to run
+#### Scenario: Valid generated-state-only bundle push
+- **WHEN** a workflow commit changes only accepted durable state and the exactly validated active/superseded bundle paths
+- **THEN** that push does not recursively invoke full CI
 
-#### Scenario: Legacy runtime paths change during migration
-- **WHEN** the one-time migration commit deletes legacy runtime files beneath `feeds/`
-- **THEN** normal CI may run because steady-state exclusions describe only the accepted post-migration architecture
+#### Scenario: Unreferenced artifact is changed
+- **WHEN** a push changes an artifact not in the validated active or immediately superseded bundle set
+- **THEN** full CI remains eligible
+
+#### Scenario: Source and bundle paths are mixed
+- **WHEN** a push changes accepted generated state and any source-controlled non-generated path
+- **THEN** full CI remains eligible
+
 ### Requirement: Feed deployment workflow acceptance includes Actions semantics
 The accepted Feed deployment workflow SHALL be valid under GitHub Actions workflow-definition and expression/context semantics. The authoritative pre-merge path SHALL evaluate the repository's real workflows with an established Actions-aware validator in addition to repository-specific hosted deployment, state ordering, explicit staging, failure-finalization, Git safety, and generated-commit CI checks. Hosted Feed runner selection SHALL remain scheduler-enforced through `runs-on: ubuntu-latest`, without an unavailable workflow-level context or redundant runtime runner guard.
 
@@ -665,38 +662,20 @@ The accepted Feed deployment workflow SHALL be valid under GitHub Actions workfl
 - **WHEN** GitHub Actions schedules a Feed generation job
 - **THEN** the job is assigned through `runs-on: ubuntu-latest` without requiring self-hosted labels or a later runtime label check
 
-### Requirement: Versioned Feed continuity checkpoint
-The repository-backed runtime-state root SHALL contain one closed, versioned `feed-checkpoint.json` whose only continuity value is `previous_success`. The supported version SHALL represent `previous_success` explicitly as either `null` or an object containing exactly the RFC 3339 UTC `evidence_cutoff_at` and successful Feed `run_id`. Unknown fields, unsupported versions, malformed JSON, invalid timestamps, invalid run identities, and missing checkpoints in an established runtime-state root SHALL fail closed before Provider network. The checkpoint SHALL NOT contain Feed items, Provider outcomes, coverage, diagnostics, configuration snapshots, RateRegistry data, HTTP history, or Agent state and SHALL NOT alter the consumer Feed schema or semantic Feed configuration snapshot.
+### Requirement: Versioned Feed continuity checkpoint tracks the active bundle
+The closed versioned checkpoint schema and its `previous_success` cutoff and `run_id` values SHALL remain unchanged. After accepted durable manifest ownership, the run SHALL atomically advance the checkpoint to the active bundle identity before releasing the runtime lock. It SHALL not advance for dry-run, source incompleteness, validation failure, publication failure, durability uncertainty, stale ownership, or any outcome without accepted active-manifest ownership. Deployment SHALL validate successful checkpoint identity against the active manifest rather than `latest.json`; checkpoint persistence failure after manifest activation SHALL fail without claiming rollback and MAY leave continuity lagging but never leading the active bundle.
 
-After an accepted non-dry-run Feed publication has durably established `feeds/latest.json` ownership, the run SHALL atomically advance the checkpoint to the successful Feed identity before releasing the runtime-state lock. The checkpoint SHALL NOT advance for dry-run, source incompleteness, typed execution failure, candidate validation failure, publication failure, durability uncertainty, stale ownership, or any result that did not establish accepted latest ownership. If checkpoint persistence fails after Feed publication, execution SHALL fail without claiming rollback; the checkpoint MAY lag a published product but MUST NOT lead it.
+#### Scenario: Accepted bundle advances continuity
+- **WHEN** a healthy or accepted degraded bundle durably establishes active manifest ownership
+- **THEN** checkpoint `previous_success` advances to exactly its cutoff and `run_id`
 
-#### Scenario: Runtime state has no previous successful Feed
-- **WHEN** a genuine bootstrap or legacy migration without `feeds/latest.json` establishes the runtime-state root
-- **THEN** it durably writes a supported checkpoint with `previous_success: null` before Provider work is permitted
-
-#### Scenario: Successful Feed checkpoint is valid
-- **WHEN** a checkpoint contains the supported version and exactly one valid prior successful cutoff and run identity
-- **THEN** runtime planning accepts that previous-success state without reading a consumer Feed artifact
-
-#### Scenario: Established checkpoint is unavailable or invalid
-- **WHEN** an established runtime-state root has a missing checkpoint, partial or malformed JSON, an unknown field or version, a malformed timestamp, or a malformed run identity
-- **THEN** execution fails closed before Provider network and does not reinterpret the state as a first Feed
-
-#### Scenario: Accepted publication advances continuity
-- **WHEN** a healthy or accepted degraded Feed durably establishes accepted `feeds/latest.json` ownership
-- **THEN** the checkpoint advances atomically to exactly that Feed's `evidence_cutoff_at` and `run_id`
-
-#### Scenario: Dry run does not advance continuity
-- **WHEN** `--dry-run` completes with healthy or degraded assessment after any real Provider sends
-- **THEN** RateRegistry state is reconciled normally but the checkpoint remains unchanged
-
-#### Scenario: Failed or uncertain publication does not advance continuity
-- **WHEN** execution fails before accepted latest ownership, a stale candidate is rejected, or publication durability is unknown
+#### Scenario: Bundle publication is failed or uncertain
+- **WHEN** active ownership is not accepted or manifest durability is uncertain
 - **THEN** the checkpoint does not advance
 
-#### Scenario: Checkpoint persistence fails after Feed publication
-- **WHEN** `feeds/latest.json` publication succeeds but atomic checkpoint persistence fails
-- **THEN** execution fails, preserves the already committed product state, and leaves continuity conservatively lagging rather than claiming rollback or advancing without persistence
+#### Scenario: Checkpoint persistence fails after activation
+- **WHEN** manifest activation succeeds but checkpoint persistence fails
+- **THEN** execution fails, preserves the active bundle, and leaves continuity conservatively lagging
 
 ### Requirement: Deterministic legacy runtime-state migration
 Before normal hosted arming, repository state SHALL be classified as a complete new layout, a complete legacy runtime layout with no new layout, no established layout, or mixed/partial/corrupt/unsupported state. A complete legacy layout SHALL enter a one-time zero-network migration that validates the existing persistence marker, RateRegistry registry, every registered scope, policy compatibility, deployment lease, and recovery information through their authoritative parsers and preserves exact token, refill-anchor, last-dispatch, cooldown, policy-fingerprint, scope-identity, lease-state, Feed-start, and recovery semantics. Only metadata explicitly bound to the old runtime root MAY be normalized to make relocated state truthful.

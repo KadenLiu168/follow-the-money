@@ -12,6 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
+from referencing import Registry, Resource
 
 from .unicode import UnicodeError_, validate_scalar_string
 
@@ -33,7 +34,21 @@ def _load_validator(rel_path: str) -> Draft202012Validator:
         schema = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise SchemaError(f"schema {rel_path} is not valid strict UTF-8 JSON: {exc}") from exc
-    validator = Draft202012Validator(schema)
+    # Physical bundle schemas reuse the legacy item definitions. Register the
+    # local legacy resource so validation never performs network resolution.
+    registry = Registry()
+    if rel_path != "feed.schema.json":
+        feed_path = SCHEMA_ROOT / "feed.schema.json"
+        try:
+            feed_schema = json.loads(feed_path.read_text(encoding="utf-8"))
+            feed_resource = Resource.from_contents(feed_schema)
+            feed_id = feed_schema.get("$id")
+            if isinstance(feed_id, str):
+                registry = registry.with_resource(feed_id, feed_resource)
+            registry = registry.with_resource(feed_path.as_uri(), feed_resource)
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise SchemaError(f"cannot read schema feed.schema.json: {exc}") from exc
+    validator = Draft202012Validator(schema, registry=registry)
     # Eagerly compile to fail fast on schema errors.
     validator.check_schema(schema)
     return validator

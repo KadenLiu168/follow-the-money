@@ -139,7 +139,6 @@ def validate_feed(feed: Mapping[str, Any]) -> None:
     cutoff = _parse_ts(feed["evidence_cutoff_at"], "evidence_cutoff_at")
     if not (start < cutoff):
         raise SchemaError(f"window must be strictly advancing: start={start} >= cutoff={cutoff}")
-
     started = _parse_ts(feed["collection_started_at"], "collection_started_at")
     completed = _parse_ts(feed["collection_completed_at"], "collection_completed_at")
     generated = _parse_ts(feed["generated_at"], "generated_at")
@@ -164,8 +163,14 @@ def validate_feed(feed: Mapping[str, Any]) -> None:
     # its narrow read-compatibility exemption.
     if not _has_exact_legacy_identity(feed):
         previous_id: str | None = None
+        seen_provider_ids: set[str] = set()
         for outcome in feed.get("provider_outcomes", []):
             pid = outcome.get("provider_id")
+            if pid in seen_provider_ids:
+                raise SchemaError(
+                    "provider_outcomes contain duplicate provider_id; order is not ascending provider_id"
+                )
+            seen_provider_ids.add(pid)
             if previous_id is not None and pid <= previous_id:
                 raise SchemaError("provider_outcomes not in ascending provider_id order")
             previous_id = pid

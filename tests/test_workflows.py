@@ -36,14 +36,9 @@ def test_test_workflow_offline_only_and_generated_push_boundary():
     assert "OPENAI_API_KEY" not in text
     assert "openai" not in text
     assert "pytest" in text
-    assert _on(data)["push"]["paths-ignore"] == [
-        ".feed-state/.follow-the-money-persistent",
-        ".feed-state/feed-checkpoint.json",
-        ".feed-state/rate-registry.json",
-        ".feed-state/scope-*.json",
-        ".feed-state/feed-run-lease.json",
-        "feeds/latest.json",
-    ]
+    assert _on(data)["push"] is None
+    assert "classify_generated_state" in data["jobs"]
+    assert "validate_generated_state.py" in text
     assert "pull_request" in _on(data)
 
 

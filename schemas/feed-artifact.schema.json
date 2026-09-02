@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://follow-the-money/schemas/feed-artifact.schema.json",
+  "title": "Follow the Money typed Feed artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "domain", "items"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "run_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "domain": {
+      "enum": ["news", "macro_release", "policy", "market_data", "flow", "positioning", "filing", "calendar"]
+    },
+    "items": {
+      "type": "array",
+      "items": { "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/feed_item" }
+    }
+  },
+  "allOf": [
+    { "$ref": "#/$defs/domain_payloads" }
+  ],
+  "$defs": {
+    "domain_payloads": {
+      "allOf": [
+        { "$ref": "#/$defs/news_artifact" },
+        { "$ref": "#/$defs/macro_release_artifact" },
+        { "$ref": "#/$defs/policy_artifact" },
+        { "$ref": "#/$defs/market_data_artifact" },
+        { "$ref": "#/$defs/flow_artifact" },
+        { "$ref": "#/$defs/positioning_artifact" },
+        { "$ref": "#/$defs/filing_artifact" },
+        { "$ref": "#/$defs/calendar_artifact" }
+      ]
+    },
+    "news_artifact": {
+      "if": { "properties": { "domain": { "const": "news" } } },
+      "then": { "properties": { "items": { "items": { "properties": { "payload": { "properties": { "type": { "const": "news" } } } } } } } }
+    },
+    "macro_release_artifact": {
+      "if": { "properties": { "domain": { "const": "macro_release" } } },
+      "then": { "properties": { "items": { "items": { "properties": { "payload": { "properties": { "type": { "const": "macro_release" } } } } } } } }
+    },
+    "policy_artifact": {
+      "if": { "properties": { "domain": { "const": "policy" } } },
+      "then": { "properties": { "items": { "items": { "properties": { "payload": { "properties": { "type": { "const": "policy" } } } } } } } }
+    },
+    "market_data_artifact": {
+      "if": { "properties": { "domain": { "const": "market_data" } } },
+      "then": { "properties": { "items": { "items": { "properties": { "payload": { "properties": { "type": { "const": "market_data" } } } } } } } }
+    },
+    "flow_artifact": {
+      "if": { "properties": { "domain": { "const": "flow" } } },
+      "then": { "properties": { "items": { "items": { "properties": { "payload": { "properties": { "type": { "const": "flow" } } } } } } } }
+    },
+    "positioning_artifact": {
+      "if": { "properties": { "domain": { "const": "positioning" } } },
+      "then": { "properties": { "items": { "items": { "properties": { "payload": { "properties": { "type": { "const": "positioning" } } } } } } } }
+    },
+    "filing_artifact": {
+      "if": { "properties": { "domain": { "const": "filing" } } },
+      "then": { "properties": { "items": { "items": { "properties": { "payload": { "properties": { "type": { "const": "filing" } } } } } } } }
+    },
+    "calendar_artifact": {
+      "if": { "properties": { "domain": { "const": "calendar" } } },
+      "then": { "properties": { "items": { "items": { "properties": { "payload": { "properties": { "type": { "const": "calendar" } } } } } } } }
+    }
+  }
+}

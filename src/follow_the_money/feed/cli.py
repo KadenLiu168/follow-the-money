@@ -18,8 +18,8 @@ The Feed command:
 7. normalizes/dedupes (stable ``(knowledge_available_at, id)`` total order),
    validates the Feed schema/semantic-digest identity, and serializes
    published bytes with the shared ``canonical_bytes()``,
-8. atomically publishes ``latest.json`` — or dry-runs; an existing latest
-   artifact with the same semantic ``run_id``/``content_digest`` is an
+8. builds eight typed artifacts and a manifest, then atomically activates
+   ``feed-manifest.json`` — or dry-runs; an existing equal bundle is an
    idempotent no-op that retains the stored bytes.
 
 Exit contract: 0 healthy/degraded success; 1 generation/publication failure;
@@ -41,7 +41,7 @@ from threading import Event, Lock
 from typing import Any
 
 from ..boundary import application_build_fingerprint, build_fingerprint_to_dict
-from ..canonical import canonical_bytes, canonical_digest, canonical_sha256, load_canonical_json
+from ..canonical import canonical_digest, canonical_sha256
 from ..config import load_config
 from ..config.load import ConfigError
 from ..config.model import AppConfig
@@ -51,6 +51,7 @@ from ..providers.lock import LOCK_FILENAME, CollectionLock, CollectionLockError
 from ..providers.manifest import ManifestError
 from ..providers.rate import RateRegistry, RateStateError, eligibility_delay, refill_tokens
 from ..schema import SchemaError
+from .bundle import BundleError, FeedBundle, build_bundle
 from .checkpoint import (
     CHECKPOINT_FILENAME,
     CheckpointError,
@@ -68,7 +69,14 @@ from .plan import (
     ordered_outcomes,
     plan_window,
 )
-from .publish import PublishError, publish_feed
+from .publish import PublishError, publish_bundle
+
+
+# Internal seam retained for callers/tests; this now means bundle publication,
+# never legacy latest.json production.
+def publish_feed(**kwargs: Any):
+    return publish_bundle(**kwargs)
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCHEMA_ROOT = REPO_ROOT / "schemas"
@@ -93,6 +101,8 @@ class FeedRunResult:
     feed: dict[str, Any] | None = None
     warnings: list[str] = field(default_factory=list)
     message: str = ""
+    bundle: FeedBundle | None = None
+    superseded_paths: tuple[str, ...] = ()
 
 
 def _default_config_path() -> Path:
@@ -498,6 +508,11 @@ def run_feed(
         except SchemaError as exc:
             raise FeedExecutionError(str(exc)) from exc
 
+        try:
+            bundle = build_bundle(feed)
+        except BundleError as exc:
+            raise FeedExecutionError(str(exc)) from exc
+
         if status == "failure":
             return FeedRunResult(
                 status=status,
@@ -505,22 +520,20 @@ def run_feed(
                 feed=feed,
                 warnings=warnings,
                 message="source completeness failed: " + "; ".join(warnings),
+                bundle=bundle,
             )
 
         if dry_run:
-            return FeedRunResult(status=status, exit_code=0, feed=feed, warnings=warnings)
+            return FeedRunResult(
+                status=status, exit_code=0, feed=feed, warnings=warnings, bundle=bundle
+            )
 
-        # The shared canonical serializer owns every published Feed byte; no
-        # module-local JSON settings are used for Feed artifacts.
-        feed_bytes = canonical_bytes(feed)
-        if load_canonical_json(feed_bytes, where="Feed candidate") != feed:
-            raise FeedExecutionError("Feed candidate is not its canonical byte representation")
         try:
             publication = publish_feed(
                 output_root=product_root,
+                bundle=bundle,
                 cutoff=cutoff,
                 run_id=feed["run_id"],
-                feed_bytes=feed_bytes,
                 monotonic_now=monotonic,
                 deadline_at=deadline_at,
             )
@@ -530,8 +543,14 @@ def run_feed(
             raise FeedExecutionError(
                 "commit_durability_unknown: Feed publication durability is unknown"
             )
-        if not (publication.latest_replaced or publication.idempotent):
-            raise FeedExecutionError("Feed latest.json ownership was not accepted")
+        if not (
+            getattr(publication, "manifest_replaced", False)
+            or getattr(publication, "latest_replaced", False)
+            or publication.idempotent
+        ):
+            raise FeedExecutionError("Feed manifest ownership was not accepted")
+        if publication.cleanup_failed:
+            warnings.append("Feed bundle cleanup deferred")
 
         try:
             write_checkpoint(
@@ -547,7 +566,14 @@ def run_feed(
             raise FeedExecutionError(f"checkpoint persistence failed: {exc}") from exc
 
         code = 0 if status in ("healthy", "degraded") else 1
-        return FeedRunResult(status=status, exit_code=code, feed=feed, warnings=warnings)
+        return FeedRunResult(
+            status=status,
+            exit_code=code,
+            feed=feed,
+            warnings=warnings,
+            bundle=bundle,
+            superseded_paths=getattr(publication, "superseded_paths", ()),
+        )
     finally:
         if lock is not None:
             lock.release()
@@ -1120,7 +1146,8 @@ def main(argv: list[str] | None = None) -> int:
                 {
                     "run_id": result.feed["run_id"],
                     "evidence_cutoff_at": result.feed["evidence_cutoff_at"],
-                    "latest_relative_path": "latest.json",
+                    "manifest_relative_path": "feed-manifest.json",
+                    "superseded_relative_paths": list(result.superseded_paths),
                 }
             )
         try:
@@ -1131,7 +1158,13 @@ def main(argv: list[str] | None = None) -> int:
     for warning in result.warnings:
         print(f"warning: {warning}", file=sys.stderr)
     if result.feed is not None and args.dry_run and result.status != "failure":
-        print(json.dumps(result.feed, ensure_ascii=False, indent=2)[:2000])
+        print(
+            json.dumps(
+                result.bundle.manifest if result.bundle else result.feed,
+                ensure_ascii=False,
+                indent=2,
+            )[:2000]
+        )
     return result.exit_code
 
 

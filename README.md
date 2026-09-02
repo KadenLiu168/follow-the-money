@@ -91,10 +91,10 @@ is investment advice.
 ```
 config/           closed versioned YAML configuration (v1 defaults, no secrets)
 providers/        provider contract manifests and fixture provenance
-schemas/          JSON Schema 2020-12 contracts (Feed plus Agent invocation)
+schemas/          JSON Schema 2020-12 contracts (logical Feed, typed bundle, Agent invocation)
 src/follow_the_money/  live Feed/Audit/Event paths plus retained deterministic libraries
 scripts/feed/     minimal internal Feed entry: follow-the-money-feed
-feeds/            current consumer Feed product (latest.json)
+feeds/            active Feed bundle (feed-manifest.json plus eight typed artifacts)
 .feed-state/      repository-backed lock, RateRegistry, lease, and checkpoint
 tests/            pytest suite (credential-free)
 docs/             architecture, contracts, runbooks
@@ -126,8 +126,9 @@ There is no public user-facing CLI product form: `brief`, `eval`, and
 
 GitHub Actions runs the credential-free Feed on `ubuntu-latest` at `20 0 * * *`
 (08:20 Asia/Shanghai), or through `workflow_dispatch`. It uses `feeds/` only
-for the current consumer product and `.feed-state/` for repository-backed
-runtime state. The first invocation may perform a zero-Provider legacy migration
+for the current consumer bundle and `.feed-state/` for repository-backed
+runtime state. Consumers discover `feed-manifest.json`; `latest.json` is only
+read when the manifest is absent during migration. The first invocation may perform a zero-Provider legacy migration
 or bootstrap; normal arming and incomplete-run recovery use the recorded
 checkpoint and conservative lease boundary. `evidence_cutoff_at` is captured
 from actual runtime, not from the nominal schedule. Checkpoint state owns runtime
