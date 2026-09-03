@@ -1072,7 +1072,27 @@ def _bootstrap_allowlisted_paths(runtime_state_root: Path) -> tuple[Path, ...]:
     return allowlisted_paths(runtime_state_root) + (runtime_state_root / CHECKPOINT_FILENAME,)
 
 
-def _migration_allowlisted_paths(product_root: Path, runtime_state_root: Path) -> tuple[Path, ...]:
+def _tracked_exact_paths(
+    repo_root: Path, paths: Iterable[Path], *, git: GitRunner
+) -> tuple[Path, ...]:
+    relative = _relative_allowed(repo_root, paths)
+    if not relative:
+        return ()
+    tracked = set(git(["ls-files", "--", *relative]).splitlines())
+    if not tracked.issubset(relative):
+        raise DeploymentError("repository index returned unexpected migration paths")
+    root = Path(repo_root).resolve()
+    by_relative = {str(Path(path).resolve().relative_to(root)): Path(path) for path in paths}
+    return tuple(by_relative[path] for path in relative if path in tracked)
+
+
+def _migration_allowlisted_paths(
+    product_root: Path,
+    runtime_state_root: Path,
+    *,
+    repo_root: Path | None = None,
+    git: GitRunner | None = None,
+) -> tuple[Path, ...]:
     runtime_state_root = Path(runtime_state_root)
     product_root = Path(product_root)
     registry = RateRegistry(runtime_state_root)
@@ -1091,11 +1111,22 @@ def _migration_allowlisted_paths(product_root: Path, runtime_state_root: Path) -
     latest = product_root / LEGACY_FILENAME
     if latest.exists():
         product_paths += (latest,)
-    return (
+
+    required_paths = (
         allowlisted_paths(runtime_state_root)
         + (runtime_state_root / CHECKPOINT_FILENAME,)
         + product_paths
-        + _legacy_paths(product_root, registry)
+    )
+    missing = sorted(str(path) for path in required_paths if not path.is_file())
+    if missing:
+        raise DeploymentError(f"migration required paths are missing: {missing}")
+    if repo_root is None or git is None:
+        return required_paths + _legacy_paths(product_root, registry)
+    repo_root = Path(repo_root)
+    if latest.exists() and not _tracked_exact_paths(repo_root, (latest,), git=git):
+        raise DeploymentError("migration latest Feed is not tracked")
+    return required_paths + _tracked_exact_paths(
+        repo_root, _legacy_paths(product_root, registry), git=git
     )
 
 
@@ -1122,12 +1153,17 @@ def _remove_migrated_latest(product_root: Path) -> None:
 def _command_publish(args: argparse.Namespace) -> int:
     product_root = Path(args.product_root)
     runtime_state_root = Path(args.runtime_state_root)
+    repo_root = Path(args.repo)
     mode = args.mode
+    git: GitRunner | None = None
     if mode == "migration":
         lease = read_lease(runtime_state_root / LEASE_FILENAME)
         if lease.state not in LEASE_STATES:
             raise DeploymentError("migration publication requires a preserved lease")
-        paths = _migration_allowlisted_paths(product_root, runtime_state_root)
+        git = _default_git(repo_root)
+        paths = _migration_allowlisted_paths(
+            product_root, runtime_state_root, repo_root=repo_root, git=git
+        )
         _remove_migrated_latest(product_root)
     elif mode == "bootstrap":
         lease = read_lease(runtime_state_root / LEASE_FILENAME, expected_run_id=args.run_id)
@@ -1142,9 +1178,10 @@ def _command_publish(args: argparse.Namespace) -> int:
     else:
         raise DeploymentError(f"unsupported pre-network publication mode: {mode!r}")
     publish_generated_state(
-        Path(args.repo),
+        repo_root,
         paths,
         message=f"feeds: {mode}",
+        git=git,
     )
     return 0
 

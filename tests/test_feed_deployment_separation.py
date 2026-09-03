@@ -91,6 +91,41 @@ def _legacy_state(product_root: Path, cfg, lease: DeploymentLease | None = None)
     return registry
 
 
+def _git_init(root: Path, *, include_latest: bool = True) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "add", "--all" if include_latest else ".feed-state"], cwd=root, check=True
+    )
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=root, check=True)
+
+
+def _established_product_only(
+    tmp_path: Path, *, track_latest: bool = True
+) -> tuple[Path, Path, object, Path]:
+    product_root = tmp_path / "feeds"
+    state_root = tmp_path / ".feed-state"
+    cfg = _cfg(_policy())
+    prepare_deployment(
+        product_root, state_root, cfg, deployment_run_id="bootstrap", now=lambda: NOW
+    )
+    feed = _healthy_feed()
+    latest = product_root / "latest.json"
+    latest.parent.mkdir(parents=True)
+    latest.write_bytes(canonical_bytes(feed))
+    write_checkpoint(
+        state_root / "feed-checkpoint.json",
+        FeedCheckpoint(
+            previous_success=PreviousSuccess(
+                evidence_cutoff_at=feed["evidence_cutoff_at"], run_id=feed["run_id"]
+            )
+        ),
+    )
+    _git_init(tmp_path, include_latest=track_latest)
+    return product_root, state_root, cfg, latest
+
+
 def _healthy_feed(cutoff: str = "2026-08-28T00:00:00.000Z") -> dict:
     feed = {
         "schema_version": 1,
@@ -368,6 +403,130 @@ def test_migration_preserves_in_progress_recovery_bounds(tmp_path: Path):
         )
 
 
+def test_product_only_migration_publishes_exact_bundle_and_latest_deletion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    product_root, state_root, cfg, latest = _established_product_only(tmp_path)
+
+    missing_legacy = [
+        path
+        for path in deployment._legacy_paths(product_root, RateRegistry(state_root))
+        if not path.exists()
+    ]
+    assert missing_legacy
+    failed = subprocess.run(
+        [
+            "git",
+            "add",
+            "--",
+            *[str(path.relative_to(tmp_path)) for path in missing_legacy],
+        ],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert failed.returncode != 0
+    assert "pathspec" in failed.stderr
+
+    result = prepare_deployment(
+        product_root,
+        state_root,
+        cfg,
+        deployment_run_id="migration-run",
+        now=lambda: NOW + timedelta(days=2),
+    )
+    real_git = deployment._default_git(tmp_path)
+    calls: list[list[str]] = []
+
+    def git(args: list[str]) -> str:
+        calls.append(args)
+        if args[:2] == ["push", "origin"]:
+            return ""
+        return real_git(args)
+
+    monkeypatch.setattr(deployment, "_default_git", lambda _repo: git)
+    assert (
+        deployment._command_publish(
+            SimpleNamespace(
+                product_root=str(product_root),
+                runtime_state_root=str(state_root),
+                mode=result.mode,
+                run_id="migration-run",
+                repo=str(tmp_path),
+            )
+        )
+        == 0
+    )
+
+    changed = subprocess.run(
+        ["git", "diff-tree", "--no-commit-id", "--name-status", "-r", "HEAD"],
+        cwd=tmp_path,
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout.splitlines()
+    expected_products = {"feeds/feed-manifest.json"}
+    manifest = json.loads((product_root / "feed-manifest.json").read_text(encoding="utf-8"))
+    expected_products.update(f"feeds/{entry['path']}" for entry in manifest["artifacts"])
+    assert set(changed) == {f"A\t{path}" for path in expected_products} | {"D\tfeeds/latest.json"}
+    assert not any(path.startswith(".feed-state/") for path in changed)
+    assert not latest.exists()
+    assert all("--force" not in args for args in calls)
+
+
+@pytest.mark.parametrize("missing", ["checkpoint", "artifact"])
+def test_migration_publication_rejects_missing_required_paths(tmp_path: Path, missing: str):
+    product_root, state_root, cfg, latest = _established_product_only(tmp_path)
+    prepare_deployment(
+        product_root,
+        state_root,
+        cfg,
+        deployment_run_id="migration-run",
+        now=lambda: NOW + timedelta(days=2),
+    )
+    if missing == "checkpoint":
+        (state_root / "feed-checkpoint.json").unlink()
+    else:
+        manifest = json.loads((product_root / "feed-manifest.json").read_text(encoding="utf-8"))
+        (product_root / manifest["artifacts"][0]["path"]).unlink()
+
+    with pytest.raises(DeploymentError, match="required paths are missing"):
+        deployment._command_publish(
+            SimpleNamespace(
+                product_root=str(product_root),
+                runtime_state_root=str(state_root),
+                mode="migration",
+                run_id="migration-run",
+                repo=str(tmp_path),
+            )
+        )
+    assert latest.exists()
+
+
+def test_untracked_latest_fails_before_removal(tmp_path: Path):
+    product_root, state_root, cfg, latest = _established_product_only(tmp_path, track_latest=False)
+    prepare_deployment(
+        product_root,
+        state_root,
+        cfg,
+        deployment_run_id="migration-run",
+        now=lambda: NOW + timedelta(days=2),
+    )
+
+    with pytest.raises(DeploymentError, match="latest Feed is not tracked"):
+        deployment._command_publish(
+            SimpleNamespace(
+                product_root=str(product_root),
+                runtime_state_root=str(state_root),
+                mode="migration",
+                run_id="migration-run",
+                repo=str(tmp_path),
+            )
+        )
+    assert latest.exists()
+
+
 def test_migration_publication_stages_legacy_deletion_with_the_bundle(tmp_path: Path, monkeypatch):
     product_root = tmp_path / "feeds"
     state_root = tmp_path / ".feed-state"
@@ -376,6 +535,7 @@ def test_migration_publication_stages_legacy_deletion_with_the_bundle(tmp_path: 
     feed = _healthy_feed()
     latest = product_root / "latest.json"
     latest.write_bytes(canonical_bytes(feed))
+    _git_init(tmp_path)
     result = prepare_deployment(
         product_root,
         state_root,
@@ -586,9 +746,6 @@ def test_migration_git_allowlist_contains_only_new_state_and_old_deletions(tmp_p
         deployment_run_id="migration-run",
         now=lambda: NOW + timedelta(days=2),
     )
-    reconstructed = _migration_allowlisted_paths(product_root, state_root)
-    scope_name = RateRegistry(state_root).scope_path("scope-a").name
-    assert product_root / scope_name in reconstructed
     calls: list[list[str]] = []
 
     def git(args: list[str]) -> str:
@@ -600,11 +757,29 @@ def test_migration_git_allowlist_contains_only_new_state_and_old_deletions(tmp_p
         )
         return completed.stdout
 
+    reconstructed = _migration_allowlisted_paths(
+        product_root, state_root, repo_root=tmp_path, git=git
+    )
+    scope_name = RateRegistry(state_root).scope_path("scope-a").name
+    assert product_root / scope_name in reconstructed
+    deployment._remove_migrated_latest(product_root)
     publish_generated_state(tmp_path, reconstructed, message="feeds: migration", git=git)
     expected = sorted(str(path.resolve().relative_to(tmp_path.resolve())) for path in reconstructed)
     add_call = next(args for args in calls if args[:2] == ["add", "--"])
     assert add_call[2:] == expected
+    changed = subprocess.run(
+        ["git", "diff-tree", "--no-commit-id", "--name-status", "-r", "HEAD"],
+        cwd=tmp_path,
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout.splitlines()
+    expected_changes = {
+        ("A" if path.exists() else "D") + "\t" + str(path.resolve().relative_to(tmp_path.resolve()))
+        for path in reconstructed
+    }
+    assert set(changed) == expected_changes
     assert unrelated.read_text(encoding="utf-8") == "keep"
     assert transient.read_text(encoding="utf-8") == "transient"
-    assert latest.exists() and dated.read_bytes() == b"product"
+    assert not latest.exists() and dated.read_bytes() == b"product"
     assert all("--force" not in args for args in calls)
