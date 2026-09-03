@@ -8,6 +8,7 @@ URL provider-bound validation, and empty-window behavior.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -18,6 +19,7 @@ from follow_the_money.providers.adapters import (
     CftcAdapter,
     FedAdapter,
     NbsAdapter,
+    PbocAdapter,
     SecEdgarAdapter,
     YahooMarketAdapter,
 )
@@ -60,9 +62,11 @@ class FakeClient:
         self.status = status
         self.content_type = content_type
         self.requests: list[str] = []
+        self.request_headers: list[dict[str, str] | None] = []
 
     def get(self, url, headers=None, timeout=None, follow_redirects=True):
         self.requests.append(url)
+        self.request_headers.append(dict(headers) if headers is not None else None)
         if self.status == 500:
             raise ConnectionError("boom")
         return FakeResponse(self.body, self.status, self.content_type, url=url)
@@ -152,6 +156,30 @@ def test_fed_transport_failure_typed():
         adapter.fetch(WINDOW, FakeClient(b"", status=500))
 
 
+def test_shared_fetch_uses_resolved_provider_user_agent():
+    adapter = FedAdapter()
+    client = FakeClient(b"{}")
+
+    adapter.fetch(WINDOW, client)
+
+    assert client.request_headers == [{"User-Agent": adapter._contract.user_agent}]
+
+
+def test_shared_fetch_merges_non_identity_headers_and_rejects_case_variants():
+    adapter = FedAdapter()
+    client = FakeClient(b"{}")
+
+    adapter._fetch(
+        client,
+        "https://www.federalreserve.gov/feeds/press_all.xml",
+        headers={"X-Trace": "fixture", "user-agent": "caller", "uSeR-aGeNt": "override"},
+    )
+
+    assert client.request_headers == [
+        {"X-Trace": "fixture", "User-Agent": adapter._contract.user_agent}
+    ]
+
+
 def test_bounded_fetch_rejects_non_success_status_and_preserves_retry_after():
     class StatusClient:
         def get(self, url, **kwargs):
@@ -238,9 +266,13 @@ def test_sec_manifest_requires_user_agent():
 
 
 def test_sec_fetch_uses_json_submissions_endpoint():
+    adapter = SecEdgarAdapter(watched_ciks=("0001067983",))
     client = FakeClient(b"{}")
-    SecEdgarAdapter(watched_ciks=("0001067983",)).fetch(WINDOW, client)
+
+    adapter.fetch(WINDOW, client)
+
     assert client.requests == ["https://data.sec.gov/submissions/CIK0001067983.json"]
+    assert client.request_headers == [{"User-Agent": adapter._contract.user_agent}]
 
 
 def test_sec_normalize_filters_filing_date_at_cutoff():
@@ -272,6 +304,60 @@ def test_nbs_html_index_is_supported():
     assert len(items) == 1
     assert items[0]["source"]["url"] == "https://www.stats.gov.cn/sj/zxfb/202608/t20260810_1.html"
     assert items[0]["payload"]["type"] == "news"
+
+
+@pytest.mark.parametrize(
+    ("adapter", "fixture", "base_url", "titles"),
+    [
+        (
+            PbocAdapter(),
+            "pboc-index.html",
+            "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html",
+            [
+                "2026年8月10日 货币政策公告",
+                "2026-02-30 2026-08-09 公开市场公告",
+                "政策公告",
+                "统计公告",
+            ],
+        ),
+        (
+            NbsAdapter(),
+            "nbs-index.html",
+            "https://www.stats.gov.cn/sj/zxfb/index.html",
+            [
+                "2026年8月10日 国民经济统计发布",
+                "2026-02-30 2026-08-09 统计公报",
+                "统计发布",
+                "统计数据",
+            ],
+        ),
+    ],
+)
+def test_production_shaped_html_indexes_skip_invalid_candidates_and_keep_first_valid(
+    adapter, fixture, base_url, titles
+):
+    response = FakeResponse(
+        (Path(__file__).parent / "fixtures" / "provider-indexes" / fixture).read_bytes(),
+    )
+    response.url = base_url
+
+    items = adapter.normalize(response, WINDOW)
+
+    assert [item["payload"]["title"] for item in items] == titles
+    assert [item["source"]["published_at"] for item in items] == [
+        "2026-08-10T00:00:00.000Z",
+        "2026-08-09T00:00:00.000Z",
+        "2026-08-11T00:00:00.000Z",
+        "2026-08-11T00:00:00.000Z",
+    ]
+
+
+def test_html_index_undecodable_response_remains_typed_fetch_failure():
+    response = FakeResponse(b"\xff")
+    response.url = "https://www.stats.gov.cn/sj/zxfb/index.html"
+
+    with pytest.raises(FetchError, match="not decodable"):
+        NbsAdapter().normalize(response, WINDOW)
 
 
 def test_yahoo_role_unit_and_availability_time_are_preserved():

@@ -59,10 +59,14 @@ class BaseAdapter(Provider):
         self._redirect_rules = self._contract.redirect_hosts
 
     def _fetch(self, client: Any, url: str, *, headers: Mapping[str, str] | None = None) -> Any:
+        request_headers = {
+            key: value for key, value in (headers or {}).items() if key.lower() != "user-agent"
+        }
+        request_headers["User-Agent"] = self._contract.user_agent
         return bounded_fetch(
             client,
             url,
-            headers=headers,
+            headers=request_headers,
             timeout=float(self._contract.attempt_timeout_seconds),
             max_bytes=int(self._contract.response_limit_bytes),
             fetch_rules=self._fetch_rules,
@@ -225,11 +229,7 @@ class SecEdgarAdapter(BaseAdapter):
     def fetch(self, window: Mapping[str, str], client: Any) -> Any:
         cik = self._watched_ciks[0] if self._watched_ciks else "0001067983"
         url = f"https://data.sec.gov/submissions/CIK{cik}.json"
-        return self._fetch(
-            client,
-            url,
-            headers={"User-Agent": self._contract.user_agent},
-        )
+        return self._fetch(client, url)
 
     def normalize(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
         data = self._json_body(raw)
@@ -762,17 +762,24 @@ def _html_index_entries(raw: Any, *, base_url: str, charset: str) -> list[dict[s
     for href, title in parser.links:
         if not href or not title:
             continue
-        match = re.search(r"(20\d{2})[-年/](\d{1,2})[-月/](\d{1,2})", title)
-        if match is None:
-            match = re.search(r"(20\d{2})[-年/](\d{1,2})[-月/](\d{1,2})", href)
-        if match is None:
-            compact = re.search(r"(20\d{2})(\d{2})(\d{2})", title + href)
-            if compact is not None:
-                match = compact
-        if match is None:
+        published: str | None = None
+        for source, pattern in (
+            (title, r"(20\d{2})[-年/](\d{1,2})[-月/](\d{1,2})"),
+            (href, r"(20\d{2})[-年/](\d{1,2})[-月/](\d{1,2})"),
+            (title + href, r"(20\d{2})(\d{2})(\d{2})"),
+        ):
+            for match in re.finditer(pattern, source):
+                year, month, day = (int(part) for part in match.groups())
+                try:
+                    candidate = datetime(year, month, day, tzinfo=UTC)
+                except ValueError:
+                    continue
+                published = _format_timestamp(candidate)
+                break
+            if published is not None:
+                break
+        if published is None:
             continue
-        year, month, day = (int(part) for part in match.groups())
-        published = _format_timestamp(datetime(year, month, day, tzinfo=UTC))
         entries.append(
             {
                 "title": title,
