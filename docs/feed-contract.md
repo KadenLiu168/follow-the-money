@@ -24,7 +24,9 @@ The manifest contains the logical Feed metadata, producer/configuration and
 Provider contract snapshots, Provider outcomes, pipeline result, logical
 `feed_schema` descriptor, physical `bundle_schemas` descriptors, and the exact
 artifact inventory (`domain`, safe `path`, `item_count`, `size_bytes`, and
-`sha256`). It contains no evidence item or financial interpretation.
+`sha256`). New production uses logical/manifest major `2`; major `1` is
+read-only compatibility for the immediately preceding bundle. Domain artifacts
+remain major `1`. It contains no evidence item or financial interpretation.
 
 The physical contracts are:
 
@@ -36,7 +38,8 @@ The physical contracts are:
 ## Semantic identity
 
 `content_digest` remains the SHA-256 of the canonical serialization of the
-explicit logical projection:
+explicit logical projection. Provider freshness cadence, status, origin contract
+hash, and carry-forward run ID are semantic fields in that projection:
 
 - `schema_version`, `window`, and `evidence_cutoff_at`;
 - semantic Provider outcomes, ordered by `provider_id`, without
@@ -51,10 +54,31 @@ outside the projection. `run_id` remains
 `{evidence_cutoff_at}::{content_digest[:32]}`. Splitting and reconstructing
 unchanged logical evidence therefore preserves identity.
 
+## Provider freshness and snapshot retention
+
+Each resolved Provider manifest owns one closed cadence contract:
+`weekly`, `scheduled`, `event_driven`, or `market_session`, with one reference
+selector (`data_as_of`, `source_updated_at`, or `checked_at`). Bounded cadences
+also declare a positive `valid_for_seconds`; `event_driven` uses `checked_at`
+and has no age window. The resolved contract and embedded Provider snapshot are
+the same authority; Feed code supplies no defaults or lookup table.
+
+Every v2 Provider outcome carries exactly one freshness result: `fresh`,
+`valid_unchanged`, `stale`, `no_snapshot`, or `not_evaluated`. Payload
+observation/effective time and source publication/update time are distinct from
+the current Provider response `retrieved_at` and the bundle `generated_at`.
+A complete successful no-observation check may carry an unchanged slice only
+from the fully validated active manifest-led bundle. Carried items retain their
+IDs, source times, provenance, lineage, and origin contract hash. Failed,
+partial, skipped, missing, ambiguous, duplicate, identity-mismatched, or
+non-permitted-empty acquisition is `not_evaluated` and remains a pipeline
+failure; retained evidence never masks it. A stale slice remains explicit.
+
 ## Validation and consumption
 
 Bundle validation is fail-closed. It requires canonical UTF-8 JSON, supported
-schema majors, the exact eight-domain inventory in fixed order, safe
+logical/manifest majors (`1` for read compatibility and `2` for production),
+the unchanged domain-artifact major, the exact eight-domain inventory in fixed order, safe
 repository-relative generation paths, matching bytes/size/SHA-256, shared
 `run_id`, matching domain/type, deterministic item order, unchanged
 provenance, and a reconstructed Feed whose digest and `run_id` recompute
@@ -71,7 +95,13 @@ calendar-horizon checks remain the existing engine boundary checks.
 ## Cutoff, ordering, and health
 
 The evidence window is `[window.start, evidence_cutoff_at)` and must advance
-strictly. Persisted timestamps are RFC 3339 UTC. Items use the stable
+strictly. `window.start` and `evidence_cutoff_at` govern acquisition eligibility.
+Payload fields retain observation/effective/reference time; `source.published_at`
+and `source.updated_at` retain source publication/update facts;
+`source.knowledge_available_at` governs event-like cutoff eligibility;
+Provider `retrieved_at` records the current response/check; and `generated_at`
+records bundle finalization. Retrieval and generation never refresh source or
+data-as-of time. Persisted timestamps are RFC 3339 UTC. Items use the stable
 `(source.knowledge_available_at, id)` order, and the calendar snapshot covers
 the configured horizon. Source completeness, coverage/degradation semantics,
 provenance, numeric bounds, and the evidence-only boundary are unchanged.
@@ -93,7 +123,7 @@ its `run_id`/cutoff; when publication removed a superseded generation, it also
 carries those deleted relative artifact paths for exact Git staging. The
 unchanged versioned checkpoint advances only after
 accepted durable manifest ownership, and deployment validates it against that
-manifest. Dry-run builds and validates the same in-memory bundle without
+manifest. Dry-run builds and validates the same in-memory v2 bundle without
 writing Feed products or advancing the checkpoint.
 
 ## Current-state migration

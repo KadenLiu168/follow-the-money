@@ -119,6 +119,41 @@ def test_complete_contract_resolves_at_an_unrelated_path(tmp_path: Path):
     )
 
 
+@pytest.mark.parametrize(
+    "freshness",
+    [
+        {"cadence": "event_driven", "reference_time": "checked_at", "valid_for_seconds": 1},
+        {
+            "cadence": "market_session",
+            "reference_time": "source_updated_at",
+            "valid_for_seconds": 86400,
+        },
+        {"cadence": "weekly", "reference_time": "data_as_of"},
+        {
+            "cadence": "scheduled",
+            "reference_time": "source_updated_at",
+            "valid_for_seconds": 0,
+        },
+        {
+            "cadence": "weekly",
+            "reference_time": "data_as_of",
+            "valid_for_seconds": 604800,
+            "unknown": True,
+        },
+        {"cadence": [], "reference_time": "data_as_of", "valid_for_seconds": 604800},
+    ],
+)
+def test_provider_freshness_contract_rejects_invalid_combinations(tmp_path: Path, freshness: dict):
+    config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
+    manifest_path = manifest_root / "federal_reserve" / "manifest.yaml"
+    manifest = _read_yaml(manifest_path)
+    manifest["freshness"] = freshness
+    _write_yaml(manifest_path, manifest)
+
+    with pytest.raises(ConfigError, match="freshness"):
+        _strict_load(config_path, providers_path, manifest_root)
+
+
 def test_load_config_exposes_only_explicit_strict_authorities():
     parameters = inspect.signature(load_config).parameters
 
@@ -667,6 +702,7 @@ def test_manifest_owned_runtime_mutation_does_not_need_registry_edit(tmp_path: P
     data["charset"]["allowed"] = ["utf-8"]
     data["response_limit_bytes"] = 12345
     data["empty_valid_for_window"] = False
+    data["freshness"]["valid_for_seconds"] = 123456
     _write_yaml(manifest_path, data)
 
     cfg = _strict_load(config_path, providers_path, manifest_root)
@@ -677,6 +713,8 @@ def test_manifest_owned_runtime_mutation_does_not_need_registry_edit(tmp_path: P
     assert provider.allowed_charset == "utf-8"
     assert provider.response_limit_bytes == 12345
     assert provider.empty_valid_for_window is False
+    assert provider.freshness is not None
+    assert provider.freshness.valid_for_seconds == 123456
 
 
 def test_retained_registry_mirror_must_match_manifest(tmp_path: Path):
@@ -750,6 +788,7 @@ def test_adapter_and_snapshot_share_resolved_provider_contract(tmp_path: Path):
     data["charset"]["allowed"] = ["utf-8"]
     data["response_limit_bytes"] = 12345
     data["empty_valid_for_window"] = False
+    data["freshness"]["valid_for_seconds"] = 123456
     _write_yaml(manifest_path, data)
 
     cfg = _strict_load(config_path, providers_path, manifest_root)
@@ -768,10 +807,17 @@ def test_adapter_and_snapshot_share_resolved_provider_contract(tmp_path: Path):
     assert adapter._contract.rate_policy.capacity == 19
     assert adapter._contract.response_limit_bytes == 12345
     assert adapter._contract.empty_valid_for_window is False
+    assert adapter._contract.freshness is not None
+    assert adapter._contract.freshness.valid_for_seconds == 123456
     assert snapshot["snapshot"]["fetch_hosts"][0]["host"] == "changed.federalreserve.gov"
     assert snapshot["snapshot"]["rate_policy"]["capacity"] == 19
     assert snapshot["snapshot"]["response_limit_bytes"] == 12345
     assert snapshot["snapshot"]["empty_valid_for_window"] is False
+    assert snapshot["snapshot"]["freshness"] == {
+        "cadence": "scheduled",
+        "reference_time": "source_updated_at",
+        "valid_for_seconds": 123456,
+    }
 
 
 def test_disabled_provider_is_not_initialized(monkeypatch):

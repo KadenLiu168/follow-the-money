@@ -63,7 +63,9 @@ units:
   contracts: contracts
 
 freshness:
-  policy: report_publication_within_window
+  cadence: weekly
+  reference_time: data_as_of
+  valid_for_seconds: 604800
 
 empty_valid_for_window: true
 pagination: none

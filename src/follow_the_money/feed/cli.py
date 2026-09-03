@@ -70,6 +70,7 @@ from .plan import (
     plan_window,
 )
 from .publish import PublishError, publish_bundle
+from .snapshot import SnapshotError, load_active_feed, select_provider_slices
 
 
 # Internal seam retained for callers/tests; this now means bundle publication,
@@ -479,8 +480,40 @@ def run_feed(
         # fenced state and aggregation is complete.
         completed_at = now_fn()
 
-        # Dedup + deterministic order.
-        deduped, _dropped = deduplicate_items(items)
+        # Snapshot retention is an optional post-acquisition operation. The
+        # checkpoint remains the sole window-planning authority.
+        active_feed = load_active_feed(product_root)
+        providers_by_id = {provider.id: provider for provider in cfg.providers}
+        contract_snapshots = _provider_contract_snapshots(cfg, include_disabled=True)
+        current_contract_hashes = {
+            entry["provider_id"]: entry["hash"] for entry in contract_snapshots
+        }
+        freshness_contracts = {
+            pid: provider.freshness
+            for pid, provider in providers_by_id.items()
+            if provider.freshness is not None
+        }
+        empty_validity = {
+            pid: provider.empty_valid_for_window for pid, provider in providers_by_id.items()
+        }
+        try:
+            selection = select_provider_slices(
+                outcomes=outcomes,
+                current_items=items,
+                active_feed=active_feed,
+                contracts=freshness_contracts,
+                current_contract_hashes=current_contract_hashes,
+                empty_valid_for_window=empty_validity,
+                evidence_cutoff_at=plan.evidence_cutoff_at,
+                strict_identity_provider_ids=tuple(providers_by_id),
+            )
+        except SnapshotError as exc:
+            raise FeedExecutionError(str(exc)) from exc
+
+        # Dedup + deterministic order after slice selection. A valid active
+        # bundle was already deduped; this preserves its semantic item bytes
+        # on an unchanged carry while retaining current Feed deduplication.
+        deduped, _dropped = deduplicate_items(list(selection.items))
         ordered = deterministic_item_order(deduped)
 
         status, warnings = assess_pipeline(
@@ -711,6 +744,30 @@ def _run_adapter(
                 reject_late_result(state)
                 return
             normalized = list(adapter.normalize(raw, window))
+            identity_ids: set[str] = set()
+            resolved_provider_ids = {provider.id for provider in cfg.providers}
+            for item in normalized:
+                item_id = item.get("id") if isinstance(item, Mapping) else None
+                if (
+                    isinstance(item, Mapping)
+                    and isinstance(item_id, str)
+                    and item_id
+                    and (
+                        (
+                            outcome.provider_id in resolved_provider_ids
+                            and item.get("provider_id") != outcome.provider_id
+                        )
+                        or item_id in identity_ids
+                    )
+                ):
+                    outcome.state = "failed"
+                    outcome.error = "current item identity is missing, duplicated, or mismatched"
+                    outcome.rejected += 1
+                    if rate is not None and scope is not None and state is not None:
+                        rate.reconcile(state, now=now_fn)
+                    return
+                if isinstance(item_id, str) and item_id:
+                    identity_ids.add(item_id)
             accepted_items = []
             rejected = 0
             for item in normalized:
@@ -896,12 +953,13 @@ def _schema_descriptor(rel: str) -> dict[str, str]:
     return {"path": f"schemas/{rel}", "sha256": sha}
 
 
-def _provider_contract_snapshots(cfg: AppConfig) -> list[dict[str, Any]]:
-    """Sorted canonical redacted non-secret runtime-contract snapshots for
-    every enabled provider (design section 4)."""
+def _provider_contract_snapshots(
+    cfg: AppConfig, *, include_disabled: bool = False
+) -> list[dict[str, Any]]:
+    """Sorted canonical redacted non-secret runtime-contract snapshots."""
     snapshots: list[dict[str, Any]] = []
     for p in sorted(cfg.providers, key=lambda x: x.id):
-        if not p.enabled:
+        if not p.enabled and not include_disabled:
             continue
         payload = {
             "provider_id": p.id,
@@ -964,7 +1022,17 @@ def _provider_contract_snapshots(cfg: AppConfig) -> list[dict[str, Any]]:
             "availability_lag_seconds": p.availability_lag_seconds,
             "identity_stable_record_id": p.identity_stable_record_id,
             "units": dict(sorted(p.units.items())),
-            "freshness_policy": p.freshness_policy,
+            "freshness": {
+                "cadence": p.freshness.cadence,
+                "reference_time": p.freshness.reference_time,
+                **(
+                    {"valid_for_seconds": p.freshness.valid_for_seconds}
+                    if p.freshness.valid_for_seconds is not None
+                    else {}
+                ),
+            }
+            if p.freshness is not None
+            else None,
             "role_mappings": [
                 {
                     key: dict(sorted(value.items())) if isinstance(value, Mapping) else value
@@ -1041,7 +1109,12 @@ def _build_feed(
     build = application_build_fingerprint(REPO_ROOT, "0.1.0")
     feed_config = _feed_config_snapshot(cfg)
     feed_schema = _schema_descriptor("feed.schema.json")
-    provider_contracts = _provider_contract_snapshots(cfg)
+    planned_provider_ids = set(outcomes)
+    provider_contracts = [
+        entry
+        for entry in _provider_contract_snapshots(cfg, include_disabled=True)
+        if entry["provider_id"] in planned_provider_ids
+    ]
     generated_at = now_fn()
     coverage_gap = None
     if plan.gap_warning:
@@ -1049,15 +1122,24 @@ def _build_feed(
             "uncovered_start": plan.gap_warning[0],
             "uncovered_end": plan.gap_warning[1],
         }
+    serialized_outcomes: list[dict[str, Any]] = []
+    for outcome in ordered_outcomes(outcomes):
+        value = outcome.to_dict()
+        if "freshness" not in value:
+            raise FeedExecutionError(
+                f"missing freshness result for provider {outcome.provider_id!r}"
+            )
+        serialized_outcomes.append(value)
+
     feed = {
-        "schema_version": 1,
+        "schema_version": 2,
         "run_id": "",  # recomputed below
         "window": {"start": plan.window_start, "end": plan.evidence_cutoff_at},
         "collection_started_at": fmt_utc(started_at),
         "evidence_cutoff_at": plan.evidence_cutoff_at,
         "collection_completed_at": fmt_utc(completed_at),
         "generated_at": fmt_utc(generated_at),
-        "provider_outcomes": [o.to_dict() for o in ordered_outcomes(outcomes)],
+        "provider_outcomes": serialized_outcomes,
         "producer": build_fingerprint_to_dict(build),
         "feed_config": feed_config,
         "feed_schema": feed_schema,

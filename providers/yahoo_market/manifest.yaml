@@ -67,7 +67,9 @@ units:
   price: price
 
 freshness:
-  policy: observation_available_before_cutoff
+  cadence: market_session
+  reference_time: data_as_of
+  valid_for_seconds: 86400
 
 role_mappings:
   - role_id: sp500

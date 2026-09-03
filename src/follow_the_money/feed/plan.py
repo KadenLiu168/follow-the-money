@@ -108,11 +108,12 @@ class ProviderOutcome:
     rejected: int = 0
     error: str | None = None
     retrieved_at: str | None = None
+    freshness: dict[str, Any] | None = None
     execution_failure: bool = False
     non_permitted_empty_observed: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "provider_id": self.provider_id,
             "state": self.state,
             "attempted": self.attempted,
@@ -127,6 +128,9 @@ class ProviderOutcome:
             "error": self.error,
             "retrieved_at": self.retrieved_at,
         }
+        if self.freshness is not None:
+            result["freshness"] = dict(self.freshness)
+        return result
 
     @property
     def healthy(self) -> bool:

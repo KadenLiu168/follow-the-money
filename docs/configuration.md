@@ -10,7 +10,10 @@ The Feed resolves checked-in configuration before creating runtime state.
 
 `ProviderEntry` is the single resolved contract consumed by adapters, rate and
 host planning, coverage assessment, and the redacted `provider_contracts`
-snapshot. A retained registry field is a validation-only compatibility mirror;
+snapshot. Each Provider manifest also owns exactly one closed freshness
+contract (`weekly`, `scheduled`, `event_driven`, or `market_session`) with its
+permitted reference selector and, for bounded cadences, a positive
+`valid_for_seconds`; resolution supplies no inferred freshness defaults. A retained registry field is a validation-only compatibility mirror;
 it cannot control runtime behavior. Coverage membership comes only from matrix
 rows, so a Provider may belong to multiple groups.
 

@@ -126,7 +126,11 @@ to any submitted text as a deterministic safety check.
   market/scoring capabilities.
 - The Feed reflects one fixed evidence cutoff captured from actual runtime
   before Provider requests; it never claims coverage through collection
-  completion or a nominal schedule value.
+  completion or a nominal schedule value. Payload observation/effective time,
+  source publication/update time, Provider retrieval/check time, and Feed
+  generation time remain distinct. Freshness is explicit per Provider; only a
+  complete successful check may carry an unchanged slice from the fully
+  validated active bundle, and carry-forward never masks Provider failure.
 
 ## Live path
 

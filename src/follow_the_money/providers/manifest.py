@@ -12,7 +12,13 @@ from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 import yaml
 
-from ..config.model import FetchRule, ProviderEntry, RatePolicy, SourceLinkRule
+from ..config.model import (
+    FetchRule,
+    FreshnessContract,
+    ProviderEntry,
+    RatePolicy,
+    SourceLinkRule,
+)
 from .urls import UrlValidationError, canonicalize_url
 
 MANIFEST_ROOT = Path(__file__).resolve().parents[3] / "providers"
@@ -140,6 +146,42 @@ def _validate_rate(raw: Any, where: str) -> None:
         raise ManifestError(f"{where}.minimum_interval_seconds must be non-negative")
 
 
+def _validate_freshness(raw: Any, where: str) -> None:
+    if not isinstance(raw, dict):
+        raise ManifestError(f"{where} must be a mapping")
+    _require(raw, {"cadence", "reference_time"}, where)
+    cadence = raw["cadence"]
+    reference = raw["reference_time"]
+    if not isinstance(cadence, str) or cadence not in {
+        "weekly",
+        "scheduled",
+        "event_driven",
+        "market_session",
+    }:
+        raise ManifestError(f"{where}.cadence is unsupported: {cadence!r}")
+    if not isinstance(reference, str) or reference not in {
+        "data_as_of",
+        "source_updated_at",
+        "checked_at",
+    }:
+        raise ManifestError(f"{where}.reference_time is unsupported: {reference!r}")
+    if cadence == "event_driven":
+        if reference != "checked_at":
+            raise ManifestError(f"{where}: event_driven must use checked_at")
+        _unknown(raw, frozenset({"cadence", "reference_time"}), where)
+        return
+    allowed_references = {"data_as_of", "source_updated_at"}
+    if cadence == "market_session":
+        allowed_references = {"data_as_of"}
+    if reference not in allowed_references:
+        raise ManifestError(f"{where}: {cadence} requires a source-semantic reference time")
+    _require(raw, {"valid_for_seconds"}, where)
+    _unknown(raw, frozenset({"cadence", "reference_time", "valid_for_seconds"}), where)
+    value = raw["valid_for_seconds"]
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ManifestError(f"{where}.valid_for_seconds must be a positive integer")
+
+
 def _validate_manifest(data: Mapping[str, Any], path: Path, provider_id: str) -> None:
     _unknown(data, _ALLOWED_MANIFEST_KEYS, str(path))
     _require(
@@ -236,7 +278,7 @@ def _validate_manifest(data: Mapping[str, Any], path: Path, provider_id: str) ->
     for section, required in (
         ("time", {"knowledge_time", "payload_types"}),
         ("identity", {"stable_record_id"}),
-        ("freshness", {"policy"}),
+        ("freshness", {"cadence", "reference_time"}),
         ("fixture_provenance", {"source", "files"}),
     ):
         value = data[section]
@@ -251,7 +293,7 @@ def _validate_manifest(data: Mapping[str, Any], path: Path, provider_id: str) ->
         f"manifest {path}.time",
     )
     _unknown(data["identity"], frozenset({"stable_record_id"}), f"manifest {path}.identity")
-    _unknown(data["freshness"], frozenset({"policy"}), f"manifest {path}.freshness")
+    _validate_freshness(data["freshness"], f"manifest {path}.freshness")
     _unknown(
         data["fixture_provenance"],
         frozenset({"source", "files"}),
@@ -640,7 +682,15 @@ def manifest_to_provider_entry(
         else None,
         identity_stable_record_id=str(manifest["identity"]["stable_record_id"]),
         units={str(k): str(v) for k, v in manifest["units"].items()},
-        freshness_policy=str(manifest["freshness"]["policy"]),
+        freshness=FreshnessContract(
+            cadence=str(manifest["freshness"]["cadence"]),
+            reference_time=str(manifest["freshness"]["reference_time"]),
+            valid_for_seconds=(
+                int(manifest["freshness"]["valid_for_seconds"])
+                if "valid_for_seconds" in manifest["freshness"]
+                else None
+            ),
+        ),
         role_mappings=tuple(_freeze_contract_mapping(m) for m in manifest.get("role_mappings", [])),
         adjustment_policy=dict(manifest.get("adjustment_policy", {})),
         fixture_provenance_source=str(manifest["fixture_provenance"]["source"]),

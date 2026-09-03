@@ -14,7 +14,11 @@ Agent 负责理解、推理与表达；`follow-the-money` 提供事实、规则�
 
 一个 Python 3.12 包，当前 live production path 负责采集并发布 schema 校验、
 携带身份的纯证据 Feed：运行身份、单一固定证据截止时间、逐条 provider 来源、
-规范摘要与契约快照。仓库中不存在任何凭据、模型或 LLM runtime。独立的 private
+规范摘要、契约快照与显式的 Provider freshness 结果。payload observation /
+effective time、source publication/update time、Provider retrieval/check time 与
+Feed generation time 各自保持语义边界。只有在 acquisition 完整成功且 active
+bundle 通过完整校验后，才允许 carry-forward unchanged slice；carry-forward
+绝不会掩盖 Provider failure。仓库中不存在任何凭据、模型或 LLM runtime。独立的 private
 one-shot boundary 提供 on-demand deterministic Audit 和 Event Structuring；其他
 retained library 仍没有 production caller。
 
@@ -119,8 +123,8 @@ GitHub Actions 使用 `ubuntu-latest` 在 `20 0 * * *`（Asia/Shanghai 08:20）
 `feed-manifest.json`；迁移期间只有 manifest 缺失时才读取 legacy `latest.json`。首次 invocation 可能执行零 Provider
 请求的 legacy migration 或 bootstrap；正常 arming 与未完成运行恢复使用记录的
 checkpoint 和 lease 保守边界。`evidence_cutoff_at` 取实际运行时刻，不取名义调度时刻。
-checkpoint 负责 runtime continuity；Git history 只是仓库历史，不是 Feed archive 或
-historical query API。在宣称部署可运行前，必须验证 Actions `contents: write` 与分支策略；
+checkpoint 负责 runtime continuity；retrieval/generation timestamp 不会刷新旧的
+observation。Git history 只是仓库历史，不是 Feed archive 或 historical query API。在宣称部署可运行前，必须验证 Actions `contents: write` 与分支策略；
 Host Agent 对 Feed 的消费和推理仍是之后独立的动作。
 
 ## 文档

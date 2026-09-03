@@ -60,7 +60,9 @@ units:
   index: index
 
 freshness:
-  policy: source_released_within_window
+  cadence: scheduled
+  reference_time: source_updated_at
+  valid_for_seconds: 604800
 
 empty_valid_for_window: true
 pagination: none

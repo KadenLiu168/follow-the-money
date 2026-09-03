@@ -15,9 +15,13 @@ facts, rules, deterministic computation, and verifiability.
 
 A Python 3.12 package whose live production path collects and publishes a
 schema-validated, identity-bearing evidence-only Feed: run identity, one fixed
-evidence cutoff, per-item provider provenance, canonical digests, and contract
-snapshots. No credential, model, or LLM runtime exists anywhere in the
-repository. A separate private one-shot boundary provides on-demand deterministic
+evidence cutoff, per-item provider provenance, canonical digests, contract
+snapshots, and explicit per-Provider freshness results. Payload observation /
+effective time, source publication/update time, Provider retrieval/check time,
+and Feed generation time remain distinct. A valid unchanged slice may be
+carried only after complete acquisition from the fully validated active bundle;
+carry-forward never masks Provider failure. No credential, model, or LLM runtime
+exists anywhere in the repository. A separate private one-shot boundary provides on-demand deterministic
 Audit and Event Structuring; the other retained libraries have no current
 production caller.
 
@@ -131,7 +135,8 @@ runtime state. Consumers discover `feed-manifest.json`; `latest.json` is only
 read when the manifest is absent during migration. The first invocation may perform a zero-Provider legacy migration
 or bootstrap; normal arming and incomplete-run recovery use the recorded
 checkpoint and conservative lease boundary. `evidence_cutoff_at` is captured
-from actual runtime, not from the nominal schedule. Checkpoint state owns runtime
+from actual runtime, not from the nominal schedule; retrieval and generation
+timestamps do not refresh old observations. Checkpoint state owns runtime
 continuity; Git history is repository history, not a Feed archive or query API.
 Verify Actions `contents: write` and branch policy before calling deployment
 operational; Host-Agent consumption and reasoning remain a separate later action.

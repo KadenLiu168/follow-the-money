@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from follow_the_money.canonical import canonical_digest
 from follow_the_money.feed.validate import (
     assert_feed_identity,
     recompute_feed_identity,
@@ -80,6 +81,49 @@ def _news_item(published: datetime, title: str = "标题") -> dict:
             "raw_metadata": {},
         },
     }
+
+
+def _valid_v2_feed() -> dict:
+    snapshot = {
+        "provider_id": "p",
+        "empty_valid_for_window": True,
+        "freshness": {
+            "cadence": "weekly",
+            "reference_time": "source_updated_at",
+            "valid_for_seconds": 604800,
+        },
+    }
+    contract_hash = canonical_digest(snapshot)
+    item = _news_item(T0 - timedelta(hours=1))
+    item["provider_id"] = "p"
+    return _valid_feed(
+        schema_version=2,
+        provider_contracts=[{"provider_id": "p", "snapshot": snapshot, "hash": contract_hash}],
+        items=[item],
+        provider_outcomes=[
+            {
+                "provider_id": "p",
+                "state": "healthy",
+                "attempted": 1,
+                "fetched": 1,
+                "succeeded": True,
+                "empty": False,
+                "partial": False,
+                "failed": False,
+                "skipped": False,
+                "accepted": 1,
+                "rejected": 0,
+                "error": None,
+                "retrieved_at": _ts(T0 + timedelta(minutes=1)),
+                "freshness": {
+                    "cadence": "weekly",
+                    "status": "fresh",
+                    "origin_contract_hash": contract_hash,
+                    "carried_forward_from_run_id": None,
+                },
+            }
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -217,16 +261,111 @@ def test_all_eight_payloads_pass_schema():
 
 
 def test_unsupported_major_rejected():
-    feed = _valid_feed(schema_version=2)
-    # Schema const(1) fires first; the semantic supported-major check is a
-    # second independent guard.
-    with pytest.raises(SchemaError, match="unsupported|was expected"):
+    feed = _valid_feed(schema_version=3)
+    # Schema enum fires first; the semantic supported-major check is a second
+    # independent guard.
+    with pytest.raises(SchemaError, match="unsupported|was expected|not one"):
         validate_feed(feed)
 
 
 def test_unknown_property_rejected():
     feed = _valid_feed(extra_field=True)
     with pytest.raises(SchemaError):
+        validate_feed(feed)
+
+
+def test_freshness_capable_major_requires_closed_provider_result():
+    feed = _valid_v2_feed()
+    validate_feed(feed)
+
+    bad = dict(feed)
+    bad["provider_outcomes"] = [dict(feed["provider_outcomes"][0])]
+    bad["provider_outcomes"][0]["freshness"] = {
+        **bad["provider_outcomes"][0]["freshness"],
+        "status": "valid_unchanged",
+        "carried_forward_from_run_id": None,
+    }
+    with pytest.raises(SchemaError, match="valid_unchanged"):
+        validate_feed(bad)
+
+
+@pytest.mark.parametrize(
+    "mutation", ["missing", "hash", "provider_id", "unknown_freshness", "invalid_type", "extra"]
+)
+def test_freshness_capable_major_requires_a_trusted_embedded_contract(mutation):
+    feed = _valid_v2_feed()
+    if mutation == "missing":
+        feed["provider_contracts"] = []
+    elif mutation == "hash":
+        feed["provider_contracts"][0]["hash"] = "0" * 64
+    elif mutation == "provider_id":
+        feed["provider_contracts"][0]["snapshot"]["provider_id"] = "other"
+    elif mutation == "unknown_freshness":
+        feed["provider_contracts"][0]["snapshot"]["freshness"]["unknown"] = True
+        feed["provider_contracts"][0]["hash"] = canonical_digest(
+            feed["provider_contracts"][0]["snapshot"]
+        )
+        feed["provider_outcomes"][0]["freshness"]["origin_contract_hash"] = feed[
+            "provider_contracts"
+        ][0]["hash"]
+    elif mutation == "invalid_type":
+        feed["provider_contracts"][0]["snapshot"]["freshness"]["cadence"] = []
+        feed["provider_contracts"][0]["hash"] = canonical_digest(
+            feed["provider_contracts"][0]["snapshot"]
+        )
+    else:
+        snapshot = {
+            **feed["provider_contracts"][0]["snapshot"],
+            "provider_id": "q",
+        }
+        feed["provider_contracts"].append(
+            {"provider_id": "q", "snapshot": snapshot, "hash": canonical_digest(snapshot)}
+        )
+
+    with pytest.raises(SchemaError, match="Provider"):
+        validate_feed(feed)
+
+
+def test_freshness_capable_major_rejects_false_healthy_source_completeness():
+    feed = _valid_v2_feed()
+    outcome = feed["provider_outcomes"][0]
+    outcome.update(state="failed", succeeded=False, failed=True)
+    outcome["freshness"] = {
+        "cadence": "weekly",
+        "status": "not_evaluated",
+        "origin_contract_hash": None,
+        "carried_forward_from_run_id": None,
+    }
+
+    with pytest.raises(SchemaError, match="pipeline.status=failure"):
+        validate_feed(feed)
+
+
+def test_non_permitted_empty_is_not_evaluated_and_requires_failure():
+    feed = _valid_v2_feed()
+    snapshot = feed["provider_contracts"][0]["snapshot"]
+    snapshot["empty_valid_for_window"] = False
+    feed["provider_contracts"][0]["hash"] = canonical_digest(snapshot)
+    feed["items"] = []
+    outcome = feed["provider_outcomes"][0]
+    outcome.update(
+        state="empty",
+        succeeded=True,
+        empty=True,
+        accepted=0,
+    )
+    outcome["freshness"] = {
+        "cadence": "weekly",
+        "status": "not_evaluated",
+        "origin_contract_hash": None,
+        "carried_forward_from_run_id": None,
+    }
+    feed["pipeline"] = {"status": "failure", "warnings": ["source incomplete"]}
+
+    validate_feed(feed)
+
+    feed["pipeline"] = {"status": "healthy", "warnings": []}
+    with pytest.raises(SchemaError, match="pipeline.status=failure"):
         validate_feed(feed)
 
 

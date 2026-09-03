@@ -214,7 +214,7 @@ class _ScriptedClock:
 
 
 def _permutation_outcomes() -> dict[str, ProviderOutcome]:
-    return {
+    outcomes = {
         "federal_reserve": ProviderOutcome(
             "federal_reserve",
             state="healthy",
@@ -226,6 +226,35 @@ def _permutation_outcomes() -> dict[str, ProviderOutcome]:
         "bls": ProviderOutcome("bls", state="failed", attempted=2, error="HTTP 503"),
         "cftc": ProviderOutcome("cftc", state="skipped"),
     }
+    for outcome in outcomes.values():
+        outcome.freshness = {
+            "cadence": "weekly" if outcome.provider_id == "cftc" else "scheduled",
+            "status": "no_snapshot" if outcome.state == "healthy" else "not_evaluated",
+            "origin_contract_hash": None,
+            "carried_forward_from_run_id": None,
+        }
+    return outcomes
+
+
+def test_feed_assembly_never_infers_missing_provider_freshness():
+    from follow_the_money.feed import cli as feed_cli
+
+    with pytest.raises(feed_cli.FeedExecutionError, match="missing freshness"):
+        feed_cli._build_feed(
+            cfg=_cfg(),
+            plan=FeedPlan(
+                window_start=_ts(T0 - timedelta(hours=72)),
+                evidence_cutoff_at=_ts(T0),
+                bootstrap=True,
+            ),
+            started_at=T0 - timedelta(minutes=2),
+            completed_at=T0 + timedelta(minutes=3),
+            outcomes={"federal_reserve": ProviderOutcome("federal_reserve", state="empty")},
+            items=[],
+            status="degraded",
+            warnings=[],
+            now_fn=lambda: T0 + timedelta(minutes=4),
+        )
 
 
 def test_outcome_serialization_is_ascending_provider_id_regardless_of_completion_order():
@@ -356,8 +385,18 @@ def test_same_source_near_duplicate_permutations_are_identical():
 
 def test_feed_identity_survives_item_input_permutations(tmp_path):
     items = [
-        _news_item("i2", "p2", knowledge=T0 - timedelta(hours=1), url="https://a.example.com/x"),
-        _news_item("i1", "p1", knowledge=T0 - timedelta(hours=2), url="https://a.example.com/x"),
+        _news_item(
+            "i2",
+            "federal_reserve",
+            knowledge=T0 - timedelta(hours=1),
+            url="https://a.example.com/x",
+        ),
+        _news_item(
+            "i1",
+            "federal_reserve",
+            knowledge=T0 - timedelta(hours=2),
+            url="https://a.example.com/x",
+        ),
     ]
 
     def run(permutation):
@@ -365,8 +404,8 @@ def test_feed_identity_survives_item_input_permutations(tmp_path):
             output_root=str(tmp_path / "out"),
             cutoff=T0,
             dry_run=True,
-            providers_fn=lambda: {"p1": _FixtureAdapter(items=permutation)},
-            enabled_provider_ids=["p1"],
+            providers_fn=lambda: {"federal_reserve": _FixtureAdapter(items=permutation)},
+            enabled_provider_ids=["federal_reserve"],
         )
         return result
 

@@ -110,6 +110,15 @@ class FetchRule:
 
 
 @dataclass(frozen=True)
+class FreshnessContract:
+    """Closed Provider-owned cadence contract for snapshot validity."""
+
+    cadence: str
+    reference_time: str
+    valid_for_seconds: int | None = None
+
+
+@dataclass(frozen=True)
 class ProviderEntry:
     """One enabled/disabled provider and its closed contract."""
 
@@ -148,7 +157,7 @@ class ProviderEntry:
     availability_lag_seconds: int | None = None
     identity_stable_record_id: str | None = None
     units: Mapping[str, str] = field(default_factory=dict)
-    freshness_policy: str | None = None
+    freshness: FreshnessContract | None = None
     role_mappings: tuple[Mapping[str, object], ...] = ()
     adjustment_policy: Mapping[str, object] = field(default_factory=dict)
     fixture_provenance_source: str | None = None

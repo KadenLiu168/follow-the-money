@@ -11,7 +11,10 @@
     "provider_contracts", "content_digest", "pipeline", "bundle_schemas", "artifacts"
   ],
   "properties": {
-    "schema_version": { "const": 1 },
+    "schema_version": {
+      "description": "Manifest major; v1 is read-compatible and v2 is freshness-capable production.",
+      "enum": [1, 2]
+    },
     "run_id": {
       "type": "string", "minLength": 1, "maxLength": 128
     },
@@ -56,6 +59,21 @@
       "items": { "$ref": "#/$defs/artifact_inventory" }
     }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "schema_version": { "const": 2 } } },
+      "then": {
+        "properties": {
+          "provider_outcomes": { "items": { "required": ["freshness"] } }
+        }
+      },
+      "else": {
+        "properties": {
+          "provider_outcomes": { "items": { "not": { "required": ["freshness"] } } }
+        }
+      }
+    }
+  ],
   "$defs": {
     "window": {
       "type": "object", "additionalProperties": false, "required": ["start", "end"],

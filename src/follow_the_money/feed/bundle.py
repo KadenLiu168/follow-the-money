@@ -22,7 +22,9 @@ DOMAINS = (
     "filing",
     "calendar",
 )
-SUPPORTED_BUNDLE_MAJOR = 1
+SUPPORTED_BUNDLE_MAJOR = 2
+SUPPORTED_BUNDLE_MAJORS = (1, 2)
+SUPPORTED_ARTIFACT_MAJOR = 1
 MANIFEST_FILENAME = "feed-manifest.json"
 LEGACY_FILENAME = "latest.json"
 ARTIFACT_SCHEMA_FILENAME = "feed-artifact.schema.json"
@@ -111,7 +113,7 @@ def split_feed(feed: dict[str, Any]) -> tuple[dict[str, Any], dict[str, dict[str
     for domain in DOMAINS:
         items = deterministic_item_order(grouped[domain])
         artifacts[domain] = {
-            "schema_version": SUPPORTED_BUNDLE_MAJOR,
+            "schema_version": SUPPORTED_ARTIFACT_MAJOR,
             "run_id": feed["run_id"],
             "domain": domain,
             "items": items,
@@ -230,7 +232,7 @@ def validate_bundle(
         validate_against(MANIFEST_SCHEMA_FILENAME, manifest)
     except SchemaError as exc:
         raise BundleError(str(exc)) from exc
-    if manifest.get("schema_version") != SUPPORTED_BUNDLE_MAJOR:
+    if manifest.get("schema_version") not in SUPPORTED_BUNDLE_MAJORS:
         raise BundleError("unsupported Feed manifest schema version")
     if manifest["window"]["end"] != manifest["evidence_cutoff_at"]:
         raise BundleError("manifest window.end must equal evidence_cutoff_at")
@@ -253,7 +255,7 @@ def validate_bundle(
         except SchemaError as exc:
             raise BundleError(str(exc)) from exc
         if (
-            artifact.get("schema_version") != SUPPORTED_BUNDLE_MAJOR
+            artifact.get("schema_version") != SUPPORTED_ARTIFACT_MAJOR
             or artifact.get("run_id") != manifest["run_id"]
             or artifact.get("domain") != domain
         ):

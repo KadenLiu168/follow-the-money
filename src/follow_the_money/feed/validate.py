@@ -3,7 +3,7 @@
 JSON Schema enforces shape; this module enforces the cross-field semantics
 from design sections 1/4:
 
-- Supported schema major (fail closed on unknown versions).
+- Supported logical schema majors (v1 read compatibility and v2 production).
 - Strictly advancing half-open window ``window.start < evidence_cutoff_at``.
 - Wall-clock order ``collection_started_at <= evidence_cutoff_at <=
   non-null request/retrieved_at <= collection_completed_at <= generated_at``;
@@ -16,7 +16,7 @@ from design sections 1/4:
   hashed); ``run_id`` derives from the fixed cutoff plus the digest.
 - Legacy read compatibility: an already-published schema-v1 artifact whose
   identity validates only under the former whole-envelope projection remains
-  consumable; producers never write that legacy form after this change.
+  consumable; producers write the freshness-capable v2 form.
 - Raw numeric tokens bounded to 64 bytes / 24 significant digits / exponent
   in [-12, 12]; canonical persisted values are plain decimals with no
   exponent, no negative zero, at most 64 bytes/24 digits, magnitude <= 1e18.
@@ -33,10 +33,13 @@ from datetime import datetime
 from typing import Any
 
 from ..canonical import canonical_digest
+from ..config.model import FreshnessContract
 from ..schema import SchemaError, validate_against
+from .freshness import FreshnessError, evaluate_freshness
 
 FEED_SCHEMA = "feed.schema.json"
-SUPPORTED_FEED_MAJOR = 1
+SUPPORTED_FEED_MAJOR = 2
+SUPPORTED_FEED_MAJORS = (1, 2)
 
 #: Top-level semantic projection members. Execution-audit metadata
 #: (``collection_started_at``, ``collection_completed_at``, ``generated_at``,
@@ -131,8 +134,10 @@ def validate_feed(feed: Mapping[str, Any]) -> None:
     """Full semantic validation of a decoded Feed object."""
     validate_against(FEED_SCHEMA, feed)
 
-    if feed.get("schema_version") != SUPPORTED_FEED_MAJOR:
+    if feed.get("schema_version") not in SUPPORTED_FEED_MAJORS:
         raise SchemaError(f"unsupported Feed schema_version {feed.get('schema_version')!r}")
+    if feed.get("schema_version") == SUPPORTED_FEED_MAJOR:
+        _validate_freshness_outcomes(feed)
 
     window = feed["window"]
     start = _parse_ts(window["start"], "window.start")
@@ -194,6 +199,167 @@ def validate_feed(feed: Mapping[str, Any]) -> None:
 
     # Calendar horizon (v1 snapshot covers [cutoff, cutoff + 26h]).
     _validate_calendar_horizon(feed)
+
+
+def _validate_freshness_outcomes(feed: Mapping[str, Any]) -> None:
+    """Validate the closed v2 freshness result and its nullability rules."""
+    contracts: dict[str, Mapping[str, Any]] = {}
+    resolved_contracts: dict[str, FreshnessContract] = {}
+    previous_contract_id: str | None = None
+    for index, entry in enumerate(feed.get("provider_contracts", [])):
+        if not isinstance(entry, Mapping):
+            raise SchemaError(f"provider_contracts[{index}] is invalid")
+        provider_id = entry.get("provider_id")
+        if not isinstance(provider_id, str) or not provider_id:
+            raise SchemaError(f"provider_contracts[{index}].provider_id is invalid")
+        if provider_id in contracts or (
+            previous_contract_id is not None and provider_id <= previous_contract_id
+        ):
+            raise SchemaError("Provider contracts must be unique and ordered by provider_id")
+        previous_contract_id = provider_id
+        snapshot = entry.get("snapshot")
+        if not isinstance(snapshot, Mapping) or snapshot.get("provider_id") != provider_id:
+            raise SchemaError("embedded Provider contract identity is invalid")
+        if entry.get("hash") != canonical_digest(snapshot):
+            raise SchemaError("embedded Provider contract hash does not match its snapshot")
+        contract_freshness = snapshot.get("freshness")
+        if not isinstance(contract_freshness, Mapping):
+            raise SchemaError("embedded Provider contract is missing freshness")
+        contract_cadence = contract_freshness.get("cadence")
+        contract_reference = contract_freshness.get("reference_time")
+        valid_for = contract_freshness.get("valid_for_seconds")
+        if not isinstance(contract_cadence, str) or contract_cadence not in {
+            "weekly",
+            "scheduled",
+            "event_driven",
+            "market_session",
+        }:
+            raise SchemaError("embedded Provider freshness cadence is invalid")
+        if not isinstance(contract_reference, str) or contract_reference not in {
+            "data_as_of",
+            "source_updated_at",
+            "checked_at",
+        }:
+            raise SchemaError("embedded Provider freshness reference_time is invalid")
+        if contract_cadence == "event_driven":
+            if set(contract_freshness) != {"cadence", "reference_time"}:
+                raise SchemaError("embedded Provider event_driven contract is not closed")
+            if contract_reference != "checked_at":
+                raise SchemaError("embedded event_driven contract is invalid")
+        else:
+            if set(contract_freshness) != {
+                "cadence",
+                "reference_time",
+                "valid_for_seconds",
+            }:
+                raise SchemaError("embedded Provider bounded contract is not closed")
+            if contract_reference == "checked_at":
+                raise SchemaError("embedded bounded contract cannot use checked_at")
+            if contract_cadence == "market_session" and contract_reference != "data_as_of":
+                raise SchemaError("embedded market_session contract must use data_as_of")
+            if isinstance(valid_for, bool) or not isinstance(valid_for, int) or valid_for <= 0:
+                raise SchemaError("embedded bounded contract needs a positive validity window")
+        contracts[provider_id] = entry
+        resolved_contracts[provider_id] = FreshnessContract(
+            cadence=contract_cadence,
+            reference_time=contract_reference,
+            valid_for_seconds=valid_for,
+        )
+
+    items_by_provider: dict[str, list[Mapping[str, Any]]] = {}
+    for item in feed.get("items", []):
+        if isinstance(item, Mapping) and isinstance(item.get("provider_id"), str):
+            items_by_provider.setdefault(item["provider_id"], []).append(item)
+    seen: set[str] = set()
+    for index, outcome in enumerate(feed.get("provider_outcomes", [])):
+        freshness = outcome.get("freshness")
+        if not isinstance(freshness, Mapping):
+            raise SchemaError(f"provider_outcomes[{index}].freshness is required")
+        cadence = freshness.get("cadence")
+        status = freshness.get("status")
+        origin = freshness.get("origin_contract_hash")
+        carried = freshness.get("carried_forward_from_run_id")
+        if cadence not in {"weekly", "scheduled", "event_driven", "market_session"}:
+            raise SchemaError(f"provider_outcomes[{index}].freshness.cadence is invalid")
+        if status not in {"fresh", "valid_unchanged", "stale", "no_snapshot", "not_evaluated"}:
+            raise SchemaError(f"provider_outcomes[{index}].freshness.status is invalid")
+        if origin is not None and (
+            not isinstance(origin, str) or not re.fullmatch(r"[0-9a-f]{64}", origin)
+        ):
+            raise SchemaError(
+                f"provider_outcomes[{index}].freshness.origin_contract_hash is invalid"
+            )
+        if carried is not None and (not isinstance(carried, str) or not carried):
+            raise SchemaError(
+                f"provider_outcomes[{index}].freshness.carried_forward_from_run_id is invalid"
+            )
+        if status in {"no_snapshot", "not_evaluated"} and (
+            origin is not None or carried is not None
+        ):
+            raise SchemaError(
+                f"provider_outcomes[{index}].freshness {status} must have null provenance"
+            )
+        if status == "fresh" and (origin is None or carried is not None):
+            raise SchemaError(
+                "fresh freshness must have origin_contract_hash and no carry-forward run"
+            )
+        if status == "valid_unchanged" and (origin is None or carried is None):
+            raise SchemaError("valid_unchanged freshness must identify its carried slice")
+        if status == "stale" and origin is None:
+            raise SchemaError("stale freshness must identify its originating contract")
+        provider_id = outcome.get("provider_id")
+        if provider_id in seen:
+            raise SchemaError("provider_outcomes contain duplicate provider_id")
+        seen.add(provider_id)
+        contract = contracts.get(provider_id)
+        resolved_contract = resolved_contracts.get(provider_id)
+        if contract is None or resolved_contract is None:
+            raise SchemaError("Provider outcome has no matching embedded Provider contract")
+        snapshot = contract["snapshot"]
+        complete = outcome.get("state") == "healthy" or (
+            outcome.get("state") == "empty" and snapshot.get("empty_valid_for_window") is True
+        )
+        if not complete and status != "not_evaluated":
+            raise SchemaError("incomplete Provider outcomes must be not_evaluated")
+        if complete and status == "not_evaluated":
+            raise SchemaError("not_evaluated requires incomplete Provider work")
+        if resolved_contract.cadence != cadence:
+            raise SchemaError("freshness cadence does not match embedded Provider contract")
+        contract_hash = contract.get("hash")
+        if status in {"fresh", "stale"} and carried is None and origin != contract_hash:
+            raise SchemaError("current freshness origin does not match embedded Provider contract")
+        if status == "not_evaluated" and feed["pipeline"]["status"] != "failure":
+            raise SchemaError("incomplete Provider work requires pipeline.status=failure")
+
+        selected_items = items_by_provider.get(provider_id, [])
+        if status == "not_evaluated":
+            # Incomplete runs may retain current accepted evidence for
+            # diagnostics, but it is never a selected snapshot.
+            continue
+        if not selected_items:
+            if status != "no_snapshot":
+                raise SchemaError("freshness with no Provider items must be no_snapshot")
+        elif resolved_contract is not None:
+            try:
+                expected = evaluate_freshness(
+                    selected_items,
+                    resolved_contract,
+                    feed["evidence_cutoff_at"],
+                    carried_forward=carried is not None,
+                    checked_at=outcome.get("retrieved_at"),
+                )
+            except FreshnessError as exc:
+                raise SchemaError(f"invalid Provider freshness authority: {exc}") from exc
+            if status != expected:
+                raise SchemaError(
+                    f"freshness status {status!r} does not match selected Provider slice ({expected!r})"
+                )
+
+    unknown_item_providers = set(items_by_provider) - seen
+    if unknown_item_providers:
+        raise SchemaError("Feed items have no matching Provider outcome")
+    if set(contracts) != seen:
+        raise SchemaError("Provider contracts do not exactly match Provider outcomes")
 
 
 def _validate_numerics(items: list[Any]) -> None:
@@ -268,7 +434,7 @@ def _recompute_legacy_identity(feed: Mapping[str, Any]) -> tuple[str, str]:
 
 
 def _has_exact_legacy_identity(feed: Mapping[str, Any]) -> bool:
-    if feed.get("schema_version") != SUPPORTED_FEED_MAJOR:
+    if feed.get("schema_version") != 1:
         return False
     digest, run_id = _recompute_legacy_identity(feed)
     return feed.get("content_digest") == digest and feed.get("run_id") == run_id

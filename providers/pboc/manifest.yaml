@@ -60,7 +60,8 @@ units:
   bps: bps
 
 freshness:
-  policy: source_published_within_window
+  cadence: event_driven
+  reference_time: checked_at
 
 empty_valid_for_window: true
 pagination: none

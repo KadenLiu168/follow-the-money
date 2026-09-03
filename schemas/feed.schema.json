@@ -22,7 +22,10 @@
     "pipeline"
   ],
   "properties": {
-    "schema_version": { "const": 1 },
+    "schema_version": {
+      "description": "Logical Feed schema major; v1 is read-compatible and v2 is freshness-capable production.",
+      "enum": [1, 2]
+    },
     "run_id": {
       "description": "Semantic run identifier: '{evidence_cutoff_at}::{first 32 hex of content_digest}'. Identifies the semantic evidence, not a specific execution.",
       "type": "string",
@@ -59,7 +62,7 @@
       "format": "date-time"
     },
     "provider_outcomes": {
-      "description": "Exactly one outcome per planned provider, in ascending provider_id order (healthy, empty, partial, failed, or skipped).",
+      "description": "Exactly one outcome per planned provider, in ascending provider_id order (healthy, empty, partial, failed, or skipped); v2 outcomes also carry one required freshness result.",
       "type": "array",
       "items": { "$ref": "#/$defs/provider_outcome" }
     },
@@ -105,7 +108,7 @@
       }
     },
     "content_digest": {
-      "description": "Semantic identity digest: canonical SHA-256 of the allowlisted semantic projection (schema_version, window, evidence_cutoff_at, semantic provider outcomes without retrieved_at, producer, feed_config, feed_schema, provider_contracts, items, pipeline status/coverage_gap). Execution audit metadata is excluded; this is not a whole-file checksum.",
+      "description": "Semantic identity digest: canonical SHA-256 of the allowlisted semantic projection, including v2 freshness fields but excluding execution audit metadata; this is not a whole-file checksum.",
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
@@ -135,6 +138,21 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "schema_version": { "const": 2 } } },
+      "then": {
+        "properties": {
+          "provider_outcomes": { "items": { "required": ["freshness"] } }
+        }
+      },
+      "else": {
+        "properties": {
+          "provider_outcomes": { "items": { "not": { "required": ["freshness"] } } }
+        }
+      }
+    }
+  ],
   "$defs": {
     "provider_outcome": {
       "type": "object",
@@ -163,7 +181,22 @@
           "description": "Execution audit metadata: observed instant when the provider response returned; null for failed/skipped work with no observed response. Excluded from content_digest.",
           "type": ["string", "null"],
           "format": "date-time"
-        }
+        },
+        "freshness": { "$ref": "#/$defs/freshness" }
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cadence", "status", "origin_contract_hash", "carried_forward_from_run_id"],
+      "properties": {
+        "cadence": { "enum": ["weekly", "scheduled", "event_driven", "market_session"] },
+        "status": { "enum": ["fresh", "valid_unchanged", "stale", "no_snapshot", "not_evaluated"] },
+        "origin_contract_hash": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "carried_forward_from_run_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 }
       }
     },
     "application_build": {
