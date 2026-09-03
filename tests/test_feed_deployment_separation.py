@@ -128,7 +128,7 @@ def _established_product_only(
 
 def _healthy_feed(cutoff: str = "2026-08-28T00:00:00.000Z") -> dict:
     feed = {
-        "schema_version": 1,
+        "schema_version": 3,
         "run_id": "",
         "window": {"start": "2026-08-25T00:00:00.000Z", "end": cutoff},
         "collection_started_at": "2026-08-27T23:59:00.000Z",

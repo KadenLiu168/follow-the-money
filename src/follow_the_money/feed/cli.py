@@ -65,6 +65,7 @@ from .plan import (
     FeedPlanError,
     ProviderOutcome,
     assess_pipeline,
+    bounded_availability_reason,
     fmt_utc,
     ordered_outcomes,
     plan_window,
@@ -305,8 +306,13 @@ def run_feed(
 
         # One outcome per planned provider, keyed by stable provider identity
         # before any worker starts; completion order is never serialized.
+        coverage_groups = _coverage_groups_by_provider(cfg)
         outcomes: dict[str, ProviderOutcome] = {
-            pid: ProviderOutcome(provider_id=pid) for pid in enabled_ids
+            pid: ProviderOutcome(
+                provider_id=pid,
+                affected_coverage_groups=coverage_groups.get(pid, ()),
+            )
+            for pid in enabled_ids
         }
         items: list[dict[str, Any]] = []
 
@@ -406,6 +412,8 @@ def run_feed(
                     if cancel_event.is_set() or monotonic() >= deadline_at:
                         outcome.state = "partial" if outcome.accepted else "failed"
                         outcome.error = "pre_commit_deadline_exceeded: scope lock wait cancelled"
+                        outcome.availability = "failed"
+                        outcome.availability_reason = outcome.error
                         outcome.execution_failure = True
                         return
                     remaining = max(0.0, deadline_at - monotonic())
@@ -434,6 +442,8 @@ def run_feed(
             if monotonic() - deadline_started > deadline_seconds:
                 outcome.state = "skipped"
                 outcome.error = "pre_commit_deadline_exceeded"
+                outcome.availability = "failed"
+                outcome.availability_reason = "pre_commit_deadline_exceeded"
                 outcome.execution_failure = True
                 return
             for adapter in adapters_by_id[pid]:
@@ -676,6 +686,14 @@ def _provider_empty_valid_for_window(pid: str, cfg: AppConfig) -> bool:
     return False
 
 
+def _coverage_groups_by_provider(cfg: AppConfig) -> dict[str, tuple[str, ...]]:
+    groups: dict[str, set[str]] = {}
+    for row in cfg.coverage.rows:
+        for provider_id in row.members:
+            groups.setdefault(provider_id, set()).add(row.group)
+    return {provider_id: tuple(sorted(group_ids)) for provider_id, group_ids in groups.items()}
+
+
 def _run_adapter(
     outcome: ProviderOutcome,
     adapter: Any,
@@ -699,8 +717,12 @@ def _run_adapter(
     empty_valid_for_window = _provider_empty_valid_for_window(outcome.provider_id, cfg)
 
     def mark_incomplete(message: str) -> None:
-        outcome.state = "partial" if outcome.accepted else "failed"
+        outcome.state = (
+            "partial" if (outcome.accepted or outcome.non_permitted_empty_observed) else "failed"
+        )
         outcome.error = message
+        outcome.availability = "failed"
+        outcome.availability_reason = bounded_availability_reason(message)
 
     def reject_late_result(state) -> None:
         mark_incomplete("pre_commit_deadline_exceeded: late provider result ignored")
@@ -760,9 +782,9 @@ def _run_adapter(
                         or item_id in identity_ids
                     )
                 ):
-                    outcome.state = "failed"
                     outcome.error = "current item identity is missing, duplicated, or mismatched"
                     outcome.rejected += 1
+                    mark_incomplete(outcome.error)
                     if rate is not None and scope is not None and state is not None:
                         rate.reconcile(state, now=now_fn)
                     return
@@ -786,26 +808,47 @@ def _run_adapter(
                 outcome.non_permitted_empty_observed = True
             if rejected:
                 outcome.state = "partial" if outcome.accepted else "failed"
+                outcome.availability = "failed"
+                outcome.availability_reason = bounded_availability_reason(outcome.error)
             elif accepted:
                 if outcome.state == "partial" or outcome.non_permitted_empty_observed:
                     outcome.state = "partial"
+                    outcome.availability = "failed"
                 else:
                     outcome.state = "healthy"
+                    if outcome.availability != "blocked":
+                        outcome.availability = "success"
+                        outcome.availability_reason = None
+                        outcome.upstream_http_status = None
             elif outcome.accepted:
                 if empty_valid_for_window and outcome.state != "partial":
                     outcome.state = "healthy"
+                    if outcome.availability != "blocked":
+                        outcome.availability = "success"
                 else:
                     outcome.state = "partial"
                     outcome.error = "non-permitted empty result after accepted evidence"
+                    outcome.availability = "failed"
+                    outcome.availability_reason = outcome.error
             else:
                 outcome.state = "empty"
+                if empty_valid_for_window:
+                    outcome.availability = "success"
+                    outcome.availability_reason = None
+                    outcome.upstream_http_status = None
+                else:
+                    outcome.availability = "failed"
+                    outcome.availability_reason = "empty result is not permitted for window"
             if rate is not None and scope is not None and state is not None:
                 rate.reconcile(state, now=now_fn)
             return
         except FetchError as exc:
             if exc.response_observed:
                 outcome.retrieved_at = fmt_utc(now_fn())
+            outcome.upstream_http_status = exc.status_code
             mark_incomplete(str(exc))
+            outcome.availability = "blocked" if exc.status_code in {401, 403} else "failed"
+            outcome.availability_reason = bounded_availability_reason(str(exc))
             if deadline_expired():
                 outcome.execution_failure = True
             if rate is not None and scope is not None and state is not None:
@@ -835,6 +878,7 @@ def _run_adapter(
             raise
         except Exception as exc:  # noqa: BLE001 - orchestration boundary
             mark_incomplete(str(exc))
+            outcome.upstream_http_status = None
             if rate is not None and scope is not None and state is not None:
                 if request_started:
                     rate.reconcile(state, now=now_fn)
@@ -1123,7 +1167,9 @@ def _build_feed(
             "uncovered_end": plan.gap_warning[1],
         }
     serialized_outcomes: list[dict[str, Any]] = []
+    coverage_groups = _coverage_groups_by_provider(cfg)
     for outcome in ordered_outcomes(outcomes):
+        outcome.affected_coverage_groups = coverage_groups.get(outcome.provider_id, ())
         value = outcome.to_dict()
         if "freshness" not in value:
             raise FeedExecutionError(
@@ -1132,7 +1178,7 @@ def _build_feed(
         serialized_outcomes.append(value)
 
     feed = {
-        "schema_version": 2,
+        "schema_version": 3,
         "run_id": "",  # recomputed below
         "window": {"start": plan.window_start, "end": plan.evidence_cutoff_at},
         "collection_started_at": fmt_utc(started_at),
@@ -1223,6 +1269,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if args.status_file:
         status = {"status": result.status, "warnings": result.warnings}
+        if result.feed is not None and result.status in ("failure", "degraded"):
+            provider_outcomes = result.feed.get("provider_outcomes")
+            if isinstance(provider_outcomes, list):
+                status["provider_outcomes"] = provider_outcomes
         if result.feed is not None and result.status in ("healthy", "degraded"):
             status.update(
                 {

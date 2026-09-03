@@ -286,7 +286,7 @@ def test_accepted_degraded_publication_advances_checkpoint(tmp_path, monkeypatch
     _seed_checkpoint(checkpoint_path)
     planned = _planned_provider_ids(cfg)
     registry = {provider_id: _OutcomeAdapter() for provider_id in planned}
-    monkeypatch.setattr(feed_cli, "assess_pipeline", lambda **_kwargs: ("degraded", []))
+    registry["bls"] = _OutcomeAdapter(error=FetchError("HTTP 403", status_code=403))
 
     result = run_feed(
         output_root=str(product_root),

@@ -51,7 +51,7 @@ def _cfg():
 
 def _feed(**overrides) -> dict:
     feed = {
-        "schema_version": 1,
+        "schema_version": 2,
         "run_id": "run_1",
         "window": {"start": _ts(T0 - timedelta(hours=72)), "end": _ts(T0)},
         "collection_started_at": _ts(T0 - timedelta(seconds=30)),

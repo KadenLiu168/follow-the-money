@@ -53,7 +53,7 @@ def load_active_feed(product_root: Path) -> dict[str, Any] | None:
         ):
             return None
         contracts[provider_id] = snapshot
-    complete: set[str] = set()
+    valid_providers: set[str] = set()
     for outcome in feed.get("provider_outcomes", []):
         if not isinstance(outcome, Mapping) or not isinstance(outcome.get("provider_id"), str):
             return None
@@ -61,15 +61,23 @@ def load_active_feed(product_root: Path) -> dict[str, Any] | None:
         snapshot = contracts.get(provider_id)
         if not isinstance(snapshot, Mapping):
             return None
-        if outcome.get("state") == "healthy" or (
+        complete = outcome.get("state") == "healthy" or (
             outcome.get("state") == "empty" and snapshot.get("empty_valid_for_window") is True
-        ):
-            complete.add(provider_id)
+        )
+        blocked_exempt = (
+            outcome.get("availability") == "blocked"
+            and outcome.get("upstream_http_status") in {401, 403}
+            and outcome.get("state") == "failed"
+            and outcome.get("accepted") == 0
+            and outcome.get("rejected") == 0
+        )
+        if complete or blocked_exempt:
+            valid_providers.add(provider_id)
         else:
             return None
-    if any(item.get("provider_id") not in complete for item in feed.get("items", [])):
+    if any(item.get("provider_id") not in valid_providers for item in feed.get("items", [])):
         return None
-    if set(contracts) != complete:
+    if set(contracts) != valid_providers:
         return None
     return feed
 

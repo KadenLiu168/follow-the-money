@@ -12,8 +12,8 @@
   ],
   "properties": {
     "schema_version": {
-      "description": "Manifest major; v1 is read-compatible and v2 is freshness-capable production.",
-      "enum": [1, 2]
+      "description": "Manifest major; v2 is read-compatible and v3 is Provider-availability-capable production.",
+      "enum": [2, 3]
     },
     "run_id": {
       "type": "string", "minLength": 1, "maxLength": 128
@@ -61,15 +61,37 @@
   },
   "allOf": [
     {
-      "if": { "properties": { "schema_version": { "const": 2 } } },
+      "if": { "properties": { "schema_version": { "const": 3 } } },
       "then": {
         "properties": {
-          "provider_outcomes": { "items": { "required": ["freshness"] } }
+          "provider_outcomes": {
+            "items": {
+              "required": [
+                "freshness", "availability", "availability_reason",
+                "upstream_http_status", "affected_coverage_groups"
+              ]
+            }
+          }
         }
       },
       "else": {
-        "properties": {
-          "provider_outcomes": { "items": { "not": { "required": ["freshness"] } } }
+        "if": { "properties": { "schema_version": { "const": 2 } } },
+        "then": {
+          "properties": {
+            "provider_outcomes": {
+              "items": {
+                "required": ["freshness"],
+                "not": {
+                  "anyOf": [
+                    { "required": ["availability"] },
+                    { "required": ["availability_reason"] },
+                    { "required": ["upstream_http_status"] },
+                    { "required": ["affected_coverage_groups"] }
+                  ]
+                }
+              }
+            }
+          }
         }
       }
     }

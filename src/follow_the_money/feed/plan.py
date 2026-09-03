@@ -98,6 +98,19 @@ def plan_window(
     )
 
 
+AVAILABILITY_REASON_LIMIT = 256
+
+
+def bounded_availability_reason(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    encoded = text.encode("utf-8")
+    if len(encoded) <= AVAILABILITY_REASON_LIMIT:
+        return text
+    return encoded[:AVAILABILITY_REASON_LIMIT].decode("utf-8", errors="ignore")
+
+
 @dataclass
 class ProviderOutcome:
     provider_id: str
@@ -109,8 +122,39 @@ class ProviderOutcome:
     error: str | None = None
     retrieved_at: str | None = None
     freshness: dict[str, Any] | None = None
+    availability: str | None = None
+    availability_reason: str | None = None
+    upstream_http_status: int | None = None
+    affected_coverage_groups: tuple[str, ...] = ()
     execution_failure: bool = False
     non_permitted_empty_observed: bool = False
+
+    @property
+    def resolved_availability(self) -> str:
+        if self.availability is not None:
+            return self.availability
+        return "success" if self.state in {"healthy", "empty"} else "failed"
+
+    @property
+    def resolved_availability_reason(self) -> str | None:
+        if self.availability_reason is not None:
+            return bounded_availability_reason(self.availability_reason)
+        if self.resolved_availability == "success":
+            return None
+        if self.upstream_http_status is not None:
+            return f"HTTP {self.upstream_http_status}"
+        return bounded_availability_reason(self.error)
+
+    @property
+    def blocked_exempt(self) -> bool:
+        return (
+            self.resolved_availability == "blocked"
+            and self.upstream_http_status in {401, 403}
+            and self.state == "failed"
+            and self.accepted == 0
+            and self.rejected == 0
+            and not self.non_permitted_empty_observed
+        )
 
     def to_dict(self) -> dict[str, Any]:
         result = {
@@ -125,6 +169,10 @@ class ProviderOutcome:
             "skipped": self.state == "skipped",
             "accepted": self.accepted,
             "rejected": self.rejected,
+            "availability": self.resolved_availability,
+            "availability_reason": self.resolved_availability_reason,
+            "upstream_http_status": self.upstream_http_status,
+            "affected_coverage_groups": sorted(self.affected_coverage_groups),
             "error": self.error,
             "retrieved_at": self.retrieved_at,
         }
@@ -139,7 +187,9 @@ class ProviderOutcome:
 
     def contributes_to_coverage(self, *, empty_valid_for_window: bool) -> bool:
         """Return whether this outcome satisfies one mandatory member slot."""
-        return self.state == "healthy" or (self.state == "empty" and empty_valid_for_window)
+        return self.resolved_availability == "success" and (
+            self.state == "healthy" or (self.state == "empty" and empty_valid_for_window)
+        )
 
 
 def ordered_outcomes(outcomes: Mapping[str, ProviderOutcome]) -> list[ProviderOutcome]:
@@ -157,10 +207,7 @@ def assess_pipeline(
     planned_provider_ids: Sequence[str],
     outcomes: Mapping[str, ProviderOutcome],
 ) -> tuple[str, list[str]]:
-    """Return ``(status, warnings)`` from provider outcomes.
-
-    status: healthy | degraded | failure.
-    """
+    """Return ``(status, warnings)`` from actual planned Provider outcomes."""
     provider_config = {provider.id: provider for provider in config.providers}
     warnings: list[str] = []
 
@@ -172,6 +219,12 @@ def assess_pipeline(
         warnings.append(f"duplicate planned providers: {', '.join(duplicate_plan_ids)}")
 
     terminal_states = {"healthy", "empty", "partial", "failed", "skipped"}
+    configured_groups = {
+        provider_id: tuple(
+            sorted(row.group for row in config.coverage.rows if provider_id in row.members)
+        )
+        for provider_id in provider_config
+    }
 
     def complete_for(provider: Any, outcome: Any) -> bool:
         return (
@@ -180,11 +233,12 @@ def assess_pipeline(
             and outcome.provider_id == provider.id
             and outcome.state in terminal_states
             and outcome.contributes_to_coverage(
-                empty_valid_for_window=provider.empty_valid_for_window
+                empty_valid_for_window=getattr(provider, "empty_valid_for_window", False)
             )
         )
 
     complete_by_provider: dict[str, bool] = {}
+    blocked_by_provider: dict[str, bool] = {}
     for provider_id in sorted(plan_counts):
         provider = provider_config.get(provider_id)
         candidates = sorted(
@@ -218,11 +272,37 @@ def assess_pipeline(
                 else "terminal state is incomplete"
             )
 
+        valid_terminal_outcome = (
+            provider is not None
+            and len(candidates) == 1
+            and candidates[0][0] == provider_id
+            and isinstance(outcome, ProviderOutcome)
+            and outcome.provider_id == provider_id
+            and outcome.state in terminal_states
+        )
+        blocked_exempt = (
+            valid_terminal_outcome
+            and isinstance(outcome, ProviderOutcome)
+            and outcome.blocked_exempt
+        )
+        blocked_by_provider[provider_id] = blocked_exempt
         complete = reason is None and complete_for(provider, outcome)
         complete_by_provider[provider_id] = complete
-        if not complete:
+        if blocked_exempt:
+            assert isinstance(outcome, ProviderOutcome)
+            groups = ",".join(configured_groups.get(provider_id, ())) or "none"
+            warnings.append(
+                "blocked Provider exempted: "
+                f"provider_id={provider_id} availability={outcome.resolved_availability} "
+                f"reason={outcome.resolved_availability_reason or 'none'} "
+                f"affected_coverage_groups={groups}"
+            )
+        elif not complete:
             state = getattr(outcome, "state", "missing")
             detail = f"source incomplete: provider_id={provider_id} state={state}"
+            availability = getattr(outcome, "resolved_availability", None)
+            if availability:
+                detail += f" availability={availability}"
             error = getattr(outcome, "error", None)
             message = getattr(outcome, "message", None)
             if error or message:
@@ -233,15 +313,21 @@ def assess_pipeline(
 
     deficient: list[str] = []
     for row in config.coverage.rows:
+        blocked_count = sum(1 for member in row.members if blocked_by_provider.get(member, False))
+        effective_minimum = max(0, row.minimum - blocked_count)
         complete_count = sum(1 for member in row.members if complete_by_provider.get(member))
-        if complete_count < row.minimum and not row.optional:
+        if complete_count < effective_minimum and not row.optional:
             deficient.append(row.group)
 
     if deficient:
         warnings.append(f"deficient coverage groups: {', '.join(deficient)}")
-    if duplicate_plan_ids or any(not complete for complete in complete_by_provider.values()):
+    if duplicate_plan_ids or any(
+        not complete and not blocked_by_provider.get(provider_id, False)
+        for provider_id, complete in complete_by_provider.items()
+    ):
         return "failure", warnings
     if deficient:
         return "failure", warnings
-
+    if any(blocked_by_provider.values()):
+        return "degraded", warnings
     return "healthy", warnings

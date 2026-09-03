@@ -73,6 +73,10 @@ _DIAGNOSTIC_UNAVAILABLE = "Feed failure diagnostics unavailable"
 _DIAGNOSTIC_PROVIDER_FIELDS = (
     "provider_id",
     "state",
+    "availability",
+    "availability_reason",
+    "upstream_http_status",
+    "affected_coverage_groups",
     "error",
     "attempted",
     "fetched",
@@ -923,11 +927,11 @@ def _write_feed_status(path: Path, result: Any) -> None:
     status: dict[str, Any] = {"status": result.status, "warnings": result.warnings}
     if result.status == "failure":
         status["message"] = result.message
-        if result.feed is not None:
-            provider_outcomes = result.feed.get("provider_outcomes")
-            if isinstance(provider_outcomes, list):
-                status["provider_outcomes"] = provider_outcomes
-    elif result.feed is not None and result.status in {"healthy", "degraded"}:
+    if result.feed is not None and result.status in {"failure", "degraded"}:
+        provider_outcomes = result.feed.get("provider_outcomes")
+        if isinstance(provider_outcomes, list):
+            status["provider_outcomes"] = provider_outcomes
+    if result.feed is not None and result.status in {"healthy", "degraded"}:
         status.update(
             {
                 "run_id": result.feed["run_id"],
@@ -977,8 +981,8 @@ def _sanitize_diagnostic_text(value: str) -> str:
 
 def _read_diagnostic_status(path: Path) -> dict[str, Any]:
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
-    if not isinstance(raw, dict) or raw.get("status") != "failure":
-        raise ValueError("diagnostic status is not a failure status")
+    if not isinstance(raw, dict) or raw.get("status") not in {"failure", "degraded"}:
+        raise ValueError("diagnostic status is not renderable")
 
     message = raw.get("message")
     if message is not None and not isinstance(message, str):
@@ -999,18 +1003,37 @@ def _read_diagnostic_status(path: Path) -> dict[str, Any]:
             if field not in outcome:
                 continue
             value = outcome[field]
-            if field == "error":
+            if field in {"error", "availability_reason"}:
                 if value is not None and not isinstance(value, str):
-                    raise ValueError("diagnostic provider error is invalid")
+                    raise ValueError("diagnostic provider text is invalid")
+            elif field == "upstream_http_status":
+                if value is not None and (
+                    isinstance(value, bool) or not isinstance(value, int) or not 100 <= value <= 599
+                ):
+                    raise ValueError("diagnostic provider HTTP status is invalid")
+            elif field == "affected_coverage_groups":
+                if (
+                    not isinstance(value, list)
+                    or any(not isinstance(group, str) for group in value)
+                    or value != sorted(set(value))
+                ):
+                    raise ValueError("diagnostic provider coverage groups are invalid")
             elif field in _DIAGNOSTIC_COUNTER_FIELDS:
                 if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                     raise ValueError("diagnostic provider counter is invalid")
+            elif field == "availability":
+                if value not in {"success", "blocked", "failed", "disabled"}:
+                    raise ValueError("diagnostic provider availability is invalid")
             elif not isinstance(value, str):
                 raise ValueError("diagnostic provider field is invalid")
             selected[field] = value
         selected_outcomes.append(selected)
+    if any(
+        any(field in outcome for field in _DIAGNOSTIC_PROVIDER_FIELDS[2:6]) for outcome in outcomes
+    ):
+        selected_outcomes.sort(key=lambda outcome: outcome.get("provider_id", ""))
     return {
-        "status": "failure",
+        "status": raw["status"],
         "message": message,
         "warnings": warnings,
         "provider_outcomes": selected_outcomes,
@@ -1018,7 +1041,7 @@ def _read_diagnostic_status(path: Path) -> dict[str, Any]:
 
 
 def _diagnostic_report(status: dict[str, Any]) -> str:
-    lines = ["Feed failure diagnostics", "status: failure"]
+    lines = ["Feed failure diagnostics", f"status: {status['status']}"]
     if status["message"] is not None:
         lines.append(f"message: {_sanitize_diagnostic_text(status['message'])}")
     for index, warning in enumerate(status["warnings"], start=1):
@@ -1029,7 +1052,12 @@ def _diagnostic_report(status: dict[str, Any]) -> str:
             value = outcome.get(field)
             if value is None:
                 continue
-            rendered = _sanitize_diagnostic_text(value) if isinstance(value, str) else str(value)
+            if isinstance(value, str):
+                rendered = _sanitize_diagnostic_text(value)
+            elif isinstance(value, list):
+                rendered = _sanitize_diagnostic_text(", ".join(value) or "none")
+            else:
+                rendered = str(value)
             lines.append(f"{field}: {rendered}")
     return _bound_diagnostic_text("\n".join(lines), _DIAGNOSTIC_REPORT_LIMIT)
 

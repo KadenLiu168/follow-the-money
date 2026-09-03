@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -213,6 +214,21 @@ def test_incomplete_outcome_never_carries_prior_slice():
     assert outcome.freshness["origin_contract_hash"] is None
 
 
+def test_blocked_outcome_never_carries_prior_slice():
+    prior = [policy_item()]
+    outcome = ProviderOutcome(
+        "provider",
+        state="failed",
+        availability="blocked",
+        availability_reason="HTTP 403",
+        upstream_http_status=403,
+    )
+    result = _selection(outcome, [], prior)
+    assert result.items == ()
+    assert outcome.freshness["status"] == "not_evaluated"
+    assert outcome.freshness["origin_contract_hash"] is None
+
+
 def _active_bundle():
     contract_snapshot = {
         "provider_id": "provider",
@@ -238,6 +254,10 @@ def _active_bundle():
         "rejected": 0,
         "error": None,
         "retrieved_at": ts(T0 + timedelta(minutes=1)),
+        "availability": "success",
+        "availability_reason": None,
+        "upstream_http_status": None,
+        "affected_coverage_groups": [],
         "freshness": {
             "cadence": "scheduled",
             "status": "fresh",
@@ -246,7 +266,7 @@ def _active_bundle():
         },
     }
     feed = {
-        "schema_version": 2,
+        "schema_version": 3,
         "run_id": "",
         "window": {"start": ts(T0 - timedelta(days=1)), "end": ts(T0)},
         "collection_started_at": ts(T0 - timedelta(minutes=1)),
@@ -267,7 +287,7 @@ def _active_bundle():
         "git": None,
         "content_digest": "",
         "items": [policy_item()],
-        "pipeline": {"status": "degraded", "warnings": []},
+        "pipeline": {"status": "healthy", "warnings": []},
     }
     feed["content_digest"], feed["run_id"] = recompute_feed_identity(feed)
     return build_bundle(feed)
@@ -310,26 +330,11 @@ def test_active_bundle_is_optional_and_manifest_first(tmp_path):
     _write_active_bundle(tmp_path, bundle)
     assert load_active_feed(tmp_path)["run_id"] == bundle.run_id
 
-    # The immediately preceding major is a valid carry-forward input.
-    legacy = {
-        key: value
-        for key, value in bundle.manifest.items()
-        if key not in {"bundle_schemas", "artifacts"}
-    }
-    legacy["schema_version"] = 1
-    legacy["items"] = bundle.artifacts["policy"]["items"]
-    legacy["provider_outcomes"] = [
-        {key: value for key, value in legacy["provider_outcomes"][0].items() if key != "freshness"}
-    ]
-    legacy["content_digest"], legacy["run_id"] = recompute_feed_identity(legacy)
-    legacy_bundle = build_bundle(legacy)
-    (tmp_path / "feed-manifest.json").write_bytes(legacy_bundle.manifest_bytes)
-    for path in tmp_path.glob("feed-*.json"):
-        if path.name != "feed-manifest.json":
-            path.unlink()
-    for domain, data in legacy_bundle.artifact_bytes.items():
-        (tmp_path / artifact_relative_path(domain, legacy_bundle.run_id)).write_bytes(data)
-    assert load_active_feed(tmp_path)["schema_version"] == 1
+    # Major 1 is no longer an active-bundle compatibility boundary.
+    unsupported = deepcopy(bundle.manifest)
+    unsupported["schema_version"] = 1
+    (tmp_path / "feed-manifest.json").write_bytes(canonical_bytes(unsupported))
+    assert load_active_feed(tmp_path) is None
 
     (tmp_path / "feed-manifest.json").write_bytes(b"{}")
     assert load_active_feed(tmp_path) is None
@@ -337,47 +342,21 @@ def test_active_bundle_is_optional_and_manifest_first(tmp_path):
     assert load_active_feed(tmp_path) is None
 
 
-def test_preceding_major_false_healthy_bundle_is_not_active(tmp_path):
+def test_failed_active_bundle_is_not_active(tmp_path):
     bundle = _active_bundle()
-    legacy = {
-        key: value
-        for key, value in bundle.manifest.items()
-        if key not in {"bundle_schemas", "artifacts"}
-    }
-    legacy["schema_version"] = 1
-    legacy["items"] = bundle.artifacts["policy"]["items"]
-    legacy["provider_outcomes"] = [
-        {key: value for key, value in legacy["provider_outcomes"][0].items() if key != "freshness"}
-    ]
-    legacy["provider_outcomes"][0].update(
-        state="failed",
-        succeeded=False,
-        failed=True,
-        error="source incomplete",
-    )
-    legacy["pipeline"] = {"status": "healthy", "warnings": []}
-    legacy["content_digest"], legacy["run_id"] = recompute_feed_identity(legacy)
-    legacy_bundle = build_bundle(legacy)
-    _write_active_bundle(tmp_path, legacy_bundle)
+    _write_active_bundle(tmp_path, bundle)
+    manifest = deepcopy(bundle.manifest)
+    manifest["pipeline"]["status"] = "failure"
+    (tmp_path / "feed-manifest.json").write_bytes(canonical_bytes(manifest))
 
     assert load_active_feed(tmp_path) is None
 
 
-def test_preceding_major_untrusted_contract_hash_is_not_active(tmp_path):
+def test_untrusted_contract_hash_is_not_active(tmp_path):
     bundle = _active_bundle()
-    legacy = {
-        key: value
-        for key, value in bundle.manifest.items()
-        if key not in {"bundle_schemas", "artifacts"}
-    }
-    legacy["schema_version"] = 1
-    legacy["items"] = bundle.artifacts["policy"]["items"]
-    legacy["provider_outcomes"] = [
-        {key: value for key, value in legacy["provider_outcomes"][0].items() if key != "freshness"}
-    ]
-    legacy["provider_contracts"][0]["hash"] = "0" * 64
-    legacy["content_digest"], legacy["run_id"] = recompute_feed_identity(legacy)
-    legacy_bundle = build_bundle(legacy)
-    _write_active_bundle(tmp_path, legacy_bundle)
+    _write_active_bundle(tmp_path, bundle)
+    manifest = deepcopy(bundle.manifest)
+    manifest["provider_contracts"][0]["hash"] = "0" * 64
+    (tmp_path / "feed-manifest.json").write_bytes(canonical_bytes(manifest))
 
     assert load_active_feed(tmp_path) is None

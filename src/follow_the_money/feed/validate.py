@@ -3,7 +3,7 @@
 JSON Schema enforces shape; this module enforces the cross-field semantics
 from design sections 1/4:
 
-- Supported logical schema majors (v1 read compatibility and v2 production).
+- Supported logical schema majors (v2 read compatibility and v3 production).
 - Strictly advancing half-open window ``window.start < evidence_cutoff_at``.
 - Wall-clock order ``collection_started_at <= evidence_cutoff_at <=
   non-null request/retrieved_at <= collection_completed_at <= generated_at``;
@@ -14,9 +14,9 @@ from design sections 1/4:
 - Canonical digest/run-ID recomputation from an explicit allowlisted
   semantic projection (``content_digest``/``run_id`` are derived, never
   hashed); ``run_id`` derives from the fixed cutoff plus the digest.
-- Legacy read compatibility: an already-published schema-v1 artifact whose
-  identity validates only under the former whole-envelope projection remains
-  consumable; producers write the freshness-capable v2 form.
+- Legacy read compatibility: an already-published schema-v2 artifact remains
+  consumable under its original freshness contract; producers write the v3
+  availability-capable form.
 - Raw numeric tokens bounded to 64 bytes / 24 significant digits / exponent
   in [-12, 12]; canonical persisted values are plain decimals with no
   exponent, no negative zero, at most 64 bytes/24 digits, magnitude <= 1e18.
@@ -38,8 +38,9 @@ from ..schema import SchemaError, validate_against
 from .freshness import FreshnessError, evaluate_freshness
 
 FEED_SCHEMA = "feed.schema.json"
-SUPPORTED_FEED_MAJOR = 2
-SUPPORTED_FEED_MAJORS = (1, 2)
+SUPPORTED_FEED_MAJOR = 3
+SUPPORTED_FEED_MAJORS = (2, 3)
+PREVIOUS_FEED_MAJOR = 2
 
 #: Top-level semantic projection members. Execution-audit metadata
 #: (``collection_started_at``, ``collection_completed_at``, ``generated_at``,
@@ -136,7 +137,9 @@ def validate_feed(feed: Mapping[str, Any]) -> None:
 
     if feed.get("schema_version") not in SUPPORTED_FEED_MAJORS:
         raise SchemaError(f"unsupported Feed schema_version {feed.get('schema_version')!r}")
-    if feed.get("schema_version") == SUPPORTED_FEED_MAJOR:
+    if feed.get("schema_version") in {PREVIOUS_FEED_MAJOR, SUPPORTED_FEED_MAJOR}:
+        if feed.get("schema_version") == SUPPORTED_FEED_MAJOR:
+            _validate_availability_outcomes(feed)
         _validate_freshness_outcomes(feed)
 
     window = feed["window"]
@@ -161,24 +164,20 @@ def validate_feed(feed: Mapping[str, Any]) -> None:
             if not (cutoff <= rts <= completed):
                 raise SchemaError("retrieved_at outside [cutoff, completed]")
 
-    # Stable serialization: new semantic-identity Feeds contain exactly one
-    # provider outcome per provider in ascending provider_id order. The former
-    # concurrent writer could persist valid legacy-v1 artifacts in worker
-    # completion order, so only an exact whole-envelope legacy identity keeps
-    # its narrow read-compatibility exemption.
-    if not _has_exact_legacy_identity(feed):
-        previous_id: str | None = None
-        seen_provider_ids: set[str] = set()
-        for outcome in feed.get("provider_outcomes", []):
-            pid = outcome.get("provider_id")
-            if pid in seen_provider_ids:
-                raise SchemaError(
-                    "provider_outcomes contain duplicate provider_id; order is not ascending provider_id"
-                )
-            seen_provider_ids.add(pid)
-            if previous_id is not None and pid <= previous_id:
-                raise SchemaError("provider_outcomes not in ascending provider_id order")
-            previous_id = pid
+    # Stable serialization: supported semantic-identity Feeds contain exactly
+    # one provider outcome per provider in ascending provider_id order.
+    previous_id: str | None = None
+    seen_provider_ids: set[str] = set()
+    for outcome in feed.get("provider_outcomes", []):
+        pid = outcome.get("provider_id")
+        if pid in seen_provider_ids:
+            raise SchemaError(
+                "provider_outcomes contain duplicate provider_id; order is not ascending provider_id"
+            )
+        seen_provider_ids.add(pid)
+        if previous_id is not None and pid <= previous_id:
+            raise SchemaError("provider_outcomes not in ascending provider_id order")
+        previous_id = pid
     previous_item_key: tuple[str, str] | None = None
     for item in feed.get("items", []):
         source = item.get("source", {})
@@ -197,12 +196,174 @@ def validate_feed(feed: Mapping[str, Any]) -> None:
             if key in payload:
                 raise SchemaError(f"intelligence field {key!r} rejected in Feed item")
 
-    # Calendar horizon (v1 snapshot covers [cutoff, cutoff + 26h]).
+    # Calendar horizon covers [cutoff, cutoff + 26h] when present.
     _validate_calendar_horizon(feed)
 
 
+def _is_blocked_exempt(outcome: Mapping[str, Any]) -> bool:
+    return (
+        outcome.get("availability") == "blocked"
+        and outcome.get("upstream_http_status") in {401, 403}
+        and outcome.get("state") == "failed"
+        and outcome.get("accepted") == 0
+        and outcome.get("rejected") == 0
+    )
+
+
+def _configured_coverage_groups(feed: Mapping[str, Any], provider_id: str) -> list[str]:
+    feed_config = feed.get("feed_config")
+    snapshot = feed_config.get("snapshot") if isinstance(feed_config, Mapping) else None
+    coverage = snapshot.get("coverage") if isinstance(snapshot, Mapping) else None
+    if coverage is None:
+        return []
+    if not isinstance(coverage, list):
+        raise SchemaError("feed_config.snapshot.coverage is invalid")
+    groups: set[str] = set()
+    for index, row in enumerate(coverage):
+        if not isinstance(row, Mapping):
+            raise SchemaError(f"feed_config.snapshot.coverage[{index}] is invalid")
+        group = row.get("group")
+        members = row.get("members")
+        if (
+            not isinstance(group, str)
+            or not isinstance(members, list)
+            or any(not isinstance(member, str) for member in members)
+        ):
+            raise SchemaError(f"feed_config.snapshot.coverage[{index}] is invalid")
+        if provider_id in members:
+            groups.add(group)
+    return sorted(groups)
+
+
+def _validate_availability_outcomes(feed: Mapping[str, Any]) -> None:
+    """Validate v3 availability fields and their pipeline/coverage semantics."""
+    contracts = {
+        entry.get("provider_id"): entry.get("snapshot")
+        for entry in feed.get("provider_contracts", [])
+        if isinstance(entry, Mapping)
+    }
+    complete_ids: set[str] = set()
+    blocked_ids: set[str] = set()
+    seen_ids: set[str] = set()
+    item_provider_ids = {
+        item.get("provider_id") for item in feed.get("items", []) if isinstance(item, Mapping)
+    }
+    for index, outcome in enumerate(feed.get("provider_outcomes", [])):
+        provider_id = outcome.get("provider_id")
+        if not isinstance(provider_id, str):
+            raise SchemaError(f"provider_outcomes[{index}].provider_id is invalid")
+        if provider_id in seen_ids:
+            raise SchemaError("provider_outcomes contain duplicate provider_id")
+        seen_ids.add(provider_id)
+        state = outcome.get("state")
+        flags = {
+            "succeeded": state in {"healthy", "empty", "partial"},
+            "empty": state == "empty",
+            "partial": state == "partial",
+            "failed": state == "failed",
+            "skipped": state == "skipped",
+        }
+        if any(outcome.get(key) is not value for key, value in flags.items()):
+            raise SchemaError(f"provider_outcomes[{index}] state flags disagree with state")
+
+        availability = outcome.get("availability")
+        reason = outcome.get("availability_reason")
+        if reason is not None and len(reason.encode("utf-8")) > 256:
+            raise SchemaError(f"provider_outcomes[{index}].availability_reason is too long")
+        status = outcome.get("upstream_http_status")
+        if status is not None and outcome.get("retrieved_at") is None:
+            raise SchemaError(
+                f"provider_outcomes[{index}].upstream_http_status requires retrieved_at"
+            )
+        snapshot = contracts.get(provider_id)
+        empty_permitted = (
+            isinstance(snapshot, Mapping) and snapshot.get("empty_valid_for_window") is True
+        )
+        complete = state == "healthy" or (state == "empty" and empty_permitted)
+
+        if availability == "disabled":
+            raise SchemaError("disabled Provider cannot have a planned outcome")
+        if availability == "success":
+            if not complete or reason is not None or status is not None:
+                raise SchemaError("availability=success disagrees with Provider outcome")
+        elif availability == "blocked":
+            if status not in {401, 403} or state not in {"failed", "partial"}:
+                raise SchemaError("availability=blocked requires HTTP 401/403 and incomplete work")
+            if not isinstance(reason, str) or not reason or str(status) not in reason:
+                raise SchemaError(
+                    "blocked availability requires a reason identifying its HTTP status"
+                )
+            if (
+                state == "failed"
+                and outcome.get("accepted") == 0
+                and outcome.get("rejected", 0) > 0
+            ):
+                raise SchemaError("blocked availability cannot contain rejected data")
+            if _is_blocked_exempt(outcome):
+                blocked_ids.add(provider_id)
+                if provider_id in item_provider_ids:
+                    raise SchemaError("blocked-exempt Provider cannot retain evidence items")
+        elif availability == "failed":
+            if complete or status in {401, 403}:
+                raise SchemaError("availability=failed disagrees with Provider outcome")
+        else:
+            raise SchemaError("Provider availability is invalid")
+
+        expected_groups = _configured_coverage_groups(feed, provider_id)
+        groups = outcome.get("affected_coverage_groups")
+        if groups != sorted(set(groups)) or groups != expected_groups:
+            raise SchemaError(
+                f"provider_outcomes[{index}].affected_coverage_groups does not match configuration"
+            )
+        if complete:
+            complete_ids.add(provider_id)
+
+    pipeline_status = feed["pipeline"]["status"]
+    if pipeline_status == "degraded" and not blocked_ids:
+        raise SchemaError("pipeline.status=degraded requires a blocked-exempt Provider")
+    if blocked_ids and pipeline_status == "healthy":
+        raise SchemaError("blocked-exempt Provider requires pipeline.status=degraded")
+
+    for outcome in feed.get("provider_outcomes", []):
+        if (
+            not (
+                outcome.get("state") in {"healthy", "empty"}
+                and outcome.get("provider_id") in complete_ids
+            )
+            and outcome.get("provider_id") not in blocked_ids
+            and pipeline_status != "failure"
+        ):
+            raise SchemaError("incomplete Provider work requires pipeline.status=failure")
+
+    feed_config = feed.get("feed_config")
+    config_snapshot = feed_config.get("snapshot") if isinstance(feed_config, Mapping) else None
+    coverage = config_snapshot.get("coverage") if isinstance(config_snapshot, Mapping) else None
+    if coverage is not None and not isinstance(coverage, list):
+        raise SchemaError("feed_config.snapshot.coverage is invalid")
+    for index, row in enumerate(coverage or []):
+        if not isinstance(row, Mapping):
+            raise SchemaError(f"feed_config.snapshot.coverage[{index}] is invalid")
+        members = row.get("members", [])
+        minimum = row.get("minimum")
+        if (
+            not isinstance(members, list)
+            or not isinstance(minimum, int)
+            or isinstance(minimum, bool)
+        ):
+            raise SchemaError(f"feed_config.snapshot.coverage[{index}] is invalid")
+        blocked_count = sum(1 for member in members if member in blocked_ids)
+        effective_minimum = max(0, minimum - blocked_count)
+        complete_count = sum(1 for member in members if member in complete_ids)
+        if (
+            pipeline_status != "failure"
+            and row.get("optional") is not True
+            and complete_count < effective_minimum
+        ):
+            raise SchemaError(f"coverage group {row.get('group')!r} is below its effective minimum")
+
+
 def _validate_freshness_outcomes(feed: Mapping[str, Any]) -> None:
-    """Validate the closed v2 freshness result and its nullability rules."""
+    """Validate the closed v2/v3 freshness result and its nullability rules."""
     contracts: dict[str, Mapping[str, Any]] = {}
     resolved_contracts: dict[str, FreshnessContract] = {}
     previous_contract_id: str | None = None
@@ -328,7 +489,11 @@ def _validate_freshness_outcomes(feed: Mapping[str, Any]) -> None:
         contract_hash = contract.get("hash")
         if status in {"fresh", "stale"} and carried is None and origin != contract_hash:
             raise SchemaError("current freshness origin does not match embedded Provider contract")
-        if status == "not_evaluated" and feed["pipeline"]["status"] != "failure":
+        if (
+            status == "not_evaluated"
+            and feed["pipeline"]["status"] != "failure"
+            and not _is_blocked_exempt(outcome)
+        ):
             raise SchemaError("incomplete Provider work requires pipeline.status=failure")
 
         selected_items = items_by_provider.get(provider_id, [])
@@ -424,29 +589,9 @@ def recompute_feed_identity(feed: Mapping[str, Any]) -> tuple[str, str]:
     return digest, run_id
 
 
-def _recompute_legacy_identity(feed: Mapping[str, Any]) -> tuple[str, str]:
-    digest = canonical_digest(
-        {k: v for k, v in feed.items() if k not in ("content_digest", "run_id")}
-    )
-    cutoff = feed["evidence_cutoff_at"]
-    run_id = f"{cutoff}::{digest[:32]}"
-    return digest, run_id
-
-
-def _has_exact_legacy_identity(feed: Mapping[str, Any]) -> bool:
-    if feed.get("schema_version") != 1:
-        return False
-    digest, run_id = _recompute_legacy_identity(feed)
-    return feed.get("content_digest") == digest and feed.get("run_id") == run_id
-
-
 def assert_feed_identity(feed: Mapping[str, Any]) -> None:
-    """Fail closed unless the embedded identity matches the semantic
-    projection exactly, or — for an already-published supported-major
-    artifact — the former whole-envelope projection exactly."""
+    """Fail closed unless the embedded identity matches the semantic projection exactly."""
     digest, run_id = recompute_feed_identity(feed)
-    if _has_exact_legacy_identity(feed):
-        return
     if feed.get("content_digest") != digest:
         raise SchemaError("content_digest does not match canonical projection")
     if feed.get("run_id") != run_id:

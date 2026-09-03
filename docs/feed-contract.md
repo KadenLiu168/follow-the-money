@@ -24,8 +24,9 @@ The manifest contains the logical Feed metadata, producer/configuration and
 Provider contract snapshots, Provider outcomes, pipeline result, logical
 `feed_schema` descriptor, physical `bundle_schemas` descriptors, and the exact
 artifact inventory (`domain`, safe `path`, `item_count`, `size_bytes`, and
-`sha256`). New production uses logical/manifest major `2`; major `1` is
-read-only compatibility for the immediately preceding bundle. Domain artifacts
+`sha256`). New production uses logical/manifest major `3`; major `2` is
+read-only compatibility for the immediately preceding bundle, and major `1` is
+unsupported at these boundaries. Domain artifacts
 remain major `1`. It contains no evidence item or financial interpretation.
 
 The physical contracts are:
@@ -38,8 +39,9 @@ The physical contracts are:
 ## Semantic identity
 
 `content_digest` remains the SHA-256 of the canonical serialization of the
-explicit logical projection. Provider freshness cadence, status, origin contract
-hash, and carry-forward run ID are semantic fields in that projection:
+explicit logical projection. Provider freshness, availability, bounded reason,
+upstream status, affected coverage groups, origin contract hash, and
+carry-forward run ID are semantic fields in that projection:
 
 - `schema_version`, `window`, and `evidence_cutoff_at`;
 - semantic Provider outcomes, ordered by `provider_id`, without
@@ -63,21 +65,29 @@ also declare a positive `valid_for_seconds`; `event_driven` uses `checked_at`
 and has no age window. The resolved contract and embedded Provider snapshot are
 the same authority; Feed code supplies no defaults or lookup table.
 
-Every v2 Provider outcome carries exactly one freshness result: `fresh`,
-`valid_unchanged`, `stale`, `no_snapshot`, or `not_evaluated`. Payload
+Every v2 or v3 Provider outcome carries exactly one freshness result: `fresh`,
+`valid_unchanged`, `stale`, `no_snapshot`, or `not_evaluated`. Major 3 outcomes
+also carry `availability` (`success`, `blocked`, `failed`, or `disabled` in
+planning), a bounded reason, upstream HTTP status, and ordered affected
+coverage groups. Only concrete HTTP 401/403 responses are `blocked`; timeouts,
+parser errors, and other failures remain `failed`. Payload
 observation/effective time and source publication/update time are distinct from
 the current Provider response `retrieved_at` and the bundle `generated_at`.
 A complete successful no-observation check may carry an unchanged slice only
-from the fully validated active manifest-led bundle. Carried items retain their
-IDs, source times, provenance, lineage, and origin contract hash. Failed,
-partial, skipped, missing, ambiguous, duplicate, identity-mismatched, or
-non-permitted-empty acquisition is `not_evaluated` and remains a pipeline
-failure; retained evidence never masks it. A stale slice remains explicit.
+from the fully validated active manifest-led bundle. Blocked or otherwise
+incomplete acquisition never carries a prior slice; a wholly blocked planned
+Provider may reduce affected mandatory coverage and produce a publishable
+`degraded` Feed, while partial data and unconfirmed failures remain
+non-publishable. Carried items retain their IDs, source times, provenance,
+lineage, and origin contract hash. Failed, partial, skipped, missing,
+ambiguous, duplicate, identity-mismatched, or non-permitted-empty acquisition
+is `not_evaluated` and remains a pipeline failure; a stale slice remains
+explicit.
 
 ## Validation and consumption
 
 Bundle validation is fail-closed. It requires canonical UTF-8 JSON, supported
-logical/manifest majors (`1` for read compatibility and `2` for production),
+logical/manifest majors (`2` for read compatibility and `3` for production),
 the unchanged domain-artifact major, the exact eight-domain inventory in fixed order, safe
 repository-relative generation paths, matching bytes/size/SHA-256, shared
 `run_id`, matching domain/type, deterministic item order, unchanged
@@ -103,8 +113,11 @@ Provider `retrieved_at` records the current response/check; and `generated_at`
 records bundle finalization. Retrieval and generation never refresh source or
 data-as-of time. Persisted timestamps are RFC 3339 UTC. Items use the stable
 `(source.knowledge_available_at, id)` order, and the calendar snapshot covers
-the configured horizon. Source completeness, coverage/degradation semantics,
-provenance, numeric bounds, and the evidence-only boundary are unchanged.
+the configured horizon. A planned Provider is complete only when healthy or
+contract-permitted empty. A wholly blocked Provider reduces each affected
+mandatory group's effective minimum by one; all other incomplete work remains
+failure. Provenance, numeric bounds, and the evidence-only boundary are
+unchanged.
 
 ## Publication and continuity
 
@@ -123,7 +136,7 @@ its `run_id`/cutoff; when publication removed a superseded generation, it also
 carries those deleted relative artifact paths for exact Git staging. The
 unchanged versioned checkpoint advances only after
 accepted durable manifest ownership, and deployment validates it against that
-manifest. Dry-run builds and validates the same in-memory v2 bundle without
+manifest. Dry-run builds and validates the same in-memory v3 bundle without
 writing Feed products or advancing the checkpoint.
 
 ## Current-state migration

@@ -220,6 +220,122 @@ def test_source_complete_empty_is_healthy():
     assert warnings == []
 
 
+@pytest.mark.parametrize("http_status", [401, 403])
+def test_wholly_blocked_provider_is_degraded_and_exempt(http_status):
+    cfg = _all_empty_cfg(_cfg())
+    outcomes = {
+        member: ProviderOutcome(member, state="empty")
+        for row in cfg.coverage.rows
+        for member in row.members
+    }
+    blocked = ProviderOutcome(
+        "bls",
+        state="failed",
+        availability="blocked",
+        availability_reason=f"HTTP {http_status}",
+        upstream_http_status=http_status,
+    )
+    outcomes["bls"] = blocked
+
+    status, warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(outcomes), outcomes=outcomes
+    )
+
+    assert status == "degraded"
+    assert any("bls" in warning and "affected_coverage_groups" in warning for warning in warnings)
+    assert blocked.to_dict()["affected_coverage_groups"] == []
+
+
+def test_all_planned_providers_blocked_reduces_mandatory_minimums_to_zero():
+    cfg = _all_empty_cfg(_cfg())
+    outcomes = {
+        provider.id: ProviderOutcome(
+            provider.id,
+            state="failed",
+            availability="blocked",
+            availability_reason="HTTP 403",
+            upstream_http_status=403,
+        )
+        for provider in cfg.providers
+        if provider.enabled
+    }
+
+    status, _warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(outcomes), outcomes=outcomes
+    )
+
+    assert status == "degraded"
+
+
+def test_optional_provider_blocking_degrades_without_changing_coverage():
+    cfg = _all_empty_cfg(_cfg())
+    outcomes = {
+        provider.id: ProviderOutcome(provider.id, state="empty")
+        for provider in cfg.providers
+        if provider.enabled
+    }
+    outcomes["cftc"] = ProviderOutcome(
+        "cftc",
+        state="failed",
+        availability="blocked",
+        availability_reason="HTTP 403",
+        upstream_http_status=403,
+    )
+
+    status, warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(outcomes), outcomes=outcomes
+    )
+
+    assert status == "degraded"
+    assert not any("deficient coverage" in warning for warning in warnings)
+
+
+def test_mixed_blocked_and_unconfirmed_failure_remains_failure():
+    cfg = _all_empty_cfg(_cfg())
+    outcomes = {
+        provider.id: ProviderOutcome(provider.id, state="empty")
+        for provider in cfg.providers
+        if provider.enabled
+    }
+    outcomes["bls"] = ProviderOutcome(
+        "bls",
+        state="failed",
+        availability="blocked",
+        availability_reason="HTTP 403",
+        upstream_http_status=403,
+    )
+    outcomes["sse"] = ProviderOutcome("sse", state="failed", availability="failed")
+
+    status, _warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(outcomes), outcomes=outcomes
+    )
+
+    assert status == "failure"
+
+
+def test_blocked_provider_with_partial_data_remains_failure():
+    cfg = _all_empty_cfg(_cfg())
+    outcomes = {
+        member: ProviderOutcome(member, state="empty")
+        for row in cfg.coverage.rows
+        for member in row.members
+    }
+    outcomes["bls"] = ProviderOutcome(
+        "bls",
+        state="partial",
+        accepted=1,
+        availability="blocked",
+        availability_reason="HTTP 403",
+        upstream_http_status=403,
+    )
+
+    status, _warnings = assess_pipeline(
+        config=cfg, planned_provider_ids=_planned_ids(outcomes), outcomes=outcomes
+    )
+
+    assert status == "failure"
+
+
 def _all_healthy_outcomes(cfg) -> dict[str, ProviderOutcome]:
     return {
         member: ProviderOutcome(member, state="healthy", accepted=1)

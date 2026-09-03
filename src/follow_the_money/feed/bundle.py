@@ -22,8 +22,8 @@ DOMAINS = (
     "filing",
     "calendar",
 )
-SUPPORTED_BUNDLE_MAJOR = 2
-SUPPORTED_BUNDLE_MAJORS = (1, 2)
+SUPPORTED_BUNDLE_MAJOR = 3
+SUPPORTED_BUNDLE_MAJORS = (2, 3)
 SUPPORTED_ARTIFACT_MAJOR = 1
 MANIFEST_FILENAME = "feed-manifest.json"
 LEGACY_FILENAME = "latest.json"
@@ -123,6 +123,8 @@ def split_feed(feed: dict[str, Any]) -> tuple[dict[str, Any], dict[str, dict[str
 
 def build_bundle(feed: dict[str, Any]) -> FeedBundle:
     """Build and canonically serialize a complete manifest-led candidate."""
+    if feed.get("schema_version") != SUPPORTED_BUNDLE_MAJOR:
+        raise BundleError("new production Feed bundles must use schema version 3")
     _unused, artifacts = split_feed(feed)
     artifact_bytes = {domain: canonical_bytes(artifact) for domain, artifact in artifacts.items()}
     inventory = [

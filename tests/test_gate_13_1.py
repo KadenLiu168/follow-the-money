@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from follow_the_money.canonical import canonical_digest
 from follow_the_money.feed.cli import FeedCliError, FeedExecutionError
 from follow_the_money.feed.cli import run_feed as _run_feed
 from follow_the_money.feed.validate import assert_feed_identity, validate_feed
@@ -351,7 +352,7 @@ def test_each_core_adapter_emits_schema_valid_items():
         assert items, f"{pid} produced no items from its fixture"
         # Items are schema-valid as Feed items (payload oneOf enforced).
         feed = {
-            "schema_version": 1,
+            "schema_version": 2,
             "run_id": "x",
             "window": window,
             "collection_started_at": "2026-08-11T00:19:30Z",
@@ -372,6 +373,39 @@ def test_each_core_adapter_emits_schema_valid_items():
         from follow_the_money.feed.validate import recompute_feed_identity
 
         feed["items"] = deterministic_item_order(items)
+        provider_id = items[0]["provider_id"]
+        snapshot = {
+            "provider_id": provider_id,
+            "empty_valid_for_window": True,
+            "freshness": {"cadence": "event_driven", "reference_time": "checked_at"},
+        }
+        contract_hash = canonical_digest(snapshot)
+        feed["provider_contracts"] = [
+            {"provider_id": provider_id, "snapshot": snapshot, "hash": contract_hash}
+        ]
+        feed["provider_outcomes"] = [
+            {
+                "provider_id": provider_id,
+                "state": "healthy",
+                "attempted": 1,
+                "fetched": 1,
+                "succeeded": True,
+                "empty": False,
+                "partial": False,
+                "failed": False,
+                "skipped": False,
+                "accepted": len(items),
+                "rejected": 0,
+                "error": None,
+                "retrieved_at": "2026-08-11T00:21:00Z",
+                "freshness": {
+                    "cadence": "event_driven",
+                    "status": "fresh",
+                    "origin_contract_hash": contract_hash,
+                    "carried_forward_from_run_id": None,
+                },
+            }
+        ]
         digest, run_id = recompute_feed_identity(feed)
         feed["content_digest"] = digest
         feed["run_id"] = run_id

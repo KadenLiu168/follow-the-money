@@ -8,6 +8,7 @@ calendar horizon, and provenance descriptors.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -35,7 +36,7 @@ def _valid_feed(**overrides) -> dict:
     completed = cutoff + timedelta(minutes=4)
     generated = cutoff + timedelta(minutes=5)
     feed = {
-        "schema_version": 1,
+        "schema_version": 2,
         "run_id": f"{_ts(cutoff)}::deadbeef",
         "window": {"start": _ts(cutoff - timedelta(hours=72)), "end": _ts(cutoff)},
         "collection_started_at": _ts(started),
@@ -126,6 +127,36 @@ def _valid_v2_feed() -> dict:
     )
 
 
+def _valid_v3_blocked_feed() -> dict:
+    feed = _valid_v2_feed()
+    feed["schema_version"] = 3
+    feed["items"] = []
+    feed["feed_config"]["snapshot"] = {
+        "coverage": [
+            {"group": "a", "members": ["p"], "minimum": 1, "optional": False},
+            {"group": "z", "members": ["p"], "minimum": 1, "optional": False},
+        ]
+    }
+    feed["provider_outcomes"][0].update(
+        state="failed",
+        succeeded=False,
+        failed=True,
+        accepted=0,
+        availability="blocked",
+        availability_reason="HTTP 403",
+        upstream_http_status=403,
+        affected_coverage_groups=["a", "z"],
+        freshness={
+            "cadence": "weekly",
+            "status": "not_evaluated",
+            "origin_contract_hash": None,
+            "carried_forward_from_run_id": None,
+        },
+    )
+    feed["pipeline"] = {"status": "degraded", "warnings": ["blocked Provider p"]}
+    return feed
+
+
 # ---------------------------------------------------------------------------
 # Positive
 # ---------------------------------------------------------------------------
@@ -141,13 +172,12 @@ def test_valid_empty_feed_passes():
 
 
 def test_valid_news_item_passes():
-    feed = _valid_feed()
-    feed["items"] = [_news_item(T0 - timedelta(hours=1))]
+    feed = _valid_v2_feed()
     validate_feed(feed)
 
 
 def test_all_eight_payloads_pass_schema():
-    feed = _valid_feed()
+    feed = _valid_v2_feed()
     base_source = _news_item(T0 - timedelta(hours=1))["source"]
     items = [
         {
@@ -252,6 +282,7 @@ def test_all_eight_payloads_pass_schema():
         },
     ]
     feed["items"] = sorted(items, key=lambda i: (i["source"]["knowledge_available_at"], i["id"]))
+    feed["provider_outcomes"][0]["accepted"] = len(items)
     validate_feed(feed)
 
 
@@ -261,7 +292,7 @@ def test_all_eight_payloads_pass_schema():
 
 
 def test_unsupported_major_rejected():
-    feed = _valid_feed(schema_version=3)
+    feed = _valid_feed(schema_version=1)
     # Schema enum fires first; the semantic supported-major check is a second
     # independent guard.
     with pytest.raises(SchemaError, match="unsupported|was expected|not one"):
@@ -270,6 +301,34 @@ def test_unsupported_major_rejected():
 
 def test_unknown_property_rejected():
     feed = _valid_feed(extra_field=True)
+    with pytest.raises(SchemaError):
+        validate_feed(feed)
+
+
+def test_valid_blocked_degradation_passes_v3_semantic_validation():
+    validate_feed(_valid_v3_blocked_feed())
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["forged_status", "wrong_groups", "duplicate_groups", "unsorted_groups", "missing", "partial"],
+)
+def test_v3_blocked_claims_fail_closed_when_cross_fields_disagree(mutation):
+    feed = deepcopy(_valid_v3_blocked_feed())
+    outcome = feed["provider_outcomes"][0]
+    if mutation == "forged_status":
+        outcome["upstream_http_status"] = 503
+    elif mutation == "wrong_groups":
+        outcome["affected_coverage_groups"] = []
+    elif mutation == "duplicate_groups":
+        outcome["affected_coverage_groups"] = ["a", "a", "z"]
+    elif mutation == "unsorted_groups":
+        outcome["affected_coverage_groups"] = ["z", "a"]
+    elif mutation == "missing":
+        feed["provider_outcomes"] = []
+    else:
+        outcome.update(state="partial", partial=True, failed=False, accepted=1)
+
     with pytest.raises(SchemaError):
         validate_feed(feed)
 
@@ -397,23 +456,10 @@ def test_wall_clock_order_violated():
 
 
 def test_retrieved_at_out_of_bounds():
-    feed = _valid_feed()
-    feed["provider_outcomes"] = [
-        {
-            "provider_id": "p",
-            "state": "healthy",
-            "attempted": 1,
-            "fetched": 1,
-            "succeeded": True,
-            "empty": False,
-            "partial": False,
-            "failed": False,
-            "skipped": False,
-            "accepted": 1,
-            "rejected": 0,
-            "retrieved_at": _ts(T0 - timedelta(minutes=1)),
-        }
-    ]
+    feed = _valid_v2_feed()
+    outcome = dict(feed["provider_outcomes"][0])
+    outcome["retrieved_at"] = _ts(T0 - timedelta(minutes=1))
+    feed["provider_outcomes"] = [outcome]
     with pytest.raises(SchemaError, match="retrieved_at"):
         validate_feed(feed)
 

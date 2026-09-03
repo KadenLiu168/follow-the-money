@@ -8,7 +8,7 @@ Covers the deterministic Feed contract:
   offset-synthesized or reused (1.3).
 - ``content_digest``/``run_id`` are computed from an explicit semantic
   projection; runtime audit metadata never participates, every semantic
-  member does, and the legacy whole-envelope read path stays exact (1.4).
+  member does, and the preceding-major read path remains exact (1.4).
 - Published Feed bytes are the shared canonical serialization and repeated
   semantic publication retains the current latest artifact (1.5).
 """
@@ -145,11 +145,11 @@ def _base_feed(
     generated: datetime = T0 + timedelta(minutes=4),
     outcomes: list[dict] | None = None,
     items: list[dict] | None = None,
-    pipeline_status: str = "degraded",
+    pipeline_status: str = "healthy",
     coverage_gap: dict | None = None,
 ) -> dict:
-    return {
-        "schema_version": 1,
+    feed = {
+        "schema_version": 3,
         "run_id": "",
         "window": {"start": _ts(cutoff - timedelta(hours=72)), "end": _ts(cutoff)},
         "collection_started_at": _ts(started),
@@ -170,6 +170,54 @@ def _base_feed(
             "coverage_gap": coverage_gap,
         },
     }
+    provider_ids = sorted(
+        {outcome["provider_id"] for outcome in feed["provider_outcomes"]}
+        | {item["provider_id"] for item in feed["items"]}
+    )
+    contracts = {}
+    for provider_id in provider_ids:
+        snapshot = {
+            "provider_id": provider_id,
+            "empty_valid_for_window": True,
+            "freshness": {
+                "cadence": "scheduled",
+                "reference_time": "source_updated_at",
+                "valid_for_seconds": 86400,
+            },
+        }
+        contracts[provider_id] = (snapshot, canonical_digest(snapshot))
+    feed["provider_contracts"] = [
+        {"provider_id": provider_id, "snapshot": snapshot, "hash": contract_hash}
+        for provider_id, (snapshot, contract_hash) in contracts.items()
+    ]
+    items_by_provider = {
+        provider_id: [item for item in feed["items"] if item["provider_id"] == provider_id]
+        for provider_id in provider_ids
+    }
+    normalized_outcomes = []
+    for outcome in feed["provider_outcomes"]:
+        outcome = dict(outcome)
+        state = outcome["state"]
+        outcome.setdefault("availability", "success" if state in {"healthy", "empty"} else "failed")
+        outcome.setdefault("availability_reason", outcome.get("error"))
+        outcome.setdefault("upstream_http_status", None)
+        outcome.setdefault("affected_coverage_groups", [])
+        status = "fresh" if items_by_provider[outcome["provider_id"]] else "no_snapshot"
+        origin = contracts[outcome["provider_id"]][1] if status == "fresh" else None
+        if state not in {"healthy", "empty"}:
+            status, origin = "not_evaluated", None
+        outcome.setdefault(
+            "freshness",
+            {
+                "cadence": "scheduled",
+                "status": status,
+                "origin_contract_hash": origin,
+                "carried_forward_from_run_id": None,
+            },
+        )
+        normalized_outcomes.append(outcome)
+    feed["provider_outcomes"] = normalized_outcomes
+    return feed
 
 
 def _identity_feed(**kwargs) -> dict:
@@ -505,7 +553,10 @@ def test_lifecycle_timestamps_normalize_aware_clock_to_utc(tmp_path):
     assert result.feed["generated_at"] == _ts(T0 + timedelta(minutes=3))
 
 
-def test_http_error_response_records_truthful_retrieved_at(tmp_path):
+@pytest.mark.parametrize(
+    ("status_code", "availability"), [(401, "blocked"), (403, "blocked"), (503, "failed")]
+)
+def test_http_error_response_records_truthful_retrieved_at(tmp_path, status_code, availability):
     started = T0 - timedelta(minutes=1)
     retrieved = T0 + timedelta(minutes=1)
     completed = T0 + timedelta(minutes=2)
@@ -517,7 +568,9 @@ def test_http_error_response_records_truthful_retrieved_at(tmp_path):
         cutoff=T0,
         dry_run=True,
         providers_fn=lambda: {
-            "federal_reserve": _FixtureAdapter(error=FetchError("HTTP 503", status_code=503))
+            "federal_reserve": _FixtureAdapter(
+                error=FetchError(f"HTTP {status_code}", status_code=status_code)
+            )
         },
         enabled_provider_ids=["federal_reserve"],
         now_fn=clock,
@@ -525,7 +578,10 @@ def test_http_error_response_records_truthful_retrieved_at(tmp_path):
 
     assert result.exit_code == 1
     assert clock.calls == [started, retrieved, completed, generated]
-    assert result.feed["provider_outcomes"][0]["retrieved_at"] == _ts(retrieved)
+    outcome = result.feed["provider_outcomes"][0]
+    assert outcome["retrieved_at"] == _ts(retrieved)
+    assert outcome["availability"] == availability
+    assert outcome["upstream_http_status"] == status_code
 
 
 def test_transport_failure_without_response_keeps_retrieved_at_null(tmp_path):
@@ -540,7 +596,32 @@ def test_transport_failure_without_response_keeps_retrieved_at_null(tmp_path):
     )
 
     assert result.exit_code == 1
-    assert result.feed["provider_outcomes"][0]["retrieved_at"] is None
+    outcome = result.feed["provider_outcomes"][0]
+    assert outcome["retrieved_at"] is None
+    assert outcome["availability"] == "failed"
+    assert outcome["upstream_http_status"] is None
+
+
+def test_timeout_and_parser_errors_remain_failed(tmp_path):
+    class ParserErrorAdapter(_FixtureAdapter):
+        def normalize(self, raw, window):
+            raise ValueError("parser error")
+
+    for provider_id, adapter in (
+        ("federal_reserve", _FixtureAdapter(error=TimeoutError("timed out"))),
+        ("bls", ParserErrorAdapter()),
+    ):
+        result = run_feed(
+            output_root=str(tmp_path / provider_id),
+            cutoff=T0,
+            dry_run=True,
+            providers_fn=lambda adapter=adapter, provider_id=provider_id: {provider_id: adapter},
+            enabled_provider_ids=[provider_id],
+        )
+        outcome = result.feed["provider_outcomes"][0]
+        assert result.exit_code == 1
+        assert outcome["availability"] == "failed"
+        assert outcome["upstream_http_status"] is None
 
 
 def test_rejected_concrete_response_preserves_observed_lifecycle_signal():
@@ -577,29 +658,19 @@ def _legacy_identity(feed: dict) -> tuple[str, str]:
     return legacy, f"{feed['evidence_cutoff_at']}::{legacy[:32]}"
 
 
-def test_literal_legacy_and_semantic_vectors_both_validate_and_differ():
+def test_semantic_identity_is_canonical_and_stable():
     outcomes = [_outcome("federal_reserve", retrieved_at=_ts(T0 + timedelta(minutes=1)))]
     items = [_news_item("i1", "federal_reserve", knowledge=T0 - timedelta(hours=1))]
     feed = _base_feed(outcomes=outcomes, items=items)
 
     semantic_digest, semantic_run_id = recompute_feed_identity(feed)
-    legacy_digest, legacy_run_id = _legacy_identity(feed)
-    assert semantic_digest == "7470dc920f40fff56e74818716eb75373bc448c2b9006563c09562864dbee261"
-    assert semantic_run_id == ("2026-08-11T00:20:00.000Z::7470dc920f40fff56e74818716eb7537")
-    assert legacy_digest == "89810e86a7e9471b5b4b515c4bfb498cd57cefde7b22bd64378798c1a598d19c"
-    assert legacy_run_id == ("2026-08-11T00:20:00.000Z::89810e86a7e9471b5b4b515c4bfb498c")
+    assert semantic_run_id == f"{feed['evidence_cutoff_at']}::{semantic_digest[:32]}"
 
     semantic = deepcopy(feed)
     semantic["content_digest"] = semantic_digest
     semantic["run_id"] = semantic_run_id
     validate_feed(semantic)
     assert_feed_identity(semantic)  # semantic read path
-
-    legacy = deepcopy(feed)
-    legacy["content_digest"] = legacy_digest
-    legacy["run_id"] = legacy_run_id
-    validate_feed(legacy)
-    assert_feed_identity(legacy)  # legacy whole-envelope read path
 
 
 def test_runtime_timestamps_never_change_semantic_identity():
@@ -633,48 +704,27 @@ def test_runtime_timestamps_never_change_semantic_identity():
     validate_feed(mutated)
     assert_feed_identity(mutated)
 
-    # The legacy vector for the same content does change with timestamps.
-    legacy_digest, _ = _legacy_identity(feed)
-    legacy_mutated, _ = _legacy_identity(mutated)
-    assert legacy_digest != legacy_mutated
 
-
-def test_legacy_identity_is_exact_not_permissive():
-    outcomes = [_outcome("federal_reserve", retrieved_at=_ts(T0 + timedelta(minutes=1)))]
-    feed = _base_feed(outcomes=outcomes)
+def test_legacy_identity_is_rejected():
+    feed = _identity_feed(
+        outcomes=[_outcome("federal_reserve", retrieved_at=_ts(T0 + timedelta(minutes=1)))]
+    )
     legacy_digest, legacy_run_id = _legacy_identity(feed)
     feed["content_digest"] = legacy_digest
     feed["run_id"] = legacy_run_id
-    validate_feed(feed)
-    assert_feed_identity(feed)
-
-    # Any audit-timestamp change breaks the exact legacy vector and there is
-    # no semantic match either: fail closed.
-    mutated = deepcopy(feed)
-    mutated["collection_completed_at"] = _ts(T0 + timedelta(minutes=7))
     with pytest.raises(SchemaError, match="content_digest"):
-        assert_feed_identity(mutated)
+        assert_feed_identity(feed)
 
 
-def test_legacy_identity_accepts_prechange_provider_completion_order():
-    """A valid legacy v1 artifact may preserve worker completion order.
-
-    Removing the exact-legacy compatibility branch from stable-order
-    validation must make this test fail; newly written semantic Feeds remain
-    subject to ascending provider ordering.
-    """
-    feed = _base_feed(
+def test_provider_outcomes_must_be_sorted_for_current_major():
+    feed = _identity_feed(
         outcomes=[
             _outcome("federal_reserve", retrieved_at=_ts(T0 + timedelta(minutes=1))),
             _outcome("bls", retrieved_at=_ts(T0 + timedelta(minutes=2))),
         ]
     )
-    legacy_digest, legacy_run_id = _legacy_identity(feed)
-    feed["content_digest"] = legacy_digest
-    feed["run_id"] = legacy_run_id
-
-    validate_feed(feed)
-    assert_feed_identity(feed)
+    with pytest.raises(SchemaError, match="ascending provider_id"):
+        validate_feed(feed)
 
 
 def test_every_semantic_projection_member_changes_identity():
@@ -708,7 +758,7 @@ def test_every_semantic_projection_member_changes_identity():
                 _news_item("i2", "federal_reserve", knowledge=T0 - timedelta(hours=2))
             )
         elif kind == "pipeline.status":
-            target["pipeline"]["status"] = "healthy"
+            target["pipeline"]["status"] = "failure"
         elif kind == "pipeline.coverage_gap":
             target["pipeline"]["coverage_gap"] = {
                 "uncovered_start": _ts(T0 - timedelta(hours=12)),
@@ -961,13 +1011,13 @@ def test_validation_rejects_duplicate_provider_outcomes():
             _outcome("bls", retrieved_at=_ts(T0 + timedelta(minutes=2))),
         ]
     )
-    with pytest.raises(SchemaError, match="ascending provider_id"):
+    with pytest.raises(SchemaError, match="duplicate provider_id"):
         validate_feed(feed)
 
 
 def test_validation_rejects_unordered_items():
     feed = _identity_feed(
-        outcomes=[],
+        outcomes=[_outcome("p1", retrieved_at=_ts(T0 + timedelta(minutes=1)))],
         items=[
             _news_item("i2", "p1", knowledge=T0 - timedelta(hours=1)),
             _news_item("i1", "p1", knowledge=T0 - timedelta(hours=2)),
@@ -979,10 +1029,11 @@ def test_validation_rejects_unordered_items():
 
 def test_null_retrieved_at_allowed_for_work_without_observed_response():
     feed = _identity_feed(
+        pipeline_status="failure",
         outcomes=[
             _outcome("bls", state="failed", accepted=0, error="HTTP 503"),
             _outcome("cftc", state="skipped", accepted=0),
-        ]
+        ],
     )
     validate_feed(feed)
     assert_feed_identity(feed)

@@ -128,9 +128,11 @@ to any submitted text as a deterministic safety check.
   before Provider requests; it never claims coverage through collection
   completion or a nominal schedule value. Payload observation/effective time,
   source publication/update time, Provider retrieval/check time, and Feed
-  generation time remain distinct. Freshness is explicit per Provider; only a
-  complete successful check may carry an unchanged slice from the fully
-  validated active bundle, and carry-forward never masks Provider failure.
+  generation time remain distinct. Freshness and availability are explicit per
+  Provider; only a complete successful check may carry an unchanged slice from
+  the fully validated active bundle. A wholly blocked HTTP 401/403 Provider may
+  produce a bounded degraded Feed without prior-slice carry-forward; other
+  incomplete Provider work remains fatal.
 
 ## Live path
 
@@ -167,8 +169,9 @@ scripts/feed/follow-the-money-feed      # evidence-only Feed, deterministic,
 This flow does not claim that the minimal Feed entry orchestrates the retained
 post-Feed libraries.
 
-If a required step fails, surface the exact stderr and stop. Partial output
-is worse than no output.
+If a required non-exempt step fails, surface the exact stderr and stop. A
+validated wholly blocked HTTP 401/403 Provider is an explicit degraded Feed
+warning, not a hidden success. Partial output is worse than no output.
 
 ## Credentials
 

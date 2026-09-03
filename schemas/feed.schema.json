@@ -23,8 +23,8 @@
   ],
   "properties": {
     "schema_version": {
-      "description": "Logical Feed schema major; v1 is read-compatible and v2 is freshness-capable production.",
-      "enum": [1, 2]
+      "description": "Logical Feed schema major; v2 is read-compatible and v3 is Provider-availability-capable production.",
+      "enum": [2, 3]
     },
     "run_id": {
       "description": "Semantic run identifier: '{evidence_cutoff_at}::{first 32 hex of content_digest}'. Identifies the semantic evidence, not a specific execution.",
@@ -62,7 +62,7 @@
       "format": "date-time"
     },
     "provider_outcomes": {
-      "description": "Exactly one outcome per planned provider, in ascending provider_id order (healthy, empty, partial, failed, or skipped); v2 outcomes also carry one required freshness result.",
+      "description": "Exactly one outcome per planned provider, in ascending provider_id order (healthy, empty, partial, failed, or skipped); v2 and v3 outcomes carry one required freshness result, and v3 also carries Provider availability diagnostics.",
       "type": "array",
       "items": { "$ref": "#/$defs/provider_outcome" }
     },
@@ -108,7 +108,7 @@
       }
     },
     "content_digest": {
-      "description": "Semantic identity digest: canonical SHA-256 of the allowlisted semantic projection, including v2 freshness fields but excluding execution audit metadata; this is not a whole-file checksum.",
+      "description": "Semantic identity digest: canonical SHA-256 of the allowlisted semantic projection, including freshness and v3 availability fields but excluding execution audit metadata; this is not a whole-file checksum.",
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
@@ -140,15 +140,37 @@
   },
   "allOf": [
     {
-      "if": { "properties": { "schema_version": { "const": 2 } } },
+      "if": { "properties": { "schema_version": { "const": 3 } } },
       "then": {
         "properties": {
-          "provider_outcomes": { "items": { "required": ["freshness"] } }
+          "provider_outcomes": {
+            "items": {
+              "required": [
+                "freshness", "availability", "availability_reason",
+                "upstream_http_status", "affected_coverage_groups"
+              ]
+            }
+          }
         }
       },
       "else": {
-        "properties": {
-          "provider_outcomes": { "items": { "not": { "required": ["freshness"] } } }
+        "if": { "properties": { "schema_version": { "const": 2 } } },
+        "then": {
+          "properties": {
+            "provider_outcomes": {
+              "items": {
+                "required": ["freshness"],
+                "not": {
+                  "anyOf": [
+                    { "required": ["availability"] },
+                    { "required": ["availability_reason"] },
+                    { "required": ["upstream_http_status"] },
+                    { "required": ["affected_coverage_groups"] }
+                  ]
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -176,6 +198,27 @@
         "skipped": { "type": "boolean" },
         "accepted": { "type": "integer", "minimum": 0 },
         "rejected": { "type": "integer", "minimum": 0 },
+        "availability": {
+          "description": "Provider availability is separate from acquisition completion.",
+          "enum": ["success", "blocked", "failed", "disabled"]
+        },
+        "availability_reason": {
+          "description": "Bounded redacted Provider availability reason.",
+          "type": ["string", "null"],
+          "maxLength": 256
+        },
+        "upstream_http_status": {
+          "description": "Concrete upstream HTTP status when a response was observed.",
+          "type": ["integer", "null"],
+          "minimum": 100,
+          "maximum": 599
+        },
+        "affected_coverage_groups": {
+          "description": "Configured coverage groups containing this planned Provider, sorted ascending.",
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
         "error": { "type": ["string", "null"] },
         "retrieved_at": {
           "description": "Execution audit metadata: observed instant when the provider response returned; null for failed/skipped work with no observed response. Excluded from content_digest.",

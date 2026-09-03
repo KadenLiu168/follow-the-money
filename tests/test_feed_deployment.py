@@ -75,7 +75,7 @@ def _clock(value: datetime):
 def _healthy_feed() -> dict:
     cutoff = "2026-08-30T00:20:00Z"
     feed = {
-        "schema_version": 1,
+        "schema_version": 3,
         "run_id": "",
         "window": {"start": "2026-08-27T00:20:00Z", "end": cutoff},
         "collection_started_at": "2026-08-30T00:19:00Z",
@@ -668,6 +668,41 @@ def test_diagnostics_renderer_selects_known_fields_and_preserves_provider_order(
     assert "\\|" in rendered
     assert "`code`" not in rendered
     assert "\x00" not in rendered
+
+
+def test_degraded_diagnostics_render_availability_in_provider_order(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    status_path = tmp_path / "feed-status.json"
+    summary_path = tmp_path / "summary.md"
+    status_path.write_text(
+        json.dumps(
+            {
+                "status": "degraded",
+                "warnings": ["blocked Providers"],
+                "provider_outcomes": [
+                    {
+                        "provider_id": provider_id,
+                        "state": "failed",
+                        "availability": "blocked",
+                        "availability_reason": "HTTP 403",
+                        "upstream_http_status": 403,
+                        "affected_coverage_groups": groups,
+                    }
+                    for provider_id, groups in (("sse", ["china"]), ("bls", ["calendar", "macro"]))
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert deployment._render_feed_diagnostics(status_path, summary_path) == 0
+    rendered = capsys.readouterr().out
+    assert rendered == summary_path.read_text(encoding="utf-8")
+    assert rendered.index("provider_id: bls") < rendered.index("provider_id: sse")
+    assert "availability: blocked" in rendered
+    assert "availability_reason: HTTP 403" in rendered
+    assert "affected_coverage_groups: calendar, macro" in rendered
 
 
 def test_diagnostics_renderer_bounds_fields_and_total_output(

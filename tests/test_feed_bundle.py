@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from follow_the_money.canonical import canonical_bytes, canonical_digest
+from follow_the_money.canonical import canonical_bytes, canonical_digest, canonical_sha256
 from follow_the_money.feed.bundle import (
     DOMAINS,
     BundleError,
@@ -53,19 +53,56 @@ def _news(item_id: str = "item-1", at: datetime = T0 - timedelta(hours=1)) -> di
 
 
 def _feed(items: list[dict] | None = None) -> dict:
+    snapshot = {
+        "provider_id": "provider",
+        "empty_valid_for_window": True,
+        "freshness": {
+            "cadence": "event_driven",
+            "reference_time": "checked_at",
+        },
+    }
+    contract_hash = canonical_digest(snapshot)
     feed = {
-        "schema_version": 1,
+        "schema_version": 3,
         "run_id": "",
         "window": {"start": _ts(T0 - timedelta(hours=72)), "end": _ts(T0)},
         "collection_started_at": _ts(T0 - timedelta(minutes=1)),
         "evidence_cutoff_at": _ts(T0),
         "collection_completed_at": _ts(T0 + timedelta(minutes=1)),
         "generated_at": _ts(T0 + timedelta(minutes=2)),
-        "provider_outcomes": [],
+        "provider_outcomes": [
+            {
+                "provider_id": "provider",
+                "state": "healthy",
+                "attempted": 1,
+                "fetched": 1,
+                "succeeded": True,
+                "empty": False,
+                "partial": False,
+                "failed": False,
+                "skipped": False,
+                "accepted": len(items or []),
+                "rejected": 0,
+                "error": None,
+                "retrieved_at": _ts(T0 + timedelta(minutes=1)),
+                "freshness": {
+                    "cadence": "event_driven",
+                    "status": "fresh" if items else "no_snapshot",
+                    "origin_contract_hash": contract_hash if items else None,
+                    "carried_forward_from_run_id": None,
+                },
+                "availability": "success",
+                "availability_reason": None,
+                "upstream_http_status": None,
+                "affected_coverage_groups": [],
+            }
+        ],
         "producer": {"package_version": "0.1.0", "files": [], "fingerprint": "a" * 64},
         "feed_config": {"snapshot": {}, "hash": "b" * 64},
         "feed_schema": {"path": "schemas/feed.schema.json", "sha256": "c" * 64},
-        "provider_contracts": [],
+        "provider_contracts": [
+            {"provider_id": "provider", "snapshot": snapshot, "hash": contract_hash}
+        ],
         "git": None,
         "content_digest": "",
         "items": items or [],
@@ -135,16 +172,56 @@ def test_legacy_read_is_allowed_only_without_manifest(tmp_path: Path):
     assert load_feed(tmp_path)["run_id"] == feed["run_id"]
 
 
-def test_prechange_legacy_identity_can_be_migrated_without_changing_identity(tmp_path: Path):
+def test_preceding_major_legacy_read_preserves_identity(tmp_path: Path):
     feed = _feed()
-    digest = canonical_digest(
-        {key: value for key, value in feed.items() if key not in {"content_digest", "run_id"}}
-    )
-    feed["content_digest"] = digest
-    feed["run_id"] = f"{feed['evidence_cutoff_at']}::{digest[:32]}"
+    feed["schema_version"] = 2
+    for key in (
+        "availability",
+        "availability_reason",
+        "upstream_http_status",
+        "affected_coverage_groups",
+    ):
+        feed["provider_outcomes"][0].pop(key)
+    feed["content_digest"], feed["run_id"] = recompute_feed_identity(feed)
+    (tmp_path / "latest.json").write_bytes(canonical_bytes(feed))
 
-    bundle = build_bundle(feed)
-    _write_bundle(tmp_path, bundle)
+    assert load_feed(tmp_path) == feed
+
+
+def test_preceding_major_manifest_bundle_is_a_valid_active_input(tmp_path: Path):
+    feed = _feed([_news()])
+    feed["schema_version"] = 2
+    for outcome in feed["provider_outcomes"]:
+        for key in (
+            "availability",
+            "availability_reason",
+            "upstream_http_status",
+            "affected_coverage_groups",
+        ):
+            outcome.pop(key)
+    feed["content_digest"], feed["run_id"] = recompute_feed_identity(feed)
+
+    current = build_bundle(_feed([_news()]))
+    artifacts = {
+        domain: {**artifact, "run_id": feed["run_id"]}
+        for domain, artifact in current.artifacts.items()
+    }
+    artifact_bytes = {domain: canonical_bytes(artifact) for domain, artifact in artifacts.items()}
+    manifest = {key: value for key, value in feed.items() if key != "items"}
+    manifest["bundle_schemas"] = current.manifest["bundle_schemas"]
+    manifest["artifacts"] = [
+        {
+            "domain": domain,
+            "path": artifact_relative_path(domain, feed["run_id"]),
+            "item_count": len(artifacts[domain]["items"]),
+            "size_bytes": len(artifact_bytes[domain]),
+            "sha256": canonical_sha256(artifact_bytes[domain]),
+        }
+        for domain in DOMAINS
+    ]
+    (tmp_path / "feed-manifest.json").write_bytes(canonical_bytes(manifest))
+    for domain, data in artifact_bytes.items():
+        (tmp_path / artifact_relative_path(domain, feed["run_id"])).write_bytes(data)
 
     assert validate_bundle(tmp_path) == feed
 
