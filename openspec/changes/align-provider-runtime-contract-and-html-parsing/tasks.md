@@ -15,4 +15,5 @@
 - [x] 3.1 Run `.venv/bin/python -m pytest tests/test_adapters.py tests/test_feed_pipeline.py tests/test_feed_cli.py` and verify request parsing, typed Provider failures, retry behavior, source completeness, and no-publication-on-failure regressions pass.
 - [x] 3.2 Run `.venv/bin/python scripts/quality_gate.py` and verify the canonical repository quality gate passes.
 - [x] 3.3 Run `openspec doctor`, `openspec validate align-provider-runtime-contract-and-html-parsing --strict`, and `openspec validate --all --strict`; verify all OpenSpec checks pass.
-- [x] 3.4 After delivery, trigger the existing hosted Feed workflow and record whether the resolved user-agent and malformed-link defects are absent while reporting any upstream blocking, throttling, network, or other external Provider failures truthfully rather than treating Provider success as required.
+- [ ] 3.4 After delivery, trigger the existing hosted Feed workflow and record whether the resolved user-agent and malformed-link defects are absent while reporting any upstream blocking, throttling, network, or other external Provider failures truthfully rather than treating Provider success as required.
+  - Attempt `33714332955` failed while publishing durable pre-network state; collection was skipped, so neither runtime defect was exercised.
