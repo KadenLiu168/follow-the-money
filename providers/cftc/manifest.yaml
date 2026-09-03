@@ -1,7 +1,8 @@
 # CFTC COT — provider contract manifest
 # Contract status: verified on 2026-08-11 against the official COT PRE API.
 # Optional coverage: positioning output is conditional and cannot satisfy a
-# mandatory matrix row alone.
+# mandatory matrix row alone. Shipped production activation is owned by
+# config/providers.yaml.
 
 contract_version: 1
 provider_id: cftc
@@ -14,8 +15,10 @@ verification:
   contract_url: "https://publicreporting.cftc.gov/Commitments-of-Traders/Legacy-Futures-Only/6dca-aqww"
   usage_note: >
     Commitments of Traders reports and release calendar. Public data, no
-    authentication. Optional verified-only coverage; default disabled because
-    positioning is conditional in the v1 coverage matrix.
+    authentication. Optional verified-only coverage: positioning stays
+    conditional in the v1 coverage matrix and cannot satisfy a mandatory row.
+    The shipped registry enables this provider; ``default_enabled`` remains
+    the manifest-only fallback for callers without a registry policy.
 
 authentication: none
 protocol: https

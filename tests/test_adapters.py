@@ -437,7 +437,9 @@ def test_no_manifest_claims_verified_without_date():
 
 
 def test_verified_adapters_enabled_optional_disabled():
-    # Gate 13.1: verified core adapters are enabled; optional CFTC stays disabled.
+    # Gate 13.1: verified core adapters are enabled; verified-optional CFTC
+    # keeps a default-disabled manifest fallback (shipped activation lives in
+    # config/providers.yaml, which this manifest-level seam never sees).
     from follow_the_money.providers.manifest import load_all_manifests, manifest_to_provider_entry
 
     for pid, m in load_all_manifests().items():

@@ -9,7 +9,7 @@ providers:
   - { id: federal_reserve, enabled: true }
   - { id: bls, enabled: true }
   - { id: sec_edgar, enabled: true }
-  - { id: cftc, enabled: false, optional: true }
+  - { id: cftc, enabled: true, optional: true }
   - { id: pboc, enabled: true }
   - { id: nbs, enabled: true }
   - { id: sse, enabled: true }

@@ -607,6 +607,23 @@ def test_production_yahoo_planning_uses_only_verified_mappings():
     assert [adapter._role_id for adapter in planned["yahoo_market"]] == ["sp500"]
 
 
+def test_production_planning_includes_existing_cftc_adapter_exactly_once():
+    from follow_the_money.feed.cli import _production_adapters
+    from follow_the_money.providers.adapters import CftcAdapter, build_registry
+
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=True,
+    )
+    assert cfg.provider("cftc").enabled
+    planned = _production_adapters(cfg, build_registry({p.id: p for p in cfg.providers}))
+
+    assert len(planned["cftc"]) == 1
+    assert isinstance(planned["cftc"][0], CftcAdapter)
+
+
 def test_provider_snapshot_retains_mapping_audit_state():
     from follow_the_money.feed.cli import _provider_contract_snapshots
 
@@ -827,16 +844,24 @@ def test_disabled_provider_is_not_initialized(monkeypatch):
         manifest_root=DEFAULT_MANIFEST_ROOT,
         require_verified_enabled=True,
     )
+    from dataclasses import replace
+
     from follow_the_money.providers import adapters
 
     class DisabledAdapterMustNotInitialize:
         def __init__(self, *_args, **_kwargs):
             raise AssertionError("disabled Provider adapter was initialized")
 
-    assert not cfg.provider("cftc").enabled
+    # CFTC is activated in the shipped plan; disable it explicitly here to
+    # prove a disabled Provider never initializes its adapter.
+    disabled_cftc = replace(cfg.provider("cftc"), enabled=False)
+    providers = {
+        provider.id: (disabled_cftc if provider.id == "cftc" else provider)
+        for provider in cfg.providers
+    }
     monkeypatch.setattr(adapters, "CftcAdapter", DisabledAdapterMustNotInitialize)
 
-    registry = adapters.build_registry({provider.id: provider for provider in cfg.providers})
+    registry = adapters.build_registry(providers)
 
     assert "cftc" not in registry.ids()
 

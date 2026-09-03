@@ -2,7 +2,9 @@
 
 Proves that no mandatory v1 matrix row is silently weakened: every adapter
 without a verified contract and implementation stays disabled and cannot
-count as working coverage; CFTC stays verified-optional.
+count as working coverage; the verified CFTC adapter is activated in the
+shipped production plan while remaining non-mandatory (verified-optional)
+coverage.
 """
 
 from __future__ import annotations
@@ -68,6 +70,22 @@ def test_cftc_verified_optional_not_mandatory():
     assert "cftc" not in mandatory  # CFTC is verified-optional coverage
 
 
+def test_shipped_production_plan_enables_verified_cftc():
+    # The resolved production plan must plan the verified CFTC adapter while
+    # its optional/non-mandatory coverage status stays unchanged.
+    cfg = load_config(
+        DEFAULT_CONFIG,
+        DEFAULT_PROVIDERS,
+        manifest_root=DEFAULT_MANIFEST_ROOT,
+        require_verified_enabled=True,
+    )
+    cftc = cfg.provider("cftc")
+    assert cftc.enabled
+    assert cftc.verified
+    mandatory = {m for r in cfg.coverage.rows for m in r.members}
+    assert "cftc" not in mandatory
+
+
 def test_no_hidden_default_enablement():
     # Every mandatory matrix row must be backed by verified enabled members.
     cfg = load_config(
@@ -76,7 +94,7 @@ def test_no_hidden_default_enablement():
         manifest_root=DEFAULT_MANIFEST_ROOT,
         require_verified_enabled=True,
     )
-    assert not cfg.provider("cftc").enabled
+    assert cfg.provider("cftc").enabled  # activated; still outside every row
     for row in cfg.coverage.rows:
         enabled = [m for m in row.members if cfg.provider(m).enabled and cfg.provider(m).verified]
         assert len(enabled) >= row.minimum, f"{row.group}: insufficient verified coverage"
@@ -103,8 +121,8 @@ def test_manifest_charset_and_source_link_rules_present():
 
 
 def test_all_shipped_adapters_are_implemented():
-    # Every shipped provider has a concrete adapter; CFTC remains disabled by
-    # default because it is optional coverage.
+    # Every shipped provider — including the activated verified CFTC adapter —
+    # has a concrete adapter.
     from follow_the_money.providers.adapters import (
         BlsAdapter,
         CftcAdapter,

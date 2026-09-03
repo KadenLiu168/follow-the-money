@@ -69,14 +69,23 @@ def test_shipped_defaults_load_structure_without_enablement():
     assert len(cfg.scoring.asset_groups) == 9
     assert len(cfg.scoring.surprise_scales) == 3
     assert sum(cfg.scoring.significance_weights) == 100
-    # Verified core adapters are enabled; optional/unverified stay disabled.
+    # Verified adapters — including verified-optional CFTC — are enabled.
     assert all(
         p.enabled
         for p in cfg.providers
         if p.id
-        in ("federal_reserve", "bls", "sec_edgar", "pboc", "nbs", "sse", "szse", "yahoo_market")
+        in (
+            "federal_reserve",
+            "bls",
+            "sec_edgar",
+            "cftc",
+            "pboc",
+            "nbs",
+            "sse",
+            "szse",
+            "yahoo_market",
+        )
     )
-    assert not cfg.provider("cftc").enabled  # verified optional; disabled by default
     # v1 defaults
     assert cfg.feed.bootstrap_lookback_hours == 72
     assert cfg.feed.gap_threshold_hours == 72
@@ -272,6 +281,11 @@ def test_disabled_unverified_adapter_ok(tmp_path):
     manifest = _read_yaml(manifest_root / "cftc" / "manifest.yaml")
     manifest["verification"]["verified"] = False
     _write_yaml(manifest_root / "cftc" / "manifest.yaml", manifest)
+    providers = _read_yaml(providers_path)
+    for entry in providers["providers"]:
+        if entry["id"] == "cftc":
+            entry["enabled"] = False
+    _write_yaml(providers_path, providers)
     load_config(config_path, providers_path, manifest_root=manifest_root)  # OK
 
 
@@ -324,6 +338,9 @@ def test_coverage_row_disabled_member_rejected(tmp_path):
     config_path, providers_path, manifest_root = _copy_contracts(tmp_path)
     providers = _read_yaml(providers_path)
     providers["coverage"][0]["members"] = ["cftc"]
+    for entry in providers["providers"]:
+        if entry["id"] == "cftc":
+            entry["enabled"] = False
     _write_yaml(providers_path, providers)
     with pytest.raises(ConfigError, match="disabled"):
         load_config(config_path, providers_path, manifest_root=manifest_root)

@@ -118,14 +118,19 @@ def test_fixture_backed_run_produces_valid_healthy_feed(tmp_path):
     assert feed is not None
     validate_feed(feed)
     assert_feed_identity(feed)
-    # Every mandatory provider contributed accepted items.
+    # Every mandatory provider contributed accepted items. CFTC is the
+    # verified-optional weekly source: a bootstrap window falling between
+    # Friday reports is a contract-permitted complete empty.
     for o in feed["provider_outcomes"]:
+        if o["provider_id"] == "cftc":
+            assert o["state"] in ("healthy", "empty"), f"cftc: {o['error']}"
+            continue
         assert o["state"] == "healthy", f"{o['provider_id']}: {o['error']}"
         assert o["accepted"] > 0
     # Real fingerprints, not placeholders.
     assert feed["feed_config"]["hash"] != "0" * 64
     assert feed["feed_schema"]["sha256"] != "0" * 64
-    assert len(feed["provider_contracts"]) == 8
+    assert len(feed["provider_contracts"]) == 9
     # The manifest is the only active Feed entry point.
     assert (tmp_path / "out" / "feed-manifest.json").exists()
     assert not (tmp_path / "out" / "daily").exists()
