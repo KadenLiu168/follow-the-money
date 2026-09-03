@@ -219,7 +219,18 @@ def test_run_feed_separates_product_and_runtime_state_roots(tmp_path, monkeypatc
     )
 
     assert result.status == "healthy"
-    assert (product_root / "feed-manifest.json").is_file()
+    manifest = json.loads((product_root / "feed-manifest.json").read_bytes())
+    assert manifest["schema_version"] == 3
+    assert all(
+        set(outcome)
+        >= {
+            "availability",
+            "availability_reason",
+            "upstream_http_status",
+            "affected_coverage_groups",
+        }
+        for outcome in manifest["provider_outcomes"]
+    )
     assert not (product_root / "daily").exists()
     assert (runtime_root / ".collection.lock").is_file()
     assert (runtime_root / "rate-registry.json").is_file()

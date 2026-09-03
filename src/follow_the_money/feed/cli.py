@@ -51,7 +51,7 @@ from ..providers.lock import LOCK_FILENAME, CollectionLock, CollectionLockError
 from ..providers.manifest import ManifestError
 from ..providers.rate import RateRegistry, RateStateError, eligibility_delay, refill_tokens
 from ..schema import SchemaError
-from .bundle import BundleError, FeedBundle, build_bundle
+from .bundle import SUPPORTED_BUNDLE_MAJOR, BundleError, FeedBundle, build_bundle
 from .checkpoint import (
     CHECKPOINT_FILENAME,
     CheckpointError,
@@ -1178,7 +1178,7 @@ def _build_feed(
         serialized_outcomes.append(value)
 
     feed = {
-        "schema_version": 3,
+        "schema_version": SUPPORTED_BUNDLE_MAJOR,
         "run_id": "",  # recomputed below
         "window": {"start": plan.window_start, "end": plan.evidence_cutoff_at},
         "collection_started_at": fmt_utc(started_at),
