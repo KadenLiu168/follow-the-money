@@ -213,13 +213,14 @@ def test_run_feed_separates_product_and_runtime_state_roots(tmp_path, monkeypatc
     result = run_feed(
         output_root=str(product_root),
         runtime_state_root=str(runtime_root),
-        cutoff=_cutoff(),
+        cutoff=_cutoff().replace(microsecond=123456),
         providers_fn=lambda: registry,
         enabled_provider_ids=planned,
     )
 
     assert result.status == "healthy"
     manifest = json.loads((product_root / "feed-manifest.json").read_bytes())
+    assert manifest["evidence_cutoff_at"] == "2026-08-11T00:20:00.123Z"
     assert manifest["schema_version"] == 3
     assert all(
         set(outcome)

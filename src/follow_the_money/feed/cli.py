@@ -224,6 +224,7 @@ def run_feed(
         if lock is not None:
             lock.release()
         raise FeedInputError("cutoff must be timezone-aware")
+    cutoff = datetime.fromisoformat(fmt_utc(cutoff))
 
     checkpoint_path = state_root / CHECKPOINT_FILENAME
     if coordinates_run:
