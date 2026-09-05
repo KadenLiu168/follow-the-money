@@ -200,6 +200,132 @@ def _planned_provider_ids(cfg) -> list[str]:
     return [provider.id for provider in cfg.providers if provider.enabled]
 
 
+def _bundle_size(bundle) -> int:
+    return len(bundle.manifest_bytes) + sum(len(data) for data in bundle.artifact_bytes.values())
+
+
+def _with_size_limit(cfg, limit: int):
+    return replace(cfg, feed=replace(cfg.feed, max_serialized_feed_bytes=limit))
+
+
+@pytest.mark.parametrize("degraded", [False, True], ids=["healthy", "degraded"])
+def test_serialized_feed_size_boundary_is_inclusive_for_publishable_candidates(
+    tmp_path, monkeypatch, degraded
+):
+    from follow_the_money.feed import cli as feed_cli
+
+    cfg = _with_size_limit(_source_complete_cfg(), 50_000)
+    monkeypatch.setattr(feed_cli, "_load_app_config", lambda _path: cfg)
+    planned = _planned_provider_ids(cfg)
+    registry = {provider_id: _OutcomeAdapter() for provider_id in planned}
+    if degraded:
+        registry["bls"] = _OutcomeAdapter(error=FetchError("HTTP 403", status_code=403))
+
+    kwargs = {
+        "output_root": str(tmp_path / "out"),
+        "cutoff": _cutoff(),
+        "dry_run": True,
+        "providers_fn": lambda: registry,
+        "enabled_provider_ids": planned,
+    }
+    probe = run_feed(**kwargs)
+    assert probe.status == ("degraded" if degraded else "healthy")
+    candidate_size = _bundle_size(probe.bundle)
+    assert candidate_size < 50_000
+
+    for limit in (candidate_size - 1, candidate_size, candidate_size + 1):
+        monkeypatch.setattr(
+            feed_cli,
+            "_load_app_config",
+            lambda _path, limit=limit: _with_size_limit(cfg, limit),
+        )
+        if limit < candidate_size:
+            with pytest.raises(FeedExecutionError):
+                run_feed(**kwargs)
+        else:
+            result = run_feed(**kwargs)
+            assert result.status == ("degraded" if degraded else "healthy")
+
+
+def test_oversized_publishable_candidate_is_typed_failure_without_publication_or_checkpoint_change(
+    tmp_path, monkeypatch
+):
+    from follow_the_money.feed import cli as feed_cli
+
+    high_cfg = _with_size_limit(_source_complete_cfg(), 50_000)
+    monkeypatch.setattr(feed_cli, "_load_app_config", lambda _path: high_cfg)
+    planned = _planned_provider_ids(high_cfg)
+    registry = {provider_id: _OutcomeAdapter() for provider_id in planned}
+    candidate = run_feed(
+        output_root=str(tmp_path / "probe"),
+        cutoff=_cutoff().replace(hour=1),
+        dry_run=True,
+        providers_fn=lambda: registry,
+        enabled_provider_ids=planned,
+    )
+    candidate_size = _bundle_size(candidate.bundle)
+    limit = candidate_size - 1
+
+    output_root = tmp_path / "out"
+    runtime_root = tmp_path / "state"
+    baseline = run_feed(
+        output_root=str(output_root),
+        runtime_state_root=str(runtime_root),
+        cutoff=_cutoff(),
+        providers_fn=lambda: registry,
+        enabled_provider_ids=planned,
+    )
+    assert baseline.status == "healthy"
+    manifest_before = (output_root / "feed-manifest.json").read_bytes()
+    checkpoint_path = runtime_root / "feed-checkpoint.json"
+    checkpoint_before = checkpoint_path.read_bytes()
+
+    low_cfg = _with_size_limit(high_cfg, limit)
+    monkeypatch.setattr(feed_cli, "_load_app_config", lambda _path: low_cfg)
+    with pytest.raises(
+        FeedExecutionError,
+        match=rf"serialized Feed size {candidate_size} exceeds max_serialized_feed_bytes {limit}",
+    ):
+        run_feed(
+            output_root=str(output_root),
+            runtime_state_root=str(runtime_root),
+            cutoff=_cutoff().replace(hour=1),
+            providers_fn=lambda: registry,
+            enabled_provider_ids=planned,
+        )
+
+    assert (output_root / "feed-manifest.json").read_bytes() == manifest_before
+    assert checkpoint_path.read_bytes() == checkpoint_before
+
+
+def test_source_failure_diagnostics_precede_serialized_feed_size_limit(tmp_path, monkeypatch):
+    from follow_the_money.feed import cli as feed_cli
+
+    cfg = _with_size_limit(_source_complete_cfg(), 1)
+    monkeypatch.setattr(feed_cli, "_load_app_config", lambda _path: cfg)
+    planned = _planned_provider_ids(cfg)
+    registry = {
+        provider_id: _OutcomeAdapter(
+            error=RuntimeError("provider unavailable") if provider_id == "bls" else None
+        )
+        for provider_id in planned
+    }
+
+    result = run_feed(
+        output_root=str(tmp_path / "out"),
+        cutoff=_cutoff(),
+        providers_fn=lambda: registry,
+        enabled_provider_ids=planned,
+    )
+
+    assert result.status == "failure"
+    assert result.exit_code == 1
+    diagnostics = "\\n".join(result.warnings)
+    assert "bls" in diagnostics
+    assert "provider unavailable" in diagnostics
+    assert "source completeness failed" in result.message
+
+
 def test_run_feed_separates_product_and_runtime_state_roots(tmp_path, monkeypatch):
     from follow_the_money.feed import cli as feed_cli
 

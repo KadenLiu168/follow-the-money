@@ -567,6 +567,16 @@ def run_feed(
                 bundle=bundle,
             )
 
+        serialized_size = len(bundle.manifest_bytes) + sum(
+            len(data) for data in bundle.artifact_bytes.values()
+        )
+        if serialized_size > cfg.feed.max_serialized_feed_bytes:
+            raise FeedExecutionError(
+                "serialized Feed size "
+                f"{serialized_size} exceeds max_serialized_feed_bytes "
+                f"{cfg.feed.max_serialized_feed_bytes}"
+            )
+
         if dry_run:
             return FeedRunResult(
                 status=status, exit_code=0, feed=feed, warnings=warnings, bundle=bundle
