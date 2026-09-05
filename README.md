@@ -13,8 +13,10 @@ facts, rules, deterministic computation, and verifiability.
 
 ## What this repository is
 
-A Python 3.12 package whose live production path collects and publishes a
-schema-validated, identity-bearing evidence-only Feed: run identity, one fixed
+A Python 3.12 package whose hosted production path collects and publishes a
+schema-validated, identity-bearing evidence-only Feed, while normal Skill
+invocation consumes that published Feed from one commit-pinned `main` snapshot:
+run identity, one fixed
 evidence cutoff, per-item provider provenance, canonical digests, contract
 snapshots, and explicit per-Provider freshness and availability results. Concrete HTTP 401/403 source denials can be published as bounded degraded diagnostics; other Provider incompleteness remains fatal. Payload observation /
 effective time, source publication/update time, Provider retrieval/check time,
@@ -98,6 +100,7 @@ providers/        provider contract manifests and fixture provenance
 schemas/          JSON Schema 2020-12 contracts (logical Feed, typed bundle, Agent invocation)
 src/follow_the_money/  live Feed/Audit/Event paths plus retained deterministic libraries
 scripts/feed/     minimal internal Feed entry: follow-the-money-feed
+scripts/skill/    normal Skill entry: prepare-feed (remote-only consumer)
 feeds/            active Feed bundle (feed-manifest.json plus eight typed artifacts)
 .feed-state/      repository-backed lock, RateRegistry, lease, and checkpoint
 tests/            pytest suite (credential-free)
@@ -113,8 +116,9 @@ in [`docs/configuration.md`](docs/configuration.md).
 ```bash
 uv sync --frozen --all-groups
 uv run pytest            # full credential-free test suite
-uv run python -m follow_the_money.feed.cli --dry-run
-# or: scripts/feed/follow-the-money-feed --dry-run
+scripts/skill/prepare-feed       # normal Skill: canonical logical Feed on stdout
+# hosted/development/diagnostic/operator producer check:
+scripts/feed/follow-the-money-feed --dry-run
 ```
 
 ## Exit-code contract (minimal internal Feed entry)
@@ -126,13 +130,31 @@ uv run python -m follow_the_money.feed.cli --dry-run
 There is no public user-facing CLI product form: `brief`, `eval`, and
 `replay` subcommands and the standalone console script were removed.
 
+## Published Feed consumption
+
+Normal Skill invocation uses only `scripts/skill/prepare-feed`. It resolves
+`KadenLiu168/follow-the-money` `main` once through the public Git reference API,
+then retrieves `feeds/feed-manifest.json` and exactly its declared artifacts
+from that exact commit. Retrieval is credential-free, temporary, and does not
+write `feeds/` or `.feed-state/`; the logical Feed contains no transport
+metadata or consumer-age policy.
+
+The consumer accepts healthy and valid degraded bundles, preserves their exact
+warnings and Provider availability metadata, and rejects `pipeline.status:
+failure` or any invalid/incomplete bundle. A remote failure is terminal: there
+is no Provider collection, stale local substitution, partial evidence, or local fallback.
+The local producer remains available only for hosted Actions,
+development, tests, Provider diagnostics, and explicit operator execution.
+
 ## Scheduled Feed boundary
 
-GitHub Actions runs the credential-free Feed on `ubuntu-latest` at `20 0 * * *`
-(08:20 Asia/Shanghai), or through `workflow_dispatch`. It uses `feeds/` only
-for the current consumer bundle and `.feed-state/` for repository-backed
-runtime state. Consumers discover `feed-manifest.json` first; a fully validated
-`latest.json` is read only when the manifest is absent. The first invocation may perform a zero-Provider legacy migration
+GitHub Actions runs the credential-free Feed producer on `ubuntu-latest` at
+`20 0 * * *` (08:20 Asia/Shanghai), or through `workflow_dispatch`. It uses
+`feeds/` only for the current consumer bundle and `.feed-state/` for
+repository-backed runtime state. Normal Skill consumers use the separate
+commit-pinned remote entry above; they do not invoke Providers or local
+generation. The producer's local loader discovers `feed-manifest.json` first; a
+fully validated `latest.json` is read only when the manifest is absent. The first invocation may perform a zero-Provider legacy migration
 or bootstrap; normal arming and incomplete-run recovery use the recorded
 checkpoint and conservative lease boundary. `evidence_cutoff_at` is captured
 from actual runtime, not from the nominal schedule; retrieval and generation

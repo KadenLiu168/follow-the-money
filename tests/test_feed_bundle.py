@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from follow_the_money.canonical import canonical_bytes, canonical_digest, canonical_sha256
+from follow_the_money.feed import bundle as bundle_module
 from follow_the_money.feed.bundle import (
     DOMAINS,
     BundleError,
@@ -150,6 +151,28 @@ def test_split_emits_all_domains_and_reconstructs_identity(tmp_path: Path):
     assert reconstructed["items"] == feed["items"]
     assert reconstructed["content_digest"] == feed["content_digest"]
     assert reconstructed["run_id"] == feed["run_id"]
+
+
+def test_manifest_prevalidation_returns_ordered_safe_inventory_and_preserves_local_loading(
+    tmp_path: Path,
+):
+    bundle = build_bundle(_feed([_news()]))
+
+    manifest, paths = bundle_module.validate_manifest_and_inventory(bundle.manifest_bytes)
+
+    assert manifest == bundle.manifest
+    assert paths == tuple(entry["path"] for entry in bundle.manifest["artifacts"])
+    _write_bundle(tmp_path, bundle)
+    assert load_feed(tmp_path) == _feed([_news()])
+
+
+def test_manifest_prevalidation_rejects_unsafe_inventory_path():
+    bundle = build_bundle(_feed())
+    manifest = deepcopy(bundle.manifest)
+    manifest["artifacts"][0]["path"] = "../feed-news.json"
+
+    with pytest.raises(BundleError, match="artifact path"):
+        bundle_module.validate_manifest_and_inventory(canonical_bytes(manifest))
 
 
 def test_bundle_integrity_and_manifest_first_fallback(tmp_path: Path):

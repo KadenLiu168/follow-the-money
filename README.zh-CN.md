@@ -12,8 +12,10 @@ Agent 负责理解、推理与表达；`follow-the-money` 提供事实、规则�
 
 ## 这个仓库是什么
 
-一个 Python 3.12 包，当前 live production path 负责采集并发布 schema 校验、
-携带身份的纯证据 Feed：运行身份、单一固定证据截止时间、逐条 provider 来源、
+一个 Python 3.12 包：hosted production path 负责采集并发布 schema 校验、
+携带身份的纯证据 Feed；normal Skill invocation 只从 `main` 的一个
+commit-pinned snapshot 消费该已发布 Feed：
+运行身份、单一固定证据截止时间、逐条 provider 来源、
 规范摘要、契约快照与显式的 Provider freshness 和 availability 结果。具体 HTTP 401/403 source denial 可通过有界诊断以 degraded Feed 发布；其他 Provider incompleteness 仍为 fatal。payload observation /
 effective time、source publication/update time、Provider retrieval/check time 与
 Feed generation time 各自保持语义边界。只有在 acquisition 完整成功且 active
@@ -87,6 +89,7 @@ providers/       provider 契约 manifest 与 fixture 来源记录
 schemas/         JSON Schema 2020-12 契约（逻辑 Feed、typed bundle 与 Agent invocation）
 src/follow_the_money/  live Feed/Audit/Event 路径与保留的确定性库
 scripts/feed/    最小内部 Feed 入口：follow-the-money-feed
+scripts/skill/   normal Skill 入口：prepare-feed（仅 remote consumer）
 feeds/           当前 Feed bundle（feed-manifest.json 与八个 typed artifacts）
 .feed-state/     仓库持久化的 lock、RateRegistry、lease 与 checkpoint
 tests/           pytest 测试套件（无需凭据）
@@ -102,8 +105,9 @@ docs/            架构、契约、runbook
 ```bash
 uv sync --frozen --all-groups
 uv run pytest            # 全量免凭据测试
-uv run python -m follow_the_money.feed.cli --dry-run
-# 或：scripts/feed/follow-the-money-feed --dry-run
+scripts/skill/prepare-feed       # normal Skill：stdout 输出 canonical logical Feed
+# hosted/development/diagnostic/operator producer check：
+scripts/feed/follow-the-money-feed --dry-run
 ```
 
 ## 退出码契约（最小内部 Feed 入口）
@@ -115,12 +119,28 @@ uv run python -m follow_the_money.feed.cli --dry-run
 不存在公开的用户面向 CLI 产品形态：`brief`、`eval`、`replay` 子命令与
 独立 console script 均已移除。
 
+## 已发布 Feed 的消费
+
+Normal Skill invocation 只使用 `scripts/skill/prepare-feed`。它通过公开的
+Git reference API 将 `KadenLiu168/follow-the-money` 的 `main` 一次解析为
+一个 exact commit，然后只从该 commit 获取 `feeds/feed-manifest.json` 和
+manifest 声明的全部 artifacts。整个 remote consumption 无 token、无
+Provider credential、只使用 temporary storage，不写仓库的 `feeds/` 或
+`.feed-state/`，也不把 transport metadata 或 consumer-age policy 加入 logical Feed。
+
+健康和合法 degraded bundle 会原样保留 warnings 与 Provider availability
+metadata；`pipeline.status: failure` 及任何不完整/不合法 bundle 都会拒绝。
+Remote failure 必须终止 invocation：没有 Provider collection、stale local
+替换、partial evidence 或 local fallback。local producer 仍只供 hosted
+Actions、development、tests、Provider diagnostics 与显式 operator execution。
+
 ## 定时 Feed 边界
 
 GitHub Actions 使用 `ubuntu-latest` 在 `20 0 * * *`（Asia/Shanghai 08:20）
-运行免凭据 Feed，也支持 `workflow_dispatch`。`feeds/` 只保存当前 consumer bundle，
+运行免凭据 Feed producer，也支持 `workflow_dispatch`。`feeds/` 只保存当前 consumer bundle，
 `.feed-state/` 保存仓库持久 runtime state。consumer 优先发现并校验
-`feed-manifest.json`；只有 manifest 缺失时才读取通过完整校验的 `latest.json`。首次 invocation 可能执行零 Provider
+`feed-manifest.json`；normal Skill consumer 使用上面的 commit-pinned remote
+entry，不调用本地生成。producer 只有在 manifest 缺失时才读取通过完整校验的 `latest.json`。首次 invocation 可能执行零 Provider
 请求的 legacy migration 或 bootstrap；正常 arming 与未完成运行恢复使用记录的
 checkpoint 和 lease 保守边界。`evidence_cutoff_at` 取实际运行时刻，不取名义调度时刻。
 checkpoint 负责 runtime continuity；retrieval/generation timestamp 不会刷新旧的

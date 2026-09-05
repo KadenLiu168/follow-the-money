@@ -167,7 +167,7 @@ def _canonical_object(data: bytes, *, where: str) -> dict[str, Any]:
     return value
 
 
-def _safe_artifact_path(root: Path, relative: object, expected: str) -> Path:
+def _validated_artifact_relative_path(relative: object, expected: str) -> str:
     if not isinstance(relative, str) or relative != expected:
         raise BundleError("artifact path is not the canonical generation-qualified path")
     candidate_rel = Path(relative)
@@ -179,7 +179,12 @@ def _safe_artifact_path(root: Path, relative: object, expected: str) -> Path:
         or ".." in candidate_rel.parts
     ):
         raise BundleError("artifact path is unsafe")
-    candidate = (root / candidate_rel).resolve()
+    return relative
+
+
+def _safe_artifact_path(root: Path, relative: object, expected: str) -> Path:
+    relative = _validated_artifact_relative_path(relative, expected)
+    candidate = (root / relative).resolve()
     if not candidate.is_relative_to(root.resolve()):
         raise BundleError("artifact path escapes Feed product root")
     if not candidate.is_file():
@@ -187,9 +192,7 @@ def _safe_artifact_path(root: Path, relative: object, expected: str) -> Path:
     return candidate
 
 
-def _validate_inventory(
-    manifest: dict[str, Any], root: Path
-) -> list[tuple[str, Path, dict[str, Any]]]:
+def _validated_inventory_paths(manifest: dict[str, Any]) -> tuple[str, ...]:
     inventory = manifest.get("artifacts")
     if not isinstance(inventory, list) or len(inventory) != len(DOMAINS):
         raise BundleError("Feed manifest inventory must contain the exact fixed domain order")
@@ -197,18 +200,48 @@ def _validate_inventory(
         raise BundleError("Feed manifest artifact inventory entry is invalid")
     if [entry.get("domain") for entry in inventory] != list(DOMAINS):
         raise BundleError("Feed manifest inventory must contain the exact fixed domain order")
-    result: list[tuple[str, Path, dict[str, Any]]] = []
+    paths: list[str] = []
     seen: set[str] = set()
     for entry in inventory:
-        domain = entry.get("domain")
+        domain = entry["domain"]
         if domain in seen:
             raise BundleError(f"duplicate Feed artifact domain: {domain}")
         seen.add(domain)
         expected = artifact_relative_path(domain, manifest["run_id"])
-        path = _safe_artifact_path(root, entry.get("path"), expected)
-        result.append((domain, path, entry))
+        paths.append(_validated_artifact_relative_path(entry["path"], expected))
     if seen != set(DOMAINS):
         raise BundleError("Feed manifest inventory is incomplete")
+    return tuple(paths)
+
+
+def validate_manifest_and_inventory(
+    manifest_bytes: bytes, *, manifest: dict[str, Any] | None = None
+) -> tuple[dict[str, Any], tuple[str, ...]]:
+    """Validate manifest bytes before any manifest-declared artifact is opened."""
+    decoded = _canonical_object(manifest_bytes, where="Feed manifest")
+    if manifest is not None and decoded != manifest:
+        raise BundleError("provided manifest differs from manifest bytes")
+    manifest = decoded
+    try:
+        validate_against(MANIFEST_SCHEMA_FILENAME, manifest)
+    except SchemaError as exc:
+        raise BundleError(str(exc)) from exc
+    if manifest.get("schema_version") not in SUPPORTED_BUNDLE_MAJORS:
+        raise BundleError("unsupported Feed manifest schema version")
+    if manifest["window"]["end"] != manifest["evidence_cutoff_at"]:
+        raise BundleError("manifest window.end must equal evidence_cutoff_at")
+    return manifest, _validated_inventory_paths(manifest)
+
+
+def _validate_inventory(
+    manifest: dict[str, Any], root: Path, paths: tuple[str, ...]
+) -> list[tuple[str, Path, dict[str, Any]]]:
+    result: list[tuple[str, Path, dict[str, Any]]] = []
+    for entry, relative in zip(manifest["artifacts"], paths, strict=True):
+        domain = entry["domain"]
+        expected = artifact_relative_path(domain, manifest["run_id"])
+        path = _safe_artifact_path(root, relative, expected)
+        result.append((domain, path, entry))
     return result
 
 
@@ -226,20 +259,8 @@ def validate_bundle(
             manifest_bytes = path.read_bytes()
         except OSError as exc:
             raise BundleError(f"cannot read Feed manifest: {path}") from exc
-    decoded = _canonical_object(manifest_bytes, where="Feed manifest")
-    if manifest is not None and decoded != manifest:
-        raise BundleError("provided manifest differs from manifest bytes")
-    manifest = decoded
-    try:
-        validate_against(MANIFEST_SCHEMA_FILENAME, manifest)
-    except SchemaError as exc:
-        raise BundleError(str(exc)) from exc
-    if manifest.get("schema_version") not in SUPPORTED_BUNDLE_MAJORS:
-        raise BundleError("unsupported Feed manifest schema version")
-    if manifest["window"]["end"] != manifest["evidence_cutoff_at"]:
-        raise BundleError("manifest window.end must equal evidence_cutoff_at")
-
-    entries = _validate_inventory(manifest, root)
+    manifest, paths = validate_manifest_and_inventory(manifest_bytes, manifest=manifest)
+    entries = _validate_inventory(manifest, root, paths)
     all_items: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     for domain, artifact_path_value, inventory_entry in entries:

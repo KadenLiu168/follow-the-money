@@ -20,6 +20,23 @@ contains only `schema_version`, `run_id`, `domain`, and `items`. Items retain
 the existing `feed.schema.json` payload shapes and are routed solely by
 `payload.type`; Provider identity does not affect routing.
 
+## Commit-pinned normal consumption
+
+Normal Skill invocation uses `scripts/skill/prepare-feed`, not the local Feed
+producer. It resolves `KadenLiu168/follow-the-money` branch `main` once to one
+exact commit, retrieves `feeds/feed-manifest.json`, validates its complete
+ordered inventory, and retrieves exactly those artifacts from that same commit.
+The consumer uses temporary storage and emits the existing logical Feed; it
+does not require a token or Provider credential and does not mutate `feeds/` or
+`.feed-state/`.
+
+Healthy and valid degraded bundles are consumable with their warnings and
+Provider availability metadata unchanged. A remote failure or invalid bundle
+is terminal: there is no Provider collection, partial evidence, stale local
+substitution, or local fallback. The local producer remains available only for
+hosted Actions, development, tests, Provider diagnostics, and explicit
+operator execution.
+
 The manifest contains the logical Feed metadata, producer/configuration and
 Provider contract snapshots, Provider outcomes, pipeline result, logical
 `feed_schema` descriptor, physical `bundle_schemas` descriptors, and the exact
@@ -95,12 +112,14 @@ provenance, and a reconstructed Feed whose digest and `run_id` recompute
 exactly. Missing, extra, duplicate, reordered, corrupt, mixed-generation,
 traversal, or identity-invalid state is not consumable.
 
-Consumers first check `feed-manifest.json`. If it exists, any manifest or
-artifact error is terminal and `latest.json` is never used as fallback. Only
-when the manifest is absent may a supported, fully validated legacy
-`latest.json` be read. Healthy bundles are accepted; degraded bundles are
-accepted with warnings; `pipeline.status: failure` is rejected. Freshness and
-calendar-horizon checks remain the existing engine boundary checks.
+The complete local bundle loader first checks `feed-manifest.json`. If it exists,
+any manifest or artifact error is terminal and `latest.json` is never used as
+fallback. Only when the manifest is absent may a supported, fully validated
+legacy `latest.json` be read. The normal commit-pinned remote consumer always
+retrieves a manifest and therefore has no local fallback. Healthy bundles are
+accepted; degraded bundles are accepted with warnings; `pipeline.status:
+failure` is rejected. Freshness and calendar-horizon checks remain the existing
+engine boundary checks.
 
 ## Cutoff, ordering, and health
 
@@ -150,6 +169,9 @@ authority and does not reinterpret `latest.json`.
 
 ## Minimal internal Feed entry
 
+Normal Skill consumption uses `scripts/skill/prepare-feed` and emits canonical
+logical Feed JSON on stdout; its source and branch are closed, and it accepts
+no producer or configuration options. The local producer
 `python -m follow_the_money.feed.cli` (also
 `scripts/feed/follow-the-money-feed`) accepts explicit config/product/runtime
 roots, dry-run, and fixture clocks/windows. Exit codes remain:

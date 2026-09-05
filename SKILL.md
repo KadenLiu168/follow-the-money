@@ -11,11 +11,16 @@ description: |
 
 # Follow the Money — Skill Orchestration Contract
 
-This Skill uses the local repository's minimal internal Feed entry and its
-separate private on-demand Audit and Event Structuring invocation boundary. The
-Feed entry owns network access and deterministic Feed collection and processing;
-the private boundary invokes only the explicitly addressed deterministic Audit
-or Event Structuring operation. Within the
+Normal Skill invocation uses `scripts/skill/prepare-feed` to consume the
+credential-free published Feed from `KadenLiu168/follow-the-money` `main`. It
+resolves that branch once to one exact commit, retrieves the manifest and its
+declared artifacts from that commit, validates them in temporary storage, and
+emits the existing logical Feed. It never invokes the local producer or uses a
+local fallback. GitHub Actions owns the producer path; the Skill also retains
+its separate private on-demand Audit and Event Structuring invocation boundary.
+The producer owns network access and deterministic Feed collection and
+processing; the private boundary invokes only the explicitly addressed
+deterministic Audit or Event Structuring operation. Within the
 Skill boundary, the deterministic engine is an internal responsibility layer for
 accepted typed/domain invariants, transformations, calculations, canonicalization,
 ordering, and capability-local validation—not a third participant or an
@@ -134,11 +139,16 @@ to any submitted text as a deterministic safety check.
   produce a bounded degraded Feed without prior-slice carry-forward; other
   incomplete Provider work remains fatal.
 
+The local producer entry `scripts/feed/follow-the-money-feed` is an explicitly
+operated surface for hosted Actions, development, tests, Provider diagnostics,
+and operator runs. It is not the normal Skill caller, and a remote failure is
+terminal rather than a local fallback.
+
 ## Live path
 
 ```text
-scripts/feed/follow-the-money-feed      # evidence-only Feed, deterministic,
-                                        # credential-free, no LLM anywhere
+scripts/skill/prepare-feed              # consume one commit-pinned published
+                                        # Feed, credential-free, no LLM anywhere
   -> host Agent: analyze the evidence and write the research digest
 ```
 
@@ -151,15 +161,20 @@ scripts/feed/follow-the-money-feed      # evidence-only Feed, deterministic,
 ## Daily flow (scheduled or /money)
 
 1. **Feed**: GitHub Actions publishes the current `feeds/feed-manifest.json`
-   and its eight typed artifacts, or run
-   `scripts/feed/follow-the-money-feed` locally. Exit 0 with healthy or degraded
-   Feed; warnings are on stderr and in status. A Feed failure means no digest
-   should be produced from it.
-2. **Evidence**: read and validate `feeds/feed-manifest.json`, then the
-   inventoried typed artifact. Only a manifest-absent migration state may use
-   `feeds/latest.json`. Every item carries source provenance;
-   the window, cutoff, and run identity are authoritative. Runtime continuity is
-   owned by the checkpoint; Git history is repository history only, not a
+   and its eight typed artifacts. Normal Skill invocation runs
+   `scripts/skill/prepare-feed`, which resolves `main` once and consumes the
+   complete manifest-led bundle from that pinned commit. It emits the
+   healthy/degraded logical Feed on stdout; warnings and remote failure
+   diagnostics are on stderr. A remote failure stops the invocation: there is
+   no Provider collection, local producer, stale Feed, partial evidence, or
+   local fallback.
+2. **Evidence**: the commit-pinned consumer validates the canonical manifest,
+   exact ordered inventory, every artifact, integrity, identity, provenance,
+   Provider availability, and pipeline status in temporary storage, then emits
+   only the existing logical Feed. Retrieval and commit time do not refresh
+   evidence timestamps. Every item carries source provenance; the window,
+   cutoff, and run identity are authoritative. Runtime continuity remains owned
+   by the producer checkpoint; Git history is repository history only, not a
    historical Feed query API.
 3. **Analysis**: the host Agent analyzes the evidence and writes the digest,
    citing the relevant Feed items. The private boundary is available only when
