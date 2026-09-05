@@ -106,6 +106,21 @@ def test_consumer_pins_manifest_and_every_declared_artifact_to_one_commit():
     assert all("/main/feeds/" not in url for url in raw_calls)
 
 
+def test_consumer_accepts_valid_artifact_larger_than_legacy_10_mib_limit():
+    remote = _remote_module()
+    item = _news()
+    item["payload"]["raw_metadata"] = {"padding": "x" * (10 * 1024 * 1024)}
+    feed = _feed([item])
+    feed["content_digest"], feed["run_id"] = recompute_feed_identity(feed)
+    bundle = build_bundle(feed)
+    calls: list[str] = []
+
+    assert bundle.manifest["artifacts"][0]["size_bytes"] > 10 * 1024 * 1024
+    assert bundle.manifest["artifacts"][0]["size_bytes"] < 50 * 1024 * 1024
+    with _client_for_bundle(bundle, remote, calls) as client:
+        assert remote.consume_published_feed(client=client) == feed
+
+
 def test_consumer_source_constants_are_closed_and_manifest_drives_discovery():
     remote = _remote_module()
 

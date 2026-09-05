@@ -25,6 +25,18 @@ def test_normal_skill_caller_graph_is_commit_pinned_remote_only():
     assert "scripts/feed/follow-the-money-feed locally" not in normal
 
 
+def test_skill_describes_normal_invocation_as_credential_free_feed_consumption():
+    skill = (REPO_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    lowered = skill.lower()
+
+    assert "collect the evidence feed" not in lowered
+    assert "retrieve" in lowered
+    assert "consume" in lowered
+    assert "scripts/skill/prepare-feed" in skill
+    assert "no github token" in lowered
+    assert "no provider credentials" in lowered
+
+
 def test_all_changed_docs_name_remote_entry_and_retain_explicit_local_boundary():
     for path in DOCUMENTATION:
         text = path.read_text(encoding="utf-8")

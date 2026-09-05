@@ -31,7 +31,6 @@ DISCOVERY_URL = (
 REMOTE_TIMEOUT_SECONDS = 20.0
 DISCOVERY_MAX_BYTES = 64 * 1024
 MANIFEST_MAX_BYTES = 1024 * 1024
-ARTIFACT_MAX_BYTES = 10 * 1024 * 1024
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
@@ -133,10 +132,6 @@ def consume_published_feed(*, client: Any | None = None) -> dict[str, Any]:
             (product_root / MANIFEST_FILENAME).write_bytes(manifest_bytes)
             for entry, relative_path in zip(manifest["artifacts"], paths, strict=True):
                 size_bytes = entry["size_bytes"]
-                if size_bytes > ARTIFACT_MAX_BYTES:
-                    raise FeedRemoteError(
-                        f"Feed artifact {entry['domain']} exceeds {ARTIFACT_MAX_BYTES} bytes"
-                    )
                 data = _read_response(
                     client,
                     _raw_url(commit_sha, relative_path),

@@ -80,9 +80,10 @@ family does not add or require a production caller.
 
 The host Agent is expected to:
 
-1. Collect the evidence Feed (below), then
+1. Retrieve and consume the validated published Feed through
+   `scripts/skill/prepare-feed`.
 2. Perform the financial analysis and produce the research digest itself,
-   grounding factual claims in the Feed's evidence and provenance.
+   grounding factual claims in the validated Feed's evidence and provenance.
 
 Do not invent future Agent objects, schemas, stages, ordering, or placeholder
 wiring in the meantime.
@@ -188,12 +189,16 @@ If a required non-exempt step fails, surface the exact stderr and stop. A
 validated wholly blocked HTTP 401/403 Provider is an explicit degraded Feed
 warning, not a hidden success. Partial output is worse than no output.
 
-## Credentials
+## Credentials and Network
 
-None. The Feed needs no credential, model, or network configuration beyond
-the configured providers.
+Normal Skill consumption requires no GitHub token and no Provider credentials.
+It requires network access only to the canonical public GitHub endpoints used
+to resolve the pinned commit and retrieve the published Feed bundle.
 
-Configuration ownership is explicit: application values come from
+The hosted/local Feed producer retains its existing credential-free Provider
+contract and configuration semantics.
+
+Producer configuration ownership is explicit: application values come from
 `config/config.yaml`, Provider contract facts come from the owning
 `providers/<provider_id>/manifest.yaml`, and enablement/coverage come from
 `config/providers.yaml`; the Feed resolves one Provider contract before
