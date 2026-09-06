@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import importlib
 import inspect
 import json
@@ -31,8 +32,10 @@ def _client_for_payloads(
     artifact_bytes: dict[str, bytes],
     *,
     failures: dict[str, object] | None = None,
+    response_headers: dict[str, dict[str, str]] | None = None,
 ):
     failures = failures or {}
+    response_headers = response_headers or {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         url = str(request.url)
@@ -47,9 +50,19 @@ def _client_for_payloads(
         if isinstance(failure, int):
             return httpx.Response(failure, request=request)
         if relative == "feed-manifest.json":
-            return httpx.Response(200, content=manifest_bytes, request=request)
+            return httpx.Response(
+                200,
+                headers=response_headers.get(relative),
+                content=manifest_bytes,
+                request=request,
+            )
         if relative in artifact_bytes:
-            return httpx.Response(200, content=artifact_bytes[relative], request=request)
+            return httpx.Response(
+                200,
+                headers=response_headers.get(relative),
+                content=artifact_bytes[relative],
+                request=request,
+            )
         raise AssertionError(f"unexpected Feed path: {relative}")
 
     return httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=False)
@@ -91,6 +104,57 @@ def test_consumer_retrieves_manifest_first_under_canonical_main_root():
         "feed-manifest.json",
         *(entry["path"] for entry in bundle.manifest["artifacts"]),
     ]
+
+
+def test_consumer_accepts_gzip_artifact_when_wire_length_exceeds_decoded_size():
+    remote = _remote_module()
+    bundle = build_bundle(_feed([_news()]))
+    target = next(
+        entry for entry in bundle.manifest["artifacts"] if entry["domain"] == "macro_release"
+    )
+    encoded = gzip.compress(bundle.artifact_bytes[target["domain"]], compresslevel=0, mtime=0)
+    calls: list[str] = []
+
+    assert len(encoded) > target["size_bytes"]
+    manifest_bytes, artifacts = _payloads(bundle)
+    artifacts[target["path"]] = encoded
+    with _client_for_payloads(
+        remote,
+        calls,
+        manifest_bytes,
+        artifacts,
+        response_headers={
+            target["path"]: {
+                "Content-Encoding": "gzip",
+                "Content-Length": str(len(encoded)),
+            }
+        },
+    ) as client:
+        feed = remote.consume_published_feed(client=client)
+
+    assert feed == _feed([_news()])
+
+
+def test_consumer_rejects_gzip_artifact_when_decoded_size_exceeds_manifest():
+    remote = _remote_module()
+    bundle = build_bundle(_feed([_news()]))
+    target = bundle.manifest["artifacts"][0]
+    oversized = bundle.artifact_bytes[target["domain"]] + b"x"
+    encoded = gzip.compress(oversized, mtime=0)
+    assert len(encoded) <= target["size_bytes"] < len(oversized)
+    manifest_bytes, artifacts = _payloads(bundle, overrides={target["path"]: encoded})
+
+    with (
+        _client_for_payloads(
+            remote,
+            [],
+            manifest_bytes,
+            artifacts,
+            response_headers={target["path"]: {"Content-Encoding": "gzip"}},
+        ) as client,
+        pytest.raises(remote.FeedRemoteError, match="response exceeds"),
+    ):
+        remote.consume_published_feed(client=client)
 
 
 def test_consumer_accepts_valid_artifact_larger_than_legacy_10_mib_limit():

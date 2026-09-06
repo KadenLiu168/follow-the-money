@@ -49,14 +49,16 @@ def _read_response(
             _response_url(response, url, where)
             if response.status_code < 200 or response.status_code >= 300:
                 raise FeedRemoteError(f"{where}: HTTP {response.status_code}")
-            content_length = response.headers.get("content-length")
-            if content_length is not None:
-                try:
-                    declared_size = int(content_length)
-                except ValueError as exc:
-                    raise FeedRemoteError(f"{where}: invalid Content-Length") from exc
-                if declared_size > max_bytes:
-                    raise FeedRemoteError(f"{where}: response exceeds {max_bytes} bytes")
+            content_encoding = response.headers.get("content-encoding", "").strip().lower()
+            if content_encoding in {"", "identity"}:
+                content_length = response.headers.get("content-length")
+                if content_length is not None:
+                    try:
+                        declared_size = int(content_length)
+                    except ValueError as exc:
+                        raise FeedRemoteError(f"{where}: invalid Content-Length") from exc
+                    if declared_size > max_bytes:
+                        raise FeedRemoteError(f"{where}: response exceeds {max_bytes} bytes")
             chunks: list[bytes] = []
             size = 0
             for chunk in response.iter_bytes():
