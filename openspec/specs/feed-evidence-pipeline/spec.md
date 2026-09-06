@@ -630,17 +630,38 @@ For an otherwise publishable healthy or degraded candidate, serialized Feed size
 - **WHEN** planned source work has non-exempt incompleteness
 - **THEN** the producer command preserves deterministic Provider diagnostics, exits `1`, and does not admit a bundle to publication or replace that failure with the publishable-candidate size check
 
+### Requirement: Canonical published Feed is consumed directly from the canonical main branch
+Normal Skill Feed consumption SHALL retrieve `feeds/feed-manifest.json` directly from branch `main` of the public repository `KadenLiu168/follow-the-money` through `raw.githubusercontent.com`, then SHALL retrieve every Feed artifact from the same canonical repository, branch, and `feeds/` root. It SHALL perform no GitHub REST API request, SHALL NOT resolve or require a Git commit SHA, and SHALL require no GitHub token or Provider credential.
+
+The validated manifest SHALL remain the only authoritative bundle entry point. The consumer SHALL retrieve exactly the artifact paths declared by its validated ordered inventory and SHALL NOT infer filenames, maintain another domain-to-path registry, enumerate the remote `feeds/` directory, use Git history as a Feed query API, or substitute a different repository, branch, or product root. Integrity and semantic validation SHALL remain authoritative across the mutable-branch read window; if branch movement or any other remote condition yields an unavailable, mixed-generation, inconsistent, or otherwise invalid bundle, consumption SHALL fail closed without retrying against another source or exposing evidence.
+
+#### Scenario: Published Feed is retrieved without GitHub API discovery
+- **WHEN** normal Skill consumption begins
+- **THEN** its first remote request retrieves `feeds/feed-manifest.json` from the canonical repository's `main` branch on `raw.githubusercontent.com`, and the invocation makes zero requests to `api.github.com`
+
+#### Scenario: Manifest declares the artifact inventory
+- **WHEN** the canonical-main manifest is accepted for retrieval
+- **THEN** only its exact validated inventory paths are requested under the same canonical `main/feeds/` root and no remote directory enumeration or independently derived artifact path is used
+
+#### Scenario: Main advances during one invocation
+- **WHEN** repository `main` advances between manifest and artifact retrieval and the returned files no longer form the complete manifest-declared bundle
+- **THEN** size, digest, schema, generation, or semantic identity validation rejects the invocation and no partial logical Feed is exposed
+
+#### Scenario: Canonical raw retrieval fails
+- **WHEN** the canonical-main manifest or any declared artifact is rate-limited, unavailable, redirected, times out, returns an HTTP error, or otherwise cannot be retrieved under the existing bounded transport contract
+- **THEN** consumption fails closed with a precise retrieval failure and does not query the GitHub REST API or another source
+
 ### Requirement: Feed bundle consumption rejects invalid or failed products
 The consumer health boundary SHALL first validate canonical manifest bytes and the complete ordered safe inventory before using it for local or remote artifact discovery. It SHALL then validate every required artifact and its integrity, reconstruct the logical Feed, and apply the existing structural, identity, Provider freshness, pipeline, warning, provenance, and calendar-horizon semantics through the same semantic authority used for repository-local bundles. It SHALL accept healthy bundles, accept degraded bundles while preserving exact warnings and Provider availability metadata, and reject `pipeline.status = failure`. A consumer needing one domain MAY parse only that domain's evidence after validating hashes and required existence for the complete inventory.
 
-Remote consumption SHALL NOT reinterpret retrieval time, invocation time, or Git commit time as evidence freshness, source publication time, or Provider availability. It SHALL NOT add a consumer-level maximum Feed age, contact Providers to verify a degraded outcome, carry forward evidence, substitute another source, or add remote transport metadata to the logical Feed schema or identity.
+Remote consumption SHALL NOT reinterpret retrieval time or invocation time as evidence freshness, source publication time, or Provider availability. It SHALL NOT add a consumer-level maximum Feed age, contact Providers to verify a degraded outcome, carry forward evidence, substitute another source, or add remote transport metadata to the logical Feed schema or identity.
 
 #### Scenario: Healthy bundle is consumed
-- **WHEN** a complete valid local or commit-pinned remote bundle is healthy and satisfies the existing embedded Feed semantics
+- **WHEN** a complete valid local or canonical-main remote bundle is healthy and satisfies the existing embedded Feed semantics
 - **THEN** the consumer accepts it and can select evidence by manifest domain inventory
 
 #### Scenario: Degraded bundle is consumed
-- **WHEN** a complete valid local or commit-pinned remote bundle is degraded and satisfies the existing embedded Feed semantics
+- **WHEN** a complete valid local or canonical-main remote bundle is degraded and satisfies the existing embedded Feed semantics
 - **THEN** the consumer accepts it and preserves manifest pipeline warnings and Provider availability metadata without contacting a Provider
 
 #### Scenario: Structurally valid failure bundle is presented
@@ -648,34 +669,13 @@ Remote consumption SHALL NOT reinterpret retrieval time, invocation time, or Git
 - **THEN** the consumer rejects it as non-consumable
 
 #### Scenario: Retrieval occurs after publication
-- **WHEN** invocation time, retrieval time, or pinned commit time is later than the Feed's source-semantic timestamps
+- **WHEN** invocation time or retrieval time is later than the Feed's source-semantic timestamps
 - **THEN** those transport times do not replace or refresh `evidence_cutoff_at`, collection timestamps, Provider freshness, source publication time, or evidence identity
-
-### Requirement: Canonical published Feed is consumed from one commit-pinned snapshot
-Normal Skill Feed consumption SHALL resolve branch `main` of the public repository `KadenLiu168/follow-the-money` to one exact Git commit before retrieving Feed products. After resolution succeeds, that invocation SHALL retrieve `feeds/feed-manifest.json` and every Feed artifact from that immutable commit only; it SHALL NOT resolve the branch again or use a mutable branch URL for any bundle file. Commit discovery and Feed retrieval SHALL require no GitHub token or Provider credential.
-
-The pinned manifest SHALL remain the only authoritative bundle entry point. The consumer SHALL retrieve exactly the artifact paths declared by its validated ordered inventory and SHALL NOT infer filenames, maintain another domain-to-path registry, enumerate the remote `feeds/` directory, or use Git history as a Feed query API.
-
-#### Scenario: Published Feed is pinned before retrieval
-- **WHEN** canonical branch discovery returns a valid exact commit and its pinned manifest declares a complete safe artifact inventory
-- **THEN** the manifest and every artifact request use that same exact commit and the reconstructed logical Feed is associated with no mutable-branch read window
-
-#### Scenario: Branch changes during one invocation
-- **WHEN** repository `main` advances after an invocation has resolved its commit
-- **THEN** that invocation continues to retrieve every bundle file from the already resolved commit and does not switch generations
-
-#### Scenario: Manifest declares the artifact inventory
-- **WHEN** a pinned manifest is accepted for retrieval
-- **THEN** only its exact validated inventory paths are requested and no remote directory enumeration or independently derived artifact path is used
-
-#### Scenario: Canonical commit cannot be resolved
-- **WHEN** commit discovery fails, is rate-limited, returns an HTTP error, times out, or returns an invalid commit response
-- **THEN** consumption fails closed with a precise retrieval failure and exposes no Feed
 
 ### Requirement: Normal Skill consumption never becomes Feed production
 Normal Skill invocation SHALL use one minimal internal remote Feed consumer entry and SHALL NOT invoke Provider adapters, the local Feed producer, hosted deployment machinery, rate state, checkpoint, lease, or collection locks. The existing minimal local Feed producer SHALL remain available only for GitHub Actions, development, tests, Provider diagnostics, and explicit operator execution; its production, dry-run, state, diagnostics, and exit behavior SHALL remain unchanged.
 
-Remote discovery, transport, validation, or consumability failure SHALL stop the invocation. It SHALL NOT fall back to local Provider collection, repository-local `feeds/` or `latest.json`, another repository, another branch or commit, a persistent cache, or any partially retrieved evidence. Remote consumption SHALL use temporary isolated storage only and SHALL leave repository `feeds/`, `.feed-state/`, and other persistent Feed state unchanged.
+Remote retrieval, transport, validation, or consumability failure SHALL stop the invocation. It SHALL NOT fall back to local Provider collection, repository-local `feeds/` or `latest.json`, another repository, another branch or commit, a persistent cache, or any partially retrieved evidence. Remote consumption SHALL use temporary isolated storage only and SHALL leave repository `feeds/`, `.feed-state/`, and other persistent Feed state unchanged.
 
 #### Scenario: Remote retrieval fails
 - **WHEN** any required remote operation exhausts its permitted bounded attempt or returns an unusable response
@@ -690,7 +690,7 @@ Remote discovery, transport, validation, or consumability failure SHALL stop the
 - **THEN** the producer retains its existing behavior independently of the normal Skill remote consumer entry
 
 #### Scenario: Remote consumption completes
-- **WHEN** a complete pinned healthy or degraded bundle is retrieved and accepted
+- **WHEN** a complete canonical-main healthy or degraded bundle is retrieved and accepted
 - **THEN** temporary files are removed after the validated logical Feed is emitted and repository Feed products and runtime state remain unchanged
 
 ### Requirement: Deterministic Feed aggregation and normalization

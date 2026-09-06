@@ -12,12 +12,13 @@ description: |
 # Follow the Money — Skill Orchestration Contract
 
 Normal Skill invocation uses `scripts/skill/prepare-feed` to consume the
-credential-free published Feed from `KadenLiu168/follow-the-money` `main`. It
-resolves that branch once to one exact commit, retrieves the manifest and its
-declared artifacts from that commit, validates them in temporary storage, and
-emits the existing logical Feed. It never invokes the local producer or uses a
-local fallback. GitHub Actions owns the producer path; the Skill also retains
-its separate private on-demand Audit and Event Structuring invocation boundary.
+credential-free published Feed from the canonical
+`raw.githubusercontent.com/KadenLiu168/follow-the-money/main/feeds/` root. It
+retrieves the manifest first and then its declared artifacts, validates them in
+temporary storage, and emits the existing logical Feed. It makes zero GitHub
+REST API requests, never invokes the local producer, and never uses a local
+fallback. GitHub Actions owns the producer path; the Skill also retains its
+separate private on-demand Audit and Event Structuring invocation boundary.
 The producer owns network access and deterministic Feed collection and
 processing; the private boundary invokes only the explicitly addressed
 deterministic Audit or Event Structuring operation. Within the
@@ -148,8 +149,8 @@ terminal rather than a local fallback.
 ## Live path
 
 ```text
-scripts/skill/prepare-feed              # consume one commit-pinned published
-                                        # Feed, credential-free, no LLM anywhere
+scripts/skill/prepare-feed              # consume canonical-main published Feed
+                                        # credential-free, no LLM anywhere
   -> host Agent: analyze the evidence and write the research digest
 ```
 
@@ -163,16 +164,17 @@ scripts/skill/prepare-feed              # consume one commit-pinned published
 
 1. **Feed**: GitHub Actions publishes the current `feeds/feed-manifest.json`
    and its eight typed artifacts. Normal Skill invocation runs
-   `scripts/skill/prepare-feed`, which resolves `main` once and consumes the
-   complete manifest-led bundle from that pinned commit. It emits the
+   `scripts/skill/prepare-feed`, which retrieves the complete manifest-led
+   bundle directly from the canonical
+   `raw.githubusercontent.com/KadenLiu168/follow-the-money/main/feeds/` raw root. It emits the
    healthy/degraded logical Feed on stdout; warnings and remote failure
    diagnostics are on stderr. A remote failure stops the invocation: there is
    no Provider collection, local producer, stale Feed, partial evidence, or
    local fallback.
-2. **Evidence**: the commit-pinned consumer validates the canonical manifest,
-   exact ordered inventory, every artifact, integrity, identity, provenance,
-   Provider availability, and pipeline status in temporary storage, then emits
-   only the existing logical Feed. Retrieval and commit time do not refresh
+2. **Evidence**: the canonical-main consumer validates the canonical
+   manifest, exact ordered inventory, every artifact, integrity, identity,
+   provenance, Provider availability, and pipeline status in temporary storage,
+   then emits only the existing logical Feed. Retrieval time does not refresh
    evidence timestamps. Every item carries source provenance; the window,
    cutoff, and run identity are authoritative. Runtime continuity remains owned
    by the producer checkpoint; Git history is repository history only, not a
@@ -192,8 +194,8 @@ warning, not a hidden success. Partial output is worse than no output.
 ## Credentials and Network
 
 Normal Skill consumption requires no GitHub token and no Provider credentials.
-It requires network access only to the canonical public GitHub endpoints used
-to resolve the pinned commit and retrieve the published Feed bundle.
+It requires network access only to the canonical public raw GitHub endpoint used
+to retrieve the published Feed bundle and makes zero GitHub REST API requests.
 
 The hosted/local Feed producer retains its existing credential-free Provider
 contract and configuration semantics.

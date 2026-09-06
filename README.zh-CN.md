@@ -13,8 +13,8 @@ Agent 负责理解、推理与表达；`follow-the-money` 提供事实、规则�
 ## 这个仓库是什么
 
 一个 Python 3.12 包：hosted production path 负责采集并发布 schema 校验、
-携带身份的纯证据 Feed；normal Skill invocation 只从 `main` 的一个
-commit-pinned snapshot 消费该已发布 Feed：
+携带身份的纯证据 Feed；normal Skill invocation 直接从 `main/feeds/` 的 canonical raw root
+消费该已发布 Feed：
 运行身份、单一固定证据截止时间、逐条 provider 来源、
 规范摘要、契约快照与显式的 Provider freshness 和 availability 结果。具体 HTTP 401/403 source denial 可通过有界诊断以 degraded Feed 发布；其他 Provider incompleteness 仍为 fatal。payload observation /
 effective time、source publication/update time、Provider retrieval/check time 与
@@ -121,12 +121,13 @@ scripts/feed/follow-the-money-feed --dry-run
 
 ## 已发布 Feed 的消费
 
-Normal Skill invocation 只使用 `scripts/skill/prepare-feed`。它通过公开的
-Git reference API 将 `KadenLiu168/follow-the-money` 的 `main` 一次解析为
-一个 exact commit，然后只从该 commit 获取 `feeds/feed-manifest.json` 和
-manifest 声明的全部 artifacts。整个 remote consumption 无 token、无
-Provider credential、只使用 temporary storage，不写仓库的 `feeds/` 或
-`.feed-state/`，也不把 transport metadata 或 consumer-age policy 加入 logical Feed。
+Normal Skill invocation 只使用 `scripts/skill/prepare-feed`。它首先从
+`raw.githubusercontent.com/KadenLiu168/follow-the-money/main/feeds/` 获取
+`feeds/feed-manifest.json`，再从同一 canonical raw root 获取 manifest 声明的
+全部 artifacts。整个 remote consumption 无 token、无 Provider credential、
+不发出 GitHub REST API request，只使用 temporary storage，不写仓库的
+`feeds/` 或 `.feed-state/`，也不把 transport metadata 或 consumer-age policy
+加入 logical Feed。
 
 健康和合法 degraded bundle 会原样保留 warnings 与 Provider availability
 metadata；`pipeline.status: failure` 及任何不完整/不合法 bundle 都会拒绝。
@@ -139,7 +140,7 @@ Actions、development、tests、Provider diagnostics 与显式 operator executio
 GitHub Actions 使用 `ubuntu-latest` 在 `20 0 * * *`（Asia/Shanghai 08:20）
 运行免凭据 Feed producer，也支持 `workflow_dispatch`。`feeds/` 只保存当前 consumer bundle，
 `.feed-state/` 保存仓库持久 runtime state。consumer 优先发现并校验
-`feed-manifest.json`；normal Skill consumer 使用上面的 commit-pinned remote
+`feed-manifest.json`；normal Skill consumer 使用上面的 canonical-main raw
 entry，不调用本地生成。producer 只有在 manifest 缺失时才读取通过完整校验的 `latest.json`。首次 invocation 可能执行零 Provider
 请求的 legacy migration 或 bootstrap；正常 arming 与未完成运行恢复使用记录的
 checkpoint 和 lease 保守边界。`evidence_cutoff_at` 取实际运行时刻，不取名义调度时刻。

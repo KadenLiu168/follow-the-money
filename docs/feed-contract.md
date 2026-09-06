@@ -20,12 +20,13 @@ contains only `schema_version`, `run_id`, `domain`, and `items`. Items retain
 the existing `feed.schema.json` payload shapes and are routed solely by
 `payload.type`; Provider identity does not affect routing.
 
-## Commit-pinned normal consumption
+## Canonical-main raw normal consumption
 
 Normal Skill invocation uses `scripts/skill/prepare-feed`, not the local Feed
-producer. It resolves `KadenLiu168/follow-the-money` branch `main` once to one
-exact commit, retrieves `feeds/feed-manifest.json`, validates its complete
-ordered inventory, and retrieves exactly those artifacts from that same commit.
+producer. It retrieves `feeds/feed-manifest.json` first from
+`raw.githubusercontent.com/KadenLiu168/follow-the-money/main/feeds/`, validates
+its complete ordered inventory, and retrieves exactly those artifacts from the
+same canonical raw root. It makes zero GitHub REST API requests.
 The consumer uses temporary storage and emits the existing logical Feed; it
 does not require a token or Provider credential and does not mutate `feeds/` or
 `.feed-state/`.
@@ -115,8 +116,8 @@ traversal, or identity-invalid state is not consumable.
 The complete local bundle loader first checks `feed-manifest.json`. If it exists,
 any manifest or artifact error is terminal and `latest.json` is never used as
 fallback. Only when the manifest is absent may a supported, fully validated
-legacy `latest.json` be read. The normal commit-pinned remote consumer always
-retrieves a manifest and therefore has no local fallback. Healthy bundles are
+legacy `latest.json` be read. The normal canonical-main raw consumer always retrieves a manifest and
+therefore has no local fallback. Healthy bundles are
 accepted; degraded bundles are accepted with warnings; `pipeline.status:
 failure` is rejected. Freshness and calendar-horizon checks remain the existing
 engine boundary checks.
@@ -170,8 +171,8 @@ authority and does not reinterpret `latest.json`.
 ## Minimal internal Feed entry
 
 Normal Skill consumption uses `scripts/skill/prepare-feed` and emits canonical
-logical Feed JSON on stdout; its source and branch are closed, and it accepts
-no producer or configuration options. The local producer
+logical Feed JSON on stdout; its canonical raw source and `main` branch are
+closed, and it accepts no producer or configuration options. The local producer
 `python -m follow_the_money.feed.cli` (also
 `scripts/feed/follow-the-money-feed`) accepts explicit config/product/runtime
 roots, dry-run, and fixture clocks/windows. Exit codes remain:

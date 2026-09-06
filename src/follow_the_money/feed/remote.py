@@ -1,10 +1,8 @@
-"""Commit-pinned published Feed consumer."""
+"""Canonical-main published Feed consumer."""
 
 from __future__ import annotations
 
 import argparse
-import json
-import re
 import sys
 import tempfile
 from pathlib import Path
@@ -23,15 +21,9 @@ from .bundle import (
 CANONICAL_REPOSITORY = "KadenLiu168/follow-the-money"
 CANONICAL_BRANCH = "main"
 CANONICAL_PRODUCT_ROOT = "feeds"
-GITHUB_API_BASE_URL = "https://api.github.com"
 RAW_BASE_URL = "https://raw.githubusercontent.com"
-DISCOVERY_URL = (
-    f"{GITHUB_API_BASE_URL}/repos/{CANONICAL_REPOSITORY}/git/ref/heads/{CANONICAL_BRANCH}"
-)
 REMOTE_TIMEOUT_SECONDS = 20.0
-DISCOVERY_MAX_BYTES = 64 * 1024
 MANIFEST_MAX_BYTES = 1024 * 1024
-_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 class FeedRemoteError(ValueError):
@@ -79,46 +71,23 @@ def _read_response(
         raise FeedRemoteError(f"{where}: {exc.__class__.__name__}") from exc
 
 
-def _resolve_commit(client: Any) -> str:
-    body = _read_response(
-        client,
-        DISCOVERY_URL,
-        where="Git reference discovery",
-        max_bytes=DISCOVERY_MAX_BYTES,
-        headers={"Accept": "application/vnd.github+json"},
+def _raw_url(relative_path: str) -> str:
+    return (
+        f"{RAW_BASE_URL}/{CANONICAL_REPOSITORY}/{CANONICAL_BRANCH}/"
+        f"{CANONICAL_PRODUCT_ROOT}/{relative_path}"
     )
-    try:
-        payload = json.loads(body.decode("utf-8"))
-    except (ValueError, RecursionError) as exc:
-        raise FeedRemoteError(f"Git reference discovery: invalid JSON: {exc}") from exc
-    if not isinstance(payload, dict):
-        raise FeedRemoteError("Git reference discovery: response must be an object")
-    if payload.get("ref") != f"refs/heads/{CANONICAL_BRANCH}":
-        raise FeedRemoteError("Git reference discovery: unexpected ref")
-    obj = payload.get("object")
-    if not isinstance(obj, dict) or obj.get("type") != "commit":
-        raise FeedRemoteError("Git reference discovery: object is not a commit")
-    sha = obj.get("sha")
-    if not isinstance(sha, str) or not _COMMIT_RE.fullmatch(sha):
-        raise FeedRemoteError("Git reference discovery: invalid exact commit SHA")
-    return sha
-
-
-def _raw_url(commit_sha: str, relative_path: str) -> str:
-    return f"{RAW_BASE_URL}/{CANONICAL_REPOSITORY}/{commit_sha}/{CANONICAL_PRODUCT_ROOT}/{relative_path}"
 
 
 def consume_published_feed(*, client: Any | None = None) -> dict[str, Any]:
-    """Consume one immutable published Feed snapshot without local fallback."""
+    """Consume one canonical-main published Feed without local fallback."""
     owned_client = None
     if client is None:
         owned_client = httpx.Client(timeout=REMOTE_TIMEOUT_SECONDS, follow_redirects=False)
         client = owned_client
     try:
-        commit_sha = _resolve_commit(client)
         manifest_bytes = _read_response(
             client,
-            _raw_url(commit_sha, MANIFEST_FILENAME),
+            _raw_url(MANIFEST_FILENAME),
             where="Feed manifest retrieval",
             max_bytes=MANIFEST_MAX_BYTES,
         )
@@ -134,7 +103,7 @@ def consume_published_feed(*, client: Any | None = None) -> dict[str, Any]:
                 size_bytes = entry["size_bytes"]
                 data = _read_response(
                     client,
-                    _raw_url(commit_sha, relative_path),
+                    _raw_url(relative_path),
                     where=f"Feed artifact {entry['domain']} retrieval",
                     max_bytes=size_bytes,
                 )

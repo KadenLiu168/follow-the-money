@@ -22,21 +22,21 @@ chaining edge.
 Hosted GitHub Actions uses the local Feed producer for configuration resolution,
 Provider planning and fetching, normalization, deduplication, validation,
 identity/digest construction, health assessment, and publication. Normal Skill
-invocation uses `scripts/skill/prepare-feed`: it consumes one commit-pinned
-snapshot from `KadenLiu168/follow-the-money` `main` and never invokes the
-producer or a local fallback. The Feed remains evidence-only: the Host Agent
-owns financial interpretation and narrative.
+invocation uses `scripts/skill/prepare-feed`: it consumes the canonical-main
+raw Feed from `KadenLiu168/follow-the-money` and never invokes the producer or
+a local fallback. The Feed remains evidence-only: the Host Agent owns
+financial interpretation and narrative.
 
 ## Published Feed caller boundary
 
-`scripts/skill/prepare-feed` resolves `refs/heads/main` once through the public
-Git reference API, retrieves `feeds/feed-manifest.json` and exactly its
-validated ordered inventory from the resulting exact commit, and reuses the
-existing complete bundle loader in temporary storage. It emits only the
-existing logical Feed representation. A remote failure is terminal: no
-Provider collection, local producer, stale local substitution, partial
-evidence, or local fallback is permitted, and `feeds/` plus `.feed-state/` stay
-unchanged.
+`scripts/skill/prepare-feed` retrieves `feeds/feed-manifest.json` first from
+`raw.githubusercontent.com/KadenLiu168/follow-the-money/main/feeds/`, then
+retrieves exactly its validated ordered inventory from that same canonical raw
+root and reuses the existing complete bundle loader in temporary storage. It
+makes zero GitHub REST API requests and emits only the existing logical Feed
+representation. A remote failure is terminal: no Provider collection, local
+producer, stale local substitution, partial evidence, or local fallback is
+permitted, and `feeds/` plus `.feed-state/` stay unchanged.
 
 The local producer `scripts/feed/follow-the-money-feed` remains an explicitly
 operated surface for hosted Actions, development, tests, Provider diagnostics,
@@ -117,7 +117,7 @@ registry entries, or callability for a retained capability.
 | `schemas/` | JSON Schema 2020-12 contracts (logical Feed, typed bundle, Agent invocation) |
 | `providers/` | Contract manifests, adapters, HTTP/rate/lock discipline |
 | `feed/` | Feed planning, typed bundle validation/publication, deduplication, minimal entry |
-| `feed/remote.py` | Commit-pinned published Feed consumer for normal Skill invocation |
+| `feed/remote.py` | Canonical-main raw published Feed consumer for normal Skill invocation |
 | `engine/` | Retained entity resolution, candidate Components, and title similarity |
 | `events.py` | Canonical Event/family ID derivation |
 | `market/` | Decimal formulas, surprise, confidence |
