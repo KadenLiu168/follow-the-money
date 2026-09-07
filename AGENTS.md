@@ -11,23 +11,25 @@
 
 ## 1. Architecture Boundary
 
-`follow-the-money` 是面向 Host Agent 的金融研究 Skill，核心是 credential-free deterministic evidence engine。
+`follow-the-money` 是面向 Host Agent 的当前金融情报 briefing Skill，核心是 credential-free deterministic evidence engine，不是通用金融研究助手。
 
-当前 live production surfaces：
+当前 Skill surface：
 
 ```text
 Evidence providers
       ↓
 Deterministic Feed
       ↓
-Host Agent reasoning
+Host Agent synthesis
       ↓
-Grounded research output
+Current financial intelligence briefing
 ```
 
-Host Agent 也可以通过 private one-shot boundary 显式、独立地按需调用
-Deterministic Audit 或 Event Structuring；它们不组成 mandatory sequence，
-也不通过 Feed 自动串联。
+Skill 仅消费当前 published Feed 并直接生成 briefing，不接收公司、资产、主题、时间范围或研究问题，也不读取历史 Feed 或 checkpoint。
+
+Host Agent 仍可通过仓库的 private one-shot boundary 显式、独立地按需调用
+Deterministic Audit 或 Event Structuring；这些是独立 repository capabilities，
+不是 Skill 行为，不组成 mandatory sequence，也不通过 Feed 自动串联。
 
 仓库负责事实、provenance、确定性规则、计算与验证；Host Agent 负责分析和叙事。
 

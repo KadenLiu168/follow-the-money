@@ -6,6 +6,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILL = REPO_ROOT / "SKILL.md"
+AGENTS = REPO_ROOT / "AGENTS.md"
 FEED_REFERENCE = REPO_ROOT / "references" / "feed-contract.md"
 DOCUMENTATION = (
     FEED_REFERENCE,
@@ -28,15 +29,31 @@ def test_normal_skill_caller_graph_is_canonical_main_remote_only():
     assert "scripts/feed/follow-the-money-feed locally" not in contract
 
 
-def test_skill_invocation_uses_progressive_disclosure_without_command_trigger():
+def test_skill_generates_only_the_current_feed_briefing():
     skill = SKILL.read_text(encoding="utf-8")
     lowered = skill.lower()
 
-    assert "evidence-grounded financial research skill" in lowered
+    assert "disable-model-invocation: true" in lowered
+    assert "generate the current evidence-based financial intelligence briefing" in lowered
     assert "scripts/skill/prepare-feed" in skill
     assert "references/feed-contract.md" in skill
     assert "references/safety-boundary.md" in skill
-    assert "/" + "money" not in lowered
+    assert "without requesting or accepting" in lowered
+    assert "historical" in lowered
+    assert "prior publication or checkpoint" in lowered
+    assert "requested research report" not in lowered
+    assert "latest capital-flow changes" in lowered
+    assert "new significant events" in lowered
+    assert "anomalous signals" in lowered
+
+
+def test_agents_keeps_private_capabilities_outside_the_current_briefing_skill():
+    agents = AGENTS.read_text(encoding="utf-8")
+
+    assert "不是通用金融研究助手" in agents
+    assert "不读取历史 Feed 或 checkpoint" in agents
+    assert "不是 Skill 行为" in agents
+    assert "Current financial intelligence briefing" in agents
 
 
 def test_all_changed_docs_name_remote_entry_and_retain_explicit_local_boundary():

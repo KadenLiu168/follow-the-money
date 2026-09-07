@@ -1,50 +1,42 @@
 ---
 name: follow-the-money
-description: |
-  Evidence-grounded financial research Skill. Uses the published deterministic
-  Feed to generate primary-source-backed financial research reports. Invoke
-  when financial research requires validated evidence from follow-the-money.
+description: Generate the current evidence-based financial intelligence briefing from the published Feed.
+disable-model-invocation: true
 ---
 
 # Follow the Money
 
-Generate the requested research report from the validated published Feed.
+Generate the current evidence-based financial intelligence briefing from the
+validated published Feed.
 
-## Execution rules
-
-For normal research report requests:
+## Execution
 
 ```text
-published Feed -> validation -> evidence analysis -> research report
+published Feed -> validation -> current evidence synthesis -> financial intelligence briefing
 ```
 
-Consume the published Feed through `scripts/skill/prepare-feed` under
+Run `scripts/skill/prepare-feed` under
 [the Feed contract](references/feed-contract.md), then apply
-[the safety boundary](references/safety-boundary.md) to the report. Use only the
-validated output. Preserve valid degraded status and warnings; on retrieval or
-validation failure, surface the exact stderr and stop. Never substitute local,
-stale, or partial data.
+[the safety boundary](references/safety-boundary.md). Use only its validated
+current output. Preserve degraded status, warnings, provenance, freshness, and
+coverage limits. On retrieval or validation failure, surface the exact stderr
+and stop. Never substitute local, stale, partial, historical, or unvalidated
+data.
 
-For Feed metadata or capability inspection, load only the corresponding
-reference and answer within that boundary. For an explicitly requested
-Deterministic Audit or Event Structuring operation, use only its private one-shot
-boundary. Do not automatically chain the Feed, private operations, or retained
-capabilities.
+Generate the briefing immediately without requesting or accepting a company,
+asset, topic, time range, research question, or other user-supplied scope.
+Treat “new” as evidence inside the current Feed window, not as a comparison with
+a prior publication or checkpoint.
+
+The briefing must contain:
+
+1. Feed data status
+2. Coverage
+3. Latest capital-flow changes
+4. New significant events
+5. Anomalous signals
+6. Data quality and missing-source notes
 
 GitHub Actions owns Provider collection and deterministic Feed production. The
-Skill consumes that product; the Host Agent owns financial interpretation,
-reasoning, conclusions, and narrative. Feed remains evidence, not intelligence
-output.
-
-## References
-
-Load only what the request needs:
-
-- [Architecture boundary](references/architecture-boundary.md) — ownership,
-  caller topology, or runtime architecture questions.
-- [Feed contract](references/feed-contract.md) — every normal research request;
-  retrieval, validation, provenance, cutoff, freshness, and degradation rules.
-- [Capability status](references/capability-status.md) — capability availability
-  or explicit deterministic-operation requests.
-- [Safety boundary](references/safety-boundary.md) — every generated report;
-  grounding, unsupported claims, and investment-assistance limits.
+Skill consumes the current product; the Host Agent owns synthesis and narrative.
+Feed remains evidence, not intelligence output.
