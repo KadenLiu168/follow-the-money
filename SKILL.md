@@ -10,29 +10,31 @@ description: |
 
 Generate the requested research report from the validated published Feed.
 
-## Skill invocation flow
+## Execution rules
 
-1. Read [references/feed-contract.md](references/feed-contract.md) and
-   [references/safety-boundary.md](references/safety-boundary.md).
-2. Run `scripts/skill/prepare-feed` to retrieve and validate the published Feed.
-3. If retrieval or validation fails, surface the exact stderr and stop. Preserve
-   degraded status and warnings; never substitute local, stale, or partial data.
-4. Analyze only the validated evidence. Distinguish evidence from interpretation,
-   cite the relevant Feed items, state material coverage or freshness limits, and
-   produce the user-facing research report.
+For normal research report requests:
 
 ```text
-published Feed -> validation -> Host Agent analysis -> research report
+published Feed -> validation -> evidence analysis -> research report
 ```
+
+Consume the published Feed through `scripts/skill/prepare-feed` under
+[the Feed contract](references/feed-contract.md), then apply
+[the safety boundary](references/safety-boundary.md) to the report. Use only the
+validated output. Preserve valid degraded status and warnings; on retrieval or
+validation failure, surface the exact stderr and stop. Never substitute local,
+stale, or partial data.
+
+For Feed metadata or capability inspection, load only the corresponding
+reference and answer within that boundary. For an explicitly requested
+Deterministic Audit or Event Structuring operation, use only its private one-shot
+boundary. Do not automatically chain the Feed, private operations, or retained
+capabilities.
 
 GitHub Actions owns Provider collection and deterministic Feed production. The
 Skill consumes that product; the Host Agent owns financial interpretation,
 reasoning, conclusions, and narrative. Feed remains evidence, not intelligence
 output.
-
-For an explicitly requested deterministic Audit or Event Structuring operation,
-use only the corresponding private one-shot boundary. Do not automatically chain
-it with the Feed or any retained capability.
 
 ## References
 
