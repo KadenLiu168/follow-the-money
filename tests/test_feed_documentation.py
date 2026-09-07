@@ -5,8 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SKILL = REPO_ROOT / "SKILL.md"
+FEED_REFERENCE = REPO_ROOT / "references" / "feed-contract.md"
 DOCUMENTATION = (
-    REPO_ROOT / "SKILL.md",
+    FEED_REFERENCE,
     REPO_ROOT / "README.md",
     REPO_ROOT / "README.zh-CN.md",
     REPO_ROOT / "docs" / "architecture.md",
@@ -15,28 +17,26 @@ DOCUMENTATION = (
 
 
 def test_normal_skill_caller_graph_is_canonical_main_remote_only():
-    skill = (REPO_ROOT / "SKILL.md").read_text(encoding="utf-8")
-    normal = skill[skill.index("## Daily flow") :]
+    contract = FEED_REFERENCE.read_text(encoding="utf-8")
 
-    assert "scripts/skill/prepare-feed" in normal
-    assert "canonical-main" in normal
-    assert "raw.githubusercontent.com" in normal
-    assert "zero github rest api requests" in normal.lower()
-    assert "local producer" in normal
-    assert "fallback" in normal
-    assert "scripts/feed/follow-the-money-feed locally" not in normal
+    assert "scripts/skill/prepare-feed" in contract
+    assert "canonical" in contract
+    assert "raw.githubusercontent.com" in contract
+    assert "zero github rest api requests" in contract.lower()
+    assert "local producer" in contract
+    assert "fallback" in contract
+    assert "scripts/feed/follow-the-money-feed locally" not in contract
 
 
-def test_skill_describes_normal_invocation_as_credential_free_feed_consumption():
-    skill = (REPO_ROOT / "SKILL.md").read_text(encoding="utf-8")
+def test_skill_invocation_uses_progressive_disclosure_without_command_trigger():
+    skill = SKILL.read_text(encoding="utf-8")
     lowered = skill.lower()
 
-    assert "collect the evidence feed" not in lowered
-    assert "retrieve" in lowered
-    assert "consume" in lowered
+    assert "evidence-grounded financial research skill" in lowered
     assert "scripts/skill/prepare-feed" in skill
-    assert "no github token" in lowered
-    assert "no provider credentials" in lowered
+    assert "references/feed-contract.md" in skill
+    assert "references/safety-boundary.md" in skill
+    assert "/" + "money" not in lowered
 
 
 def test_all_changed_docs_name_remote_entry_and_retain_explicit_local_boundary():

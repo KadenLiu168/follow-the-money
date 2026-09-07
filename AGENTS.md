@@ -100,19 +100,15 @@ scripts/
 1 Linear execution issue = 1 OpenSpec Change
 ```
 
-开始 iteration 前：
+Before implementation, inspect the relevant:
 
-1. 阅读 Linear issue；
-2. 检查 milestone 和 blocking relations；
-3. 阅读相关 living specs；
-4. 检查 active Changes 是否冲突或重叠；
-5. 定位相关 implementation / tests / config / schemas / docs；
-6. 明确：
+* Linear issue；
+* OpenSpec contract；
+* affected implementation；
+* related tests / config / docs。
 
-   * 当前已有能力
-   * 当前 Gap
-   * 本 issue 要解决的 Gap
-   * explicit non-goals / future work
+Inspection depth should match the change scope. 明确当前能力、当前 Gap、本 issue
+要解决的 Gap，以及 explicit non-goals / future work。
 
 ### Dependency
 
@@ -237,21 +233,22 @@ README.zh-CN.md
 
 ## 8. Verification
 
-开发期间先运行与当前修改直接相关的 focused tests。
+开发期间运行与当前修改直接相关的 focused tests。
 
-准备环境：
+需要准备完整环境时：
 
 ```bash
 uv sync --frozen --all-groups
 ```
 
-最终 repository quality gate：
+在 iteration 完成前需要 repository-level validation 时，运行 canonical
+quality gate：
 
 ```bash
 .venv/bin/python scripts/quality_gate.py
 ```
 
-不要用较弱的自定义检查集合替代 canonical quality gate。
+不要用较弱的自定义检查集合替代所需的 canonical quality gate。
 
 OpenSpec Change 完成前检查：
 
