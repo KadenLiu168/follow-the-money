@@ -1,1 +1,1 @@
-{"armed_at":"2026-09-08T04:50:08.002Z","deployment_run_id":"34188384276-1","feed_start_not_after":"2026-09-08T04:55:08.002Z","finished_at":null,"recovery_not_before":"2026-09-09T05:00:08.002Z","state":"in_progress","version":"1"}
+{"armed_at":"2026-09-08T04:50:08.002Z","deployment_run_id":"34188384276-1","feed_start_not_after":"2026-09-08T04:55:08.002Z","finished_at":"2026-09-08T04:50:26.053Z","recovery_not_before":"2026-09-09T05:00:08.002Z","state":"success","version":"1"}
