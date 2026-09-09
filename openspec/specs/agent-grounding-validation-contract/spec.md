@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the runtime-neutral semantic conditions under which Host-Agent factual assertions may be represented as grounded and Agent-owned research output is admissible.
+Define the runtime-neutral semantic conditions under which Host-Agent factual assertions may be represented as grounded and Agent-owned user-facing output is admissible.
 
 ## Requirements
 
@@ -67,15 +67,15 @@ The Skill SHALL own the correctness and meaning of findings produced by an accep
 - **THEN** the finding SHALL NOT be attributed semantic authority beyond the exact guarantees of its governing living spec
 
 ### Requirement: Host Agent owns a constrained output-admissibility decision
-The Host Agent SHALL own the operational decision to emit its Agent-owned narrative. It SHALL NOT emit a candidate as grounded research output when it knows that the candidate contains either a factual assertion represented as grounded for which sufficient semantic support has not been established or an unresolved critical deterministic finding from an accepted deterministic validation capability that applies to the candidate. This admissibility rule SHALL remain semantic and SHALL NOT define a runtime pipeline.
+The Host Agent SHALL own the operational decision to emit its Agent-owned user-facing output, including an information digest governed by `information-digest-invocation`. It SHALL NOT emit a candidate as grounded user-facing output when it knows that the candidate contains either a factual assertion represented as grounded for which sufficient semantic support has not been established or an unresolved critical deterministic finding from an accepted deterministic validation capability that applies to the candidate. This admissibility rule SHALL remain semantic and SHALL NOT define a runtime pipeline.
 
 #### Scenario: Candidate contains a known unsupported grounded assertion
 - **WHEN** the Host Agent knows a candidate represents a factual assertion as grounded without sufficient semantic support
-- **THEN** the candidate is inadmissible as grounded research output and SHALL NOT be emitted unchanged
+- **THEN** the candidate is inadmissible as grounded user-facing output and SHALL NOT be emitted unchanged
 
 #### Scenario: Candidate contains an unresolved applicable critical finding
 - **WHEN** the Host Agent knows an accepted deterministic validation capability has produced an unresolved critical finding that applies to a candidate
-- **THEN** the candidate is inadmissible as grounded research output and SHALL NOT be emitted unchanged
+- **THEN** the candidate is inadmissible as grounded user-facing output and SHALL NOT be emitted unchanged
 
 #### Scenario: Operational emission ownership is inspected
 - **WHEN** the output-admissibility decision is reviewed
@@ -101,7 +101,7 @@ An unsupported factual assertion SHALL NOT be presented as a grounded fact. The 
 - **THEN** the characterization does not falsely upgrade the reasoning to grounded factual authority
 
 ### Requirement: Recovery restores admissibility without prescribing control flow
-If a candidate is inadmissible under this contract, it SHALL NOT be emitted unchanged as grounded research output. A later candidate MAY be emitted only after the relevant grounding or deterministic-validation violation no longer applies, including through conceptual removal, correction, re-grounding, reformulation, or re-evaluation. This contract SHALL NOT define retry count, automatic retry, rewrite loop, invocation order, call count, recovery topology, or a specific validator invocation.
+If a candidate is inadmissible under this contract, it SHALL NOT be emitted unchanged as grounded user-facing output. A later candidate MAY be emitted only after the relevant grounding or deterministic-validation violation no longer applies, including through conceptual removal, correction, re-grounding, reformulation, or re-evaluation. This contract SHALL NOT define retry count, automatic retry, rewrite loop, invocation order, call count, recovery topology, or a specific validator invocation.
 
 #### Scenario: Relevant violation is resolved
 - **WHEN** removal, correction, re-grounding, reformulation, or re-evaluation produces a later candidate to which the prior grounding or deterministic-validation violation no longer applies
@@ -109,7 +109,7 @@ If a candidate is inadmissible under this contract, it SHALL NOT be emitted unch
 
 #### Scenario: Candidate is retried unchanged
 - **WHEN** a later candidate preserves the same applicable grounding or deterministic-validation violation
-- **THEN** it remains inadmissible as grounded research output regardless of being submitted or considered again
+- **THEN** it remains inadmissible as grounded user-facing output regardless of being submitted or considered again
 
 #### Scenario: Recovery mechanism is requested
 - **WHEN** retry count, automatic retry, rewrite loops, invocation order, call count, recovery topology, or a specific validator invocation is sought

@@ -11,27 +11,34 @@
 
 ## 1. Architecture Boundary
 
-`follow-the-money` 是面向 Host Agent 的当前金融情报 briefing Skill，核心是 credential-free deterministic evidence engine，不是通用金融研究助手。
+`follow-the-money` 是面向 Host Agent 的当前 evidence-based information digest
+Skill，核心是 credential-free deterministic evidence engine，不是通用金融研究助手。
 
 当前 Skill surface：
 
 ```text
-Evidence providers
+Published evidence Feed
       ↓
-Deterministic Feed
+Feed validation
       ↓
-Host Agent synthesis
+Host Agent summarization/formatting
       ↓
-Current financial intelligence briefing
+Evidence-based information digest
 ```
 
-Skill 仅消费当前 published Feed 并直接生成 briefing，不接收公司、资产、主题、时间范围或研究问题，也不读取历史 Feed 或 checkpoint。
+Skill 仅消费当前 published Feed，经过验证后直接生成 evidence-based information
+digest，不接收公司、资产、主题、时间范围或研究问题，也不读取历史 Feed 或 checkpoint。
+Host Agent 可以进行 evidence-preserving 的 grouping、heading、ordering、consolidation
+与 compression，但不得把这些 presentation choice 变成重要性、因果、market impact、
+prediction、投资或交易判断。
 
 Host Agent 仍可通过仓库的 private one-shot boundary 显式、独立地按需调用
 Deterministic Audit 或 Event Structuring；这些是独立 repository capabilities，
-不是 Skill 行为，不组成 mandatory sequence，也不通过 Feed 自动串联。
+不是 Skill 行为，也不是 normal information-digest behavior，不组成 mandatory sequence，
+也不通过 Feed 自动串联。
 
-仓库负责事实、provenance、确定性规则、计算与验证；Host Agent 负责分析和叙事。
+仓库负责事实、provenance、确定性规则、计算与验证；normal digest path 中 Host Agent
+负责 evidence-preserving summarization/formatting，其他分析和叙事仍属于 Host Agent。
 
 除非当前已批准的 OpenSpec Change 明确要求，不得引入：
 
@@ -192,7 +199,7 @@ Market Analytics and State、Confidence and Watchlist、Scoring and Ranking
 
 不得增加 hidden fallback、duplicated truth source，或把 unknown / unverified 内容伪装成 verified。
 
-仓库提供金融研究能力，不提供确定性交易指令。
+仓库提供证据与 information-digest 能力，不提供确定性交易指令。
 
 `ClaimAuditor` 应保持 deterministic safety capability，不得演变成 LLM policy layer 或自动文本重写系统。
 

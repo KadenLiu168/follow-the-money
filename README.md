@@ -1,6 +1,6 @@
 # Follow the Money
 
-Evidence-grounded financial research Skill for AI Agents: a deterministic,
+Evidence-based information digest Skill for AI Agents: a deterministic,
 credential-free evidence Feed from free China/US official and public sources,
 plus retained deterministic libraries (ledger, candidate events, market
 snapshot/state, watchlist, scoring/ranking rules, safety audit). The semantic
@@ -8,8 +8,10 @@ Skill capability surface, responsibility boundary, and private on-demand Audit
 and Event Structuring invocation boundary are implemented; integration beyond
 Audit and Event Structuring remains deferred.
 
-The Agent understands, reasons, and expresses; `follow-the-money` supplies
-facts, rules, deterministic computation, and verifiability.
+The Host Agent summarizes and formats the current validated Feed as an
+evidence-based information digest; `follow-the-money` supplies facts, rules,
+deterministic computation, provenance, and verifiability. The digest does not
+add financial judgment.
 
 ## What this repository is
 
@@ -29,9 +31,9 @@ production caller.
 
 The retained deterministic libraries other than Audit and Event Structuring are
 typed, reproducible, independently tested, and reusable, but have no current
-production orchestration caller. The Host Agent owns reasoning and narrative
-after consuming the Feed; naming a retained capability does not add a
-production caller.
+production orchestration caller. Normal Skill consumption gives the Host Agent
+the current validated Feed for an evidence-preserving digest; naming a retained
+capability does not add a production caller.
 
 ## Semantic capability surface
 
@@ -48,8 +50,13 @@ These are descriptive architecture labels, not runtime state, configuration,
 serialized metadata, a capability registry, or workflow stages. The
 repository/Skill owns the accepted deterministic behavior, invariants, and
 capability-local validation; detailed behavior remains in the existing living
-specs. The Host Agent owns research intent, interpretation, reasoning,
-hypotheses, conclusions, working analysis, and narrative. The deterministic
+specs. For normal Skill invocation, the Host Agent owns evidence-preserving
+digest summarization, editorial grouping and formatting, transparent
+consolidation/compression, and user-facing presentation without adding
+importance, causality, prediction, market impact, investment, or trading
+judgment. Outside that digest path, the Host Agent owns research intent,
+interpretation, reasoning, hypotheses, conclusions, working analysis, and
+narrative. The digest is not a seventh deterministic capability family. The deterministic
 engine is an internal Skill layer, not a third participant or Agent-callable
 endpoint. A result is authoritative only within its governing spec; consumer
 derivation outside that governing capability remains consumer/Agent-owned, and
@@ -145,7 +152,12 @@ warnings and Provider availability metadata, and rejects `pipeline.status:
 failure` or any invalid/incomplete bundle. A remote failure is terminal: there
 is no Provider collection, stale local substitution, partial evidence, or local fallback.
 The local producer remains available only for hosted Actions,
-development, tests, Provider diagnostics, and explicit operator execution.
+development, tests, Provider diagnostics, and explicit operator execution. The
+Host Agent presents the validated current Feed as the information digest; this
+presentation is not a new Feed field or deterministic capability result. It may
+compress or consolidate evidence, but for every domain it reports the total item
+count and reconciles individually summarized, consolidated, and omitted items;
+omissions are disclosed as editorial compression.
 
 ## Scheduled Feed boundary
 

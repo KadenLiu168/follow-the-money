@@ -29,31 +29,91 @@ def test_normal_skill_caller_graph_is_canonical_main_remote_only():
     assert "scripts/feed/follow-the-money-feed locally" not in contract
 
 
-def test_skill_generates_only_the_current_feed_briefing():
+def test_skill_generates_only_the_current_information_digest():
     skill = SKILL.read_text(encoding="utf-8")
     lowered = skill.lower()
 
     assert "disable-model-invocation: true" in lowered
-    assert "generate the current evidence-based financial intelligence briefing" in lowered
+    assert (
+        "generate the current evidence-based information digest from the published feed" in lowered
+    )
+    assert (
+        "published feed -> validation -> host agent summarization/formatting -> evidence-based information digest"
+        in lowered
+    )
     assert "scripts/skill/prepare-feed" in skill
     assert "references/feed-contract.md" in skill
     assert "references/safety-boundary.md" in skill
     assert "without requesting or accepting" in lowered
+    assert "company" in lowered
+    assert "asset" in lowered
+    assert "topic" in lowered
+    assert "time range" in lowered
+    assert "research question" in lowered
     assert "historical" in lowered
     assert "prior publication or checkpoint" in lowered
-    assert "requested research report" not in lowered
-    assert "latest capital-flow changes" in lowered
-    assert "new significant events" in lowered
-    assert "anomalous signals" in lowered
+    assert "current feed window" in lowered
+    assert "feed data status" in lowered
+    assert "evidence cutoff" in lowered
+    assert "current updates" in lowered
+    assert "source provenance" in lowered
+    assert "freshness" in lowered
+    assert "coverage" in lowered
+    assert "limitations" in lowered
+    assert "total item count" in lowered
+    assert "individually summarized" in lowered
+    assert "consolidated" in lowered
+    assert "omitted" in lowered
+    assert "reconcile" in lowered
 
 
-def test_agents_keeps_private_capabilities_outside_the_current_briefing_skill():
+def test_normal_skill_output_does_not_require_financial_judgment_sections():
+    skill = SKILL.read_text(encoding="utf-8").lower()
+
+    for forbidden in (
+        "financial intelligence briefing",
+        "financial intelligence report",
+        "financial research report",
+        "latest capital-flow changes",
+        "new significant events",
+        "anomalous signals",
+        "significance section",
+        "anomaly section",
+        "signal section",
+        "prediction section",
+        "market-impact section",
+        "investment-judgment section",
+        "trading section",
+    ):
+        assert forbidden not in skill
+
+
+def test_agents_keeps_private_capabilities_outside_the_current_information_digest():
     agents = AGENTS.read_text(encoding="utf-8")
 
     assert "不是通用金融研究助手" in agents
     assert "不读取历史 Feed 或 checkpoint" in agents
     assert "不是 Skill 行为" in agents
-    assert "Current financial intelligence briefing" in agents
+    assert "information digest" in agents.lower()
+    assert "Host Agent summarization/formatting" in agents
+
+
+def test_readmes_position_normal_skill_as_an_information_digest():
+    english = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    chinese = (REPO_ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+
+    assert "evidence-based information digest skill" in english.lower()
+    assert "financial intelligence" not in english.lower()
+    assert "financial research skill" not in english.lower()
+    assert "证据驱动信息摘要 Skill" in chinese
+    assert "金融情报" not in chinese
+    assert "证据驱动金融研究 Skill" not in chinese
+    for text in (english, chinese):
+        lowered = text.lower()
+        assert "evidence-preserving" in lowered
+        assert "information digest" in lowered
+        assert "retained" in lowered
+        assert "claimauditor" in lowered
 
 
 def test_all_changed_docs_name_remote_entry_and_retain_explicit_local_boundary():

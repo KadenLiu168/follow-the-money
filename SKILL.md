@@ -1,42 +1,64 @@
 ---
 name: follow-the-money
-description: Generate the current evidence-based financial intelligence briefing from the published Feed.
+description: Generate the current evidence-based information digest from the published Feed.
 disable-model-invocation: true
 ---
 
 # Follow the Money
 
-Generate the current evidence-based financial intelligence briefing from the
-validated published Feed.
+Generate the current evidence-based information digest from the validated
+published Feed.
 
 ## Execution
 
 ```text
-published Feed -> validation -> current evidence synthesis -> financial intelligence briefing
+published Feed -> validation -> Host Agent summarization/formatting -> evidence-based information digest
 ```
 
 Run `scripts/skill/prepare-feed` under
 [the Feed contract](references/feed-contract.md), then apply
 [the safety boundary](references/safety-boundary.md). Use only its validated
-current output. Preserve degraded status, warnings, provenance, freshness, and
-coverage limits. On retrieval or validation failure, surface the exact stderr
-and stop. Never substitute local, stale, partial, historical, or unvalidated
-data.
+current output. Preserve degraded status, warnings, provenance, freshness,
+coverage, and source-availability limits. On retrieval or validation failure,
+surface the exact stderr and stop. Never substitute local, stale, partial,
+historical, or unvalidated data.
 
-Generate the briefing immediately without requesting or accepting a company,
+Generate the digest immediately without requesting or accepting a company,
 asset, topic, time range, research question, or other user-supplied scope.
-Treat “new” as evidence inside the current Feed window, not as a comparison with
-a prior publication or checkpoint.
+Treat “current” or “new” as evidence belonging to the current Feed window; do
+not claim comparison with a prior publication or checkpoint unless that
+comparison is explicitly present in a validated Feed item.
 
-The briefing must contain:
+The digest must contain:
 
-1. Feed data status
-2. Coverage
-3. Latest capital-flow changes
-4. New significant events
-5. Anomalous signals
-6. Data quality and missing-source notes
+1. Feed data status and evidence cutoff
+2. Domain and Provider coverage and source availability
+3. Current updates from the Feed
+4. Source provenance and freshness
+5. Data-quality, unavailable-source, and compression limitations
+
+For every Feed domain, report its total item count and reconcile every item as
+individually summarized, represented through a consolidated summary, or
+omitted. Disclose omissions as editorial compression; never justify them by
+calling an item unimportant or irrelevant. The representation counts must
+reconcile to the domain total.
+
+The Host Agent may group related evidence across domains, derive editorial
+headings, order content for readability, consolidate repetition, and compress
+detail. These are presentation choices, not deterministic Feed results or
+evidence of importance, priority, ranking, or another analytical finding.
+Every factual summary must remain semantically supported by the cited Feed
+items. If a source item contains analytical or predictive language, summarize
+it only with clear source attribution and do not adopt it as a Host-Agent
+conclusion.
+
+Do not introduce or infer significance, anomaly, signal, causality, market
+impact, prediction, investment judgment, investment recommendation, or trading
+instruction. The digest preserves evidence and its limits; it does not add
+financial analysis or trading direction.
 
 GitHub Actions owns Provider collection and deterministic Feed production. The
-Skill consumes the current product; the Host Agent owns synthesis and narrative.
-Feed remains evidence, not intelligence output.
+Skill owns validated Feed consumption, while the Host Agent owns digest
+summarization and formatting. The Feed remains evidence-only. Audit, Event
+Structuring, and retained deterministic capabilities remain independent
+private or retained capabilities and are not invoked by this digest path.

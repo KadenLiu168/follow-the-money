@@ -10,9 +10,11 @@ Evidence Providers
       ↓
 Deterministic evidence Feed
       ↓
-Host Agent reasoning and narrative
+Feed validation
       ↓
-Grounded research output
+Host Agent summarization/formatting
+      ↓
+Evidence-based information digest
 ```
 
 The Host Agent may also explicitly invoke the private on-demand Audit or Event
@@ -24,8 +26,14 @@ Provider planning and fetching, normalization, deduplication, validation,
 identity/digest construction, health assessment, and publication. Normal Skill
 invocation uses `scripts/skill/prepare-feed`: it consumes the canonical-main
 raw Feed from `KadenLiu168/follow-the-money` and never invokes the producer or
-a local fallback. The Feed remains evidence-only: the Host Agent owns
-financial interpretation and narrative.
+a local fallback. The Feed remains evidence-only: the Host Agent owns evidence-preserving digest
+summarization, editorial grouping, transparent compression, formatting, and
+user-facing presentation. Normal digest presentation does not add financial
+interpretation or judgment; research interpretation outside that path remains
+Host-Agent-owned. For each Feed domain, the digest reports the total item count
+and reconciles items that are individually summarized, consolidated, or omitted;
+omissions are disclosed as editorial compression rather than an importance
+judgment.
 
 ## Published Feed caller boundary
 
@@ -36,7 +44,9 @@ root and reuses the existing complete bundle loader in temporary storage. It
 makes zero GitHub REST API requests and emits only the existing logical Feed
 representation. A remote failure is terminal: no Provider collection, local
 producer, stale local substitution, partial evidence, or local fallback is
-permitted, and `feeds/` plus `.feed-state/` stay unchanged.
+permitted, and `feeds/` plus `.feed-state/` stay unchanged. The Host Agent may
+present the validated Feed as an evidence-based information digest, but that
+presentation is not a Feed field or deterministic capability result.
 
 The local producer `scripts/feed/follow-the-money-feed` remains an explicitly
 operated surface for hosted Actions, development, tests, Provider diagnostics,
@@ -57,16 +67,22 @@ sequential production stages or API boundaries:
 | Deterministic Audit | `live-production` (on demand) | `deterministic-research-engine` |
 
 Capability ownership means repository/Skill ownership of accepted deterministic
-behavior, invariants, and capability-local validation. The Host Agent owns
-research intent, financial interpretation, reasoning and judgment, Agent
+behavior, invariants, and capability-local validation. For normal Skill
+invocation, the Host Agent owns evidence-preserving digest summarization,
+editorial grouping and heading derivation, readability ordering,
+consolidation/compression, formatting, and user-facing presentation. Those
+choices do not add significance, anomaly, causality, market impact, prediction,
+investment, or trading judgment. Outside the normal digest path, the Host Agent
+owns research intent, financial interpretation, reasoning and judgment, Agent
 hypotheses and conclusions, working analysis, and user-facing synthesis and
 narrative. The deterministic engine is an internal Skill responsibility layer
 for executing those accepted typed/domain invariants, transformations,
 calculations, canonicalization, ordering, and validation; it is not a third
 participant, service, facade, endpoint, or direct Host-Agent contract. The
-status labels are descriptive architecture metadata only: they are not runtime
-state, serialized fields, configuration, a capability registry, or a promise
-that every named family is production-wired.
+information digest is not a seventh deterministic capability family. The status
+labels are descriptive architecture metadata only: they are not runtime state,
+serialized fields, configuration, a capability registry, or a promise that
+every named family is production-wired.
 
 The retained libraries other than Deterministic Audit and on-demand Event
 Structuring are typed, deterministic, reproducible, independently tested, and

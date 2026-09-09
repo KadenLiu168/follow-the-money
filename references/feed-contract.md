@@ -56,7 +56,13 @@ A wholly blocked HTTP 401/403 Provider may produce a bounded degraded Feed
 without prior-slice carry-forward. Other incomplete Provider work, partial data,
 unconfirmed failures, and invalid coverage remain fatal. A valid degraded Feed
 is consumable only with its warnings, availability, freshness, cutoff, and
-coverage limits preserved in the analysis.
+coverage limits preserved in the information digest. Host-Agent grouping,
+compression, and formatting do not alter deterministic Feed ownership or its
+provenance and coverage semantics.
+
+Normal Skill consumption supplies only this validated Feed to the Host Agent for
+evidence-preserving information-digest presentation. It does not invoke Audit,
+Event Structuring, or another retained deterministic capability.
 
 See `docs/feed-contract.md` and `openspec/specs/feed-evidence-pipeline/spec.md`
 for the authoritative full contract.

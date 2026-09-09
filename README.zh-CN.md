@@ -1,14 +1,15 @@
 # Follow the Money（追踪资金）
 
-面向 AI Agent 的证据驱动金融研究 Skill：一个确定性、免凭据的纯证据 Feed，
+面向 AI Agent 的证据驱动信息摘要 Skill（evidence-based information digest）：一个确定性、免凭据的纯证据 Feed，
 来自免费的中美官方与公开来源；同时保留确定性引擎（证据台账、候选事件、
 市场快照/状态、关注列表、打分/选择规则、安全审计）。语义层的 Skill
 capability surface、responsibility boundary 与 private on-demand Audit 和 Event
 Structuring invocation boundary 已实现；Audit 与 Event Structuring 之外的
 Skill-Agent integration 仍 deferred。
 
-Agent 负责理解、推理与表达；`follow-the-money` 提供事实、规则、确定性计算
-与可验证性。
+Host Agent 负责把当前已验证 Feed 做 evidence-preserving 的摘要与格式化，形成
+information digest；`follow-the-money` 提供事实、规则、确定性计算、provenance
+与可验证性。Digest 不增加金融判断。
 
 ## 这个仓库是什么
 
@@ -25,8 +26,9 @@ one-shot boundary 提供 on-demand deterministic Audit 和 Event Structuring；�
 retained library 仍没有 production caller。
 
 Audit 与 Event Structuring 之外的保留确定性库是 typed、可复现、独立测试且可复用的，
-但当前没有 production orchestration caller。Host Agent 在消费 Feed 后负责推理与叙事；
-命名 retained capability 不会增加 production caller。
+但当前没有 production orchestration caller。Normal Skill consumption 把当前已验证 Feed
+交给 Host Agent 做 evidence-preserving information digest；命名 retained capability
+不会增加 production caller。
 
 ## 语义 capability surface
 
@@ -42,9 +44,13 @@ Audit 与 Event Structuring 之外的保留确定性库是 typed、可复现、�
 这些是描述 architecture 的标签，不是 runtime state、configuration、serialized
 metadata、capability registry 或 workflow stage。repository/Skill 只拥有这些
 family 已接受的 deterministic behavior、invariants 与 capability-local validation；
-详细行为仍由现有 living specs 负责。Host Agent 负责 research intent、
+详细行为仍由现有 living specs 负责。Normal Skill invocation 中 Host Agent 负责
+evidence-preserving digest summarization、editorial grouping/heading/ordering、
+consolidation/compression 与 user-facing presentation，不增加重要性、因果、prediction、
+market impact、投资或交易判断。在 digest path 之外，Host Agent 负责 research intent、
 interpretation、reasoning、hypotheses、conclusions、working analysis 与 narrative；
-deterministic engine 是 Skill 内部责任层，不是第三参与者或 Agent-callable endpoint。
+digest 不是第七个 deterministic capability family。deterministic engine 是 Skill 内部
+责任层，不是第三参与者或 Agent-callable endpoint。
 结果只在 governing spec 保证的范围内具有 authority；在该 governing capability
 之外由 consumer 派生的值归 consumer/Agent 所有，跨边界或 deterministic processing 不会提升 provenance、
 verification 或 authority。runtime-neutral 的
@@ -134,6 +140,10 @@ metadata；`pipeline.status: failure` 及任何不完整/不合法 bundle 都会
 Remote failure 必须终止 invocation：没有 Provider collection、stale local
 替换、partial evidence 或 local fallback。local producer 仍只供 hosted
 Actions、development、tests、Provider diagnostics 与显式 operator execution。
+Host Agent 只把已验证的当前 Feed 呈现为 information digest；这种 presentation
+不是新的 Feed field 或 deterministic capability result。Digest 可以压缩或合并证据，
+但必须对每个 domain 报告 total item count，并核对 individually summarized、
+consolidated 与 omitted 项目；omission 必须披露为 editorial compression。
 
 ## 定时 Feed 边界
 
