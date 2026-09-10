@@ -100,19 +100,6 @@ def generated_state_only(repo: Path, *, head: str = "HEAD", base: str | None = N
         for path in current_paths | previous_paths
         if path == "feeds/feed-manifest.json" or path.startswith("feeds/feed-")
     }
-    # Migration is the only accepted legacy deletion, and only alongside a
-    # now-valid active manifest.
-    if (
-        current_paths
-        and "feeds/latest.json" in changed
-        and not (repo / "feeds" / "latest.json").exists()
-    ):
-        try:
-            _git(repo, "cat-file", "-e", f"{base}:feeds/latest.json")
-        except subprocess.CalledProcessError:
-            pass
-        else:
-            allowed.add("feeds/latest.json")
     return changed.issubset(allowed)
 
 

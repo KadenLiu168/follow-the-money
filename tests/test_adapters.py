@@ -1,7 +1,7 @@
-"""Task 3.3-3.14 — adapter fixture tests (Fed, BLS, SEC, Yahoo).
+"""Task 3.3-3.14 — adapter fixture tests (the eight credential-free Feed Providers).
 
 Uses synthetic fixtures and injected clients only; never touches the network.
-Covers supported policy/release/calendar/macro cases, invalid responses,
+Covers supported policy/release/HTML-index date parsing cases, invalid responses,
 URL provider-bound validation, and empty-window behavior.
 """
 
@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -21,7 +20,6 @@ from follow_the_money.providers.adapters import (
     NbsAdapter,
     PbocAdapter,
     SecEdgarAdapter,
-    YahooMarketAdapter,
 )
 from follow_the_money.providers.http import FetchError, bounded_fetch
 from follow_the_money.providers.urls import UrlValidationError
@@ -194,8 +192,12 @@ def test_bounded_fetch_rejects_non_success_status_and_preserves_retry_after():
         bounded_fetch(
             StatusClient(),
             "https://www.federalreserve.gov/feeds/press_all.xml",
-            fetch_rules=[FetchRule("federalreserve.gov", allow_subdomains=True)],
-            redirect_rules=[FetchRule("federalreserve.gov", allow_subdomains=True)],
+            fetch_rules=[
+                FetchRule("federalreserve.gov", allow_subdomains=True, allowed_ports=(443,))
+            ],
+            redirect_rules=[
+                FetchRule("federalreserve.gov", allow_subdomains=True, allowed_ports=(443,))
+            ],
         )
     error = exc_info.value
     assert error.status_code == 429
@@ -212,8 +214,12 @@ def test_bounded_fetch_does_not_retry_arbitrary_client_exception():
         bounded_fetch(
             BuggyClient(),
             "https://www.federalreserve.gov/feeds/press_all.xml",
-            fetch_rules=[FetchRule("federalreserve.gov", allow_subdomains=True)],
-            redirect_rules=[FetchRule("federalreserve.gov", allow_subdomains=True)],
+            fetch_rules=[
+                FetchRule("federalreserve.gov", allow_subdomains=True, allowed_ports=(443,))
+            ],
+            redirect_rules=[
+                FetchRule("federalreserve.gov", allow_subdomains=True, allowed_ports=(443,))
+            ],
         )
     assert not exc_info.value.retryable
 
@@ -227,8 +233,12 @@ def test_bounded_fetch_rejects_redirect_outside_manifest():
         bounded_fetch(
             RedirectClient(),
             "https://www.federalreserve.gov/feeds/press_all.xml",
-            fetch_rules=[FetchRule("federalreserve.gov", allow_subdomains=True)],
-            redirect_rules=[FetchRule("federalreserve.gov", allow_subdomains=True)],
+            fetch_rules=[
+                FetchRule("federalreserve.gov", allow_subdomains=True, allowed_ports=(443,))
+            ],
+            redirect_rules=[
+                FetchRule("federalreserve.gov", allow_subdomains=True, allowed_ports=(443,))
+            ],
         )
 
 
@@ -360,94 +370,6 @@ def test_html_index_undecodable_response_remains_typed_fetch_failure():
         NbsAdapter().normalize(response, WINDOW)
 
 
-def test_yahoo_role_unit_and_availability_time_are_preserved():
-    body = (
-        __import__("json")
-        .dumps(
-            {
-                "chart": {
-                    "result": [
-                        {
-                            "timestamp": [1786118400],
-                            "indicators": {"quote": [{"close": [110.5]}]},
-                        }
-                    ]
-                }
-            }
-        )
-        .encode()
-    )
-    item = YahooMarketAdapter(instrument="^TNX", role_id="us10y", unit="percent").normalize(
-        FakeResponse(body), WINDOW
-    )[0]
-    observation = item["payload"]["observations"][0]
-    assert observation["unit"] == "percent"
-    assert item["source"]["knowledge_available_at"] == "2026-08-11T00:20:00.000Z"
-    assert observation["available_at"] is None
-
-
-def test_yahoo_fetch_requests_explicit_cutoff_bounded_daily_history():
-    client = FakeClient(b"{}")
-    adapter = YahooMarketAdapter(instrument="^GSPC", role_id="sp500")
-    end = "2026-08-11T00:20:00Z"
-    adapter.fetch({"start": "2026-08-01T00:00:00Z", "end": end}, client)
-    assert len(client.requests) == 1
-    query = parse_qs(urlsplit(client.requests[0]).query)
-    assert query["interval"] == ["1d"]
-    assert int(query["period2"][0]) == int(datetime.fromisoformat(end).timestamp())
-    assert int(query["period2"][0]) - int(query["period1"][0]) == 90 * 24 * 60 * 60
-
-
-def test_yahoo_normalize_enforces_260_chronological_observations():
-    import json
-
-    start = datetime(2025, 1, 1, tzinfo=UTC)
-    body = json.dumps(
-        {
-            "chart": {
-                "result": [
-                    {
-                        "timestamp": [
-                            int((start + timedelta(days=i)).timestamp()) for i in range(300)
-                        ],
-                        "indicators": {"quote": [{"close": [str(i + 1) for i in range(300)]}]},
-                    }
-                ]
-            }
-        }
-    ).encode()
-    items = YahooMarketAdapter(instrument="^GSPC", role_id="sp500").normalize(
-        FakeResponse(body), {"start": "2025-01-01T00:00:00Z", "end": "2026-01-01T00:00:00Z"}
-    )
-    observations = items[0]["payload"]["observations"]
-    assert len(observations) == 260
-    assert [o["as_of"] for o in observations] == sorted(o["as_of"] for o in observations)
-
-
-def test_yahoo_normalize_preserves_bar_for_session_aware_eligibility():
-    import json
-
-    partial = int((NOW - timedelta(seconds=299)).timestamp())
-    complete = int((NOW - timedelta(seconds=301)).timestamp())
-    body = json.dumps(
-        {
-            "chart": {
-                "result": [
-                    {
-                        "timestamp": [partial, complete],
-                        "indicators": {"quote": [{"close": ["101", "100"]}]},
-                    }
-                ]
-            }
-        }
-    ).encode()
-    items = YahooMarketAdapter(instrument="^GSPC", role_id="sp500").normalize(
-        FakeResponse(body), {"start": "2026-08-10T00:00:00Z", "end": NOW.isoformat()}
-    )
-    assert [row["value"] for row in items[0]["payload"]["observations"]] == ["100", "101"]
-    assert all(row["available_at"] is None for row in items[0]["payload"]["observations"])
-
-
 def test_sec_unknown_response_is_empty():
     adapter = SecEdgarAdapter()
     assert adapter.normalize(FakeResponse(b"{}"), WINDOW) == []
@@ -507,7 +429,6 @@ def test_all_manifests_load_and_provider_id_matches():
         "nbs",
         "sse",
         "szse",
-        "yahoo_market",
     }
     for pid, m in manifests.items():
         assert m["provider_id"] == pid
@@ -522,16 +443,17 @@ def test_no_manifest_claims_verified_without_date():
             assert m["verification"]["verification_date"] is not None
 
 
-def test_verified_adapters_enabled_optional_disabled():
-    # Gate 13.1: verified core adapters are enabled; verified-optional CFTC
-    # keeps a default-disabled manifest fallback (shipped activation lives in
-    # config/providers.yaml, which this manifest-level seam never sees).
+def test_manifest_entries_are_credential_free_and_closed():
     from follow_the_money.providers.manifest import load_all_manifests, manifest_to_provider_entry
 
-    for pid, m in load_all_manifests().items():
-        entry = manifest_to_provider_entry(m)
-        if m["verification"]["verified"] and pid != "cftc":
-            assert entry.enabled, f"{pid} verified and default-enabled"
-            assert entry.verified
-        else:
-            assert not entry.enabled, f"{pid} must stay disabled"
+    for pid, manifest in load_all_manifests().items():
+        entry = manifest_to_provider_entry(manifest)
+        assert entry.id == pid
+        assert entry.authentication == "none"
+        assert set(entry.payload_types) <= {
+            "news",
+            "macro_release",
+            "policy",
+            "positioning",
+            "filing",
+        }

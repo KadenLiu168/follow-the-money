@@ -1,4 +1,4 @@
-"""Feed orchestration and CLI wiring (task 4.4/4.8, gate 13.1).
+"""Deterministic five-domain Evidence Feed orchestration.
 
 The Feed command:
 
@@ -18,7 +18,7 @@ The Feed command:
 7. normalizes/dedupes (stable ``(knowledge_available_at, id)`` total order),
    validates the Feed schema/semantic-digest identity, and serializes
    published bytes with the shared ``canonical_bytes()``,
-8. builds eight typed artifacts and a manifest, then atomically activates
+8. builds five typed artifacts and a manifest, then atomically activates
    ``feed-manifest.json`` — or dry-runs; an existing equal bundle is an
    idempotent no-op that retains the stored bytes.
 
@@ -46,7 +46,7 @@ from ..config import load_config
 from ..config.load import ConfigError
 from ..config.model import AppConfig
 from ..feed.validate import assert_feed_identity, recompute_feed_identity, validate_feed
-from ..providers.http import FetchError
+from ..providers.http import FetchError, validate_provider_url
 from ..providers.lock import LOCK_FILENAME, CollectionLock, CollectionLockError
 from ..providers.manifest import ManifestError
 from ..providers.rate import RateRegistry, RateStateError, eligibility_delay, refill_tokens
@@ -72,13 +72,6 @@ from .plan import (
 )
 from .publish import PublishError, publish_bundle
 from .snapshot import SnapshotError, load_active_feed, select_provider_slices
-
-
-# Internal seam retained for callers/tests; this now means bundle publication,
-# never legacy latest.json production.
-def publish_feed(**kwargs: Any):
-    return publish_bundle(**kwargs)
-
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCHEMA_ROOT = REPO_ROOT / "schemas"
@@ -257,7 +250,7 @@ def run_feed(
         raise FeedExecutionError(str(exc)) from exc
 
     # Durable rate-state registry is created only after planning succeeds:
-    # an invalid latest makes zero writes beyond the lock file itself.
+    # an invalid current Feed makes zero writes beyond the lock file itself.
     if coordinates_run:
         try:
             rate = RateRegistry(state_root)
@@ -583,7 +576,7 @@ def run_feed(
             )
 
         try:
-            publication = publish_feed(
+            publication = publish_bundle(
                 output_root=product_root,
                 bundle=bundle,
                 cutoff=cutoff,
@@ -597,11 +590,7 @@ def run_feed(
             raise FeedExecutionError(
                 "commit_durability_unknown: Feed publication durability is unknown"
             )
-        if not (
-            getattr(publication, "manifest_replaced", False)
-            or getattr(publication, "latest_replaced", False)
-            or publication.idempotent
-        ):
+        if not (getattr(publication, "manifest_replaced", False) or publication.idempotent):
             raise FeedExecutionError("Feed manifest ownership was not accepted")
         if publication.cleanup_failed:
             warnings.append("Feed bundle cleanup deferred")
@@ -636,40 +625,16 @@ def run_feed(
 def _production_adapters(cfg: AppConfig, registry: Any) -> dict[str, list[Any]]:
     """Build per-provider adapter lists for the production registry.
 
-    The Yahoo-compatible contract plans only verified configured role mappings;
-    every other enabled provider contributes one adapter instance.
+    Every enabled Provider contributes one adapter instance; SEC EDGAR also
+    receives the configured watched-company CIK filter.
     """
-    from ..providers.adapters import SecEdgarAdapter, YahooMarketAdapter
+    from ..providers.adapters import SecEdgarAdapter
 
     adapters: dict[str, list[Any]] = {}
     for p in cfg.providers:
         if not p.enabled:
             continue
-        if p.id == "yahoo_market":
-            mappings = {str(mapping["role_id"]): mapping for mapping in p.role_mappings}
-            planned: list[Any] = []
-            for role in cfg.roles:
-                mapping = mappings.get(role.id)
-                if mapping is None:
-                    raise FeedInputError(f"missing resolved Yahoo mapping for role {role.id!r}")
-                if (
-                    mapping.get("instrument") != role.instrument
-                    or mapping.get("unit") != role.unit
-                    or mapping.get("mapping_verified") != role.mapping_verified
-                ):
-                    raise FeedInputError(f"Yahoo mapping tuple mismatch for role {role.id!r}")
-                if not mapping["mapping_verified"]:
-                    continue
-                planned.append(
-                    YahooMarketAdapter(
-                        p,
-                        instrument=str(mapping["instrument"]),
-                        role_id=role.id,
-                        unit=str(mapping["unit"]),
-                    )
-                )
-            adapters[p.id] = planned
-        elif p.id == "sec_edgar":
+        if p.id == "sec_edgar":
             adapters[p.id] = [
                 SecEdgarAdapter(
                     p, watched_ciks=tuple(company.cik for company in cfg.watched_companies)
@@ -777,51 +742,75 @@ def _run_adapter(
                 reject_late_result(state)
                 return
             normalized = list(adapter.normalize(raw, window))
+            provider_contract = next(
+                (provider for provider in cfg.providers if provider.id == outcome.provider_id),
+                None,
+            )
+            allowed_payload_types = (
+                set(provider_contract.payload_types) if provider_contract is not None else set()
+            )
+            validated_items: list[dict[str, Any]] = []
             identity_ids: set[str] = set()
-            resolved_provider_ids = {provider.id for provider in cfg.providers}
+            invalid_reason: str | None = None
             for item in normalized:
-                item_id = item.get("id") if isinstance(item, Mapping) else None
+                if not isinstance(item, Mapping):
+                    invalid_reason = "normalized item is not an object"
+                    break
+                payload = item.get("payload")
                 if (
-                    isinstance(item, Mapping)
-                    and isinstance(item_id, str)
-                    and item_id
-                    and (
-                        (
-                            outcome.provider_id in resolved_provider_ids
-                            and item.get("provider_id") != outcome.provider_id
-                        )
-                        or item_id in identity_ids
-                    )
+                    not isinstance(payload, Mapping)
+                    or payload.get("type") not in allowed_payload_types
                 ):
-                    outcome.error = "current item identity is missing, duplicated, or mismatched"
-                    outcome.rejected += 1
-                    mark_incomplete(outcome.error)
-                    if rate is not None and scope is not None and state is not None:
-                        rate.reconcile(state, now=now_fn)
-                    return
-                if isinstance(item_id, str) and item_id:
-                    identity_ids.add(item_id)
-            accepted_items = []
-            rejected = 0
-            for item in normalized:
-                if item.get("source", {}).get("url"):
-                    accepted_items.append(item)
-                else:
-                    rejected += 1
+                    invalid_reason = "normalized item payload is outside Provider contract"
+                    break
+                item_id = item.get("id")
+                if (
+                    not isinstance(item_id, str)
+                    or not item_id
+                    or item_id in identity_ids
+                    or item.get("provider_id") != outcome.provider_id
+                ):
+                    invalid_reason = "current item identity is missing, duplicated, or mismatched"
+                    break
+                identity_ids.add(item_id)
+                source = item.get("source")
+                if not isinstance(source, Mapping):
+                    invalid_reason = "normalized item source URL is outside Provider contract"
+                    break
+                url = source.get("url")
+                if provider_contract is None or not isinstance(url, str) or not url:
+                    invalid_reason = "normalized item source URL is outside Provider contract"
+                    break
+                try:
+                    canonical_url = validate_provider_url(
+                        url,
+                        rules=provider_contract.source_link_hosts,
+                    )
+                except (TypeError, ValueError):
+                    invalid_reason = "normalized item source URL is outside Provider contract"
+                    break
+                if len(canonical_url) > cfg.feed.max_url_characters:
+                    invalid_reason = "normalized item source URL exceeds configured limit"
+                    break
+                normalized_item = dict(item)
+                normalized_item["source"] = {**source, "url": canonical_url}
+                validated_items.append(normalized_item)
+            if invalid_reason is not None:
+                outcome.rejected += 1
+                mark_incomplete(invalid_reason)
+                if rate is not None and scope is not None and state is not None:
+                    rate.reconcile(state, now=now_fn)
+                return
             if deadline_expired():
                 reject_late_result(state)
                 return
+            accepted_items = validated_items
             items.extend(accepted_items)
             accepted = len(accepted_items)
             outcome.accepted += accepted
-            outcome.rejected += rejected
-            if not accepted and not rejected and not empty_valid_for_window:
+            if not accepted and not empty_valid_for_window:
                 outcome.non_permitted_empty_observed = True
-            if rejected:
-                outcome.state = "partial" if outcome.accepted else "failed"
-                outcome.availability = "failed"
-                outcome.availability_reason = bounded_availability_reason(outcome.error)
-            elif accepted:
+            if accepted:
                 if outcome.state == "partial" or outcome.non_permitted_empty_observed:
                     outcome.state = "partial"
                     outcome.availability = "failed"
@@ -1067,14 +1056,11 @@ def _provider_contract_snapshots(
             "response_limit_bytes": p.response_limit_bytes,
             "attempt_timeout_seconds": p.attempt_timeout_seconds,
             "request_limit_bytes": p.request_limit_bytes,
-            "max_observations": p.max_observations,
             "credentials_required": p.credentials_required,
             "verification_date": p.verification_date,
             "contract_url": p.contract_url,
             "time_knowledge_time": p.time_knowledge_time,
             "payload_types": list(p.payload_types),
-            "calendar_capability": p.calendar_capability,
-            "availability_lag_seconds": p.availability_lag_seconds,
             "identity_stable_record_id": p.identity_stable_record_id,
             "units": dict(sorted(p.units.items())),
             "freshness": {
@@ -1088,14 +1074,6 @@ def _provider_contract_snapshots(
             }
             if p.freshness is not None
             else None,
-            "role_mappings": [
-                {
-                    key: dict(sorted(value.items())) if isinstance(value, Mapping) else value
-                    for key, value in sorted(mapping.items())
-                }
-                for mapping in p.role_mappings
-            ],
-            "adjustment_policy": dict(sorted(p.adjustment_policy.items())),
             "fixture_provenance_source": p.fixture_provenance_source,
             "fixture_files": list(p.fixture_files),
         }
@@ -1111,7 +1089,6 @@ def _feed_config_snapshot(cfg: AppConfig) -> dict[str, Any]:
         "feed": {
             "bootstrap_lookback_hours": cfg.feed.bootstrap_lookback_hours,
             "gap_threshold_hours": cfg.feed.gap_threshold_hours,
-            "calendar_horizon_hours": cfg.feed.calendar_horizon_hours,
             "pre_commit_deadline_seconds": cfg.feed.pre_commit_deadline_seconds,
             "commit_reserve_seconds": cfg.feed.commit_reserve_seconds,
             "global_concurrency": cfg.feed.global_concurrency,
@@ -1123,7 +1100,6 @@ def _feed_config_snapshot(cfg: AppConfig) -> dict[str, Any]:
             "max_title_code_points": cfg.feed.max_title_code_points,
             "max_snippet_code_points": cfg.feed.max_snippet_code_points,
             "max_url_characters": cfg.feed.max_url_characters,
-            "max_observations_per_instrument": cfg.feed.max_observations_per_instrument,
             "max_serialized_feed_bytes": cfg.feed.max_serialized_feed_bytes,
             "lock_timeout_seconds": cfg.feed.lock_timeout_seconds,
         },

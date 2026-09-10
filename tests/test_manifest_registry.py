@@ -1,128 +1,72 @@
-"""Task 3.17/3.18 — manifest/registry coverage-matrix gates.
-
-Proves that no mandatory v1 matrix row is silently weakened: every adapter
-without a verified contract and implementation stays disabled and cannot
-count as working coverage; the verified CFTC adapter is activated in the
-shipped production plan while remaining non-mandatory (verified-optional)
-coverage.
-"""
+"""Feed-only manifest and coverage-matrix gates."""
 
 from __future__ import annotations
+
+from pathlib import Path
 
 from follow_the_money.config import load_config
 from follow_the_money.providers.manifest import load_all_manifests
 
-REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO_ROOT / "config" / "config.yaml"
 DEFAULT_PROVIDERS = REPO_ROOT / "config" / "providers.yaml"
 DEFAULT_MANIFEST_ROOT = REPO_ROOT / "providers"
-
-# The six mandatory v1 groups and their exact members (design matrix).
+REQUIRED = {
+    "federal_reserve",
+    "bls",
+    "pboc",
+    "nbs",
+    "sse",
+    "szse",
+    "sec_edgar",
+    "cftc",
+}
 MANDATORY_ROWS = {
     "us_official_macro_policy": ("federal_reserve", "bls"),
     "us_company_filings": ("sec_edgar",),
     "china_official_macro_policy": ("pboc", "nbs"),
     "china_exchange_evidence": ("sse", "szse"),
-    "verified_market_data": ("yahoo_market",),
-    "future_calendar": ("federal_reserve", "bls", "nbs"),
+    "cftc_positioning": ("cftc",),
 }
+RETAINED_DOMAINS = {"news", "macro_release", "policy", "positioning", "filing"}
 
 
-def test_shipped_config_declares_exact_six_groups():
-    cfg = load_config(
-        DEFAULT_CONFIG,
-        DEFAULT_PROVIDERS,
-        manifest_root=DEFAULT_MANIFEST_ROOT,
-        require_verified_enabled=False,
-    )
-    rows = {r.group: r.members for r in cfg.coverage.rows}
-    assert rows == MANDATORY_ROWS
-
-
-def test_shipped_matrix_minima_match_design():
-    cfg = load_config(
-        DEFAULT_CONFIG,
-        DEFAULT_PROVIDERS,
-        manifest_root=DEFAULT_MANIFEST_ROOT,
-        require_verified_enabled=False,
-    )
-    for r in cfg.coverage.rows:
-        expected_min = {
-            "us_official_macro_policy": 2,
-            "us_company_filings": 1,
-            "china_official_macro_policy": 2,
-            "china_exchange_evidence": 2,
-            "verified_market_data": 1,
-            "future_calendar": 3,
-        }[r.group]
-        assert r.minimum == expected_min
-        assert r.capability  # every row names its capability
-
-
-def test_cftc_verified_optional_not_mandatory():
-    cfg = load_config(
-        DEFAULT_CONFIG,
-        DEFAULT_PROVIDERS,
-        manifest_root=DEFAULT_MANIFEST_ROOT,
-        require_verified_enabled=False,
-    )
-    mandatory = {m for r in cfg.coverage.rows for m in r.members}
-    assert "cftc" not in mandatory  # CFTC is verified-optional coverage
-
-
-def test_shipped_production_plan_enables_verified_cftc():
-    # The resolved production plan must plan the verified CFTC adapter while
-    # its optional/non-mandatory coverage status stays unchanged.
-    cfg = load_config(
+def _config():
+    return load_config(
         DEFAULT_CONFIG,
         DEFAULT_PROVIDERS,
         manifest_root=DEFAULT_MANIFEST_ROOT,
         require_verified_enabled=True,
     )
-    cftc = cfg.provider("cftc")
-    assert cftc.enabled
-    assert cftc.verified
-    mandatory = {m for r in cfg.coverage.rows for m in r.members}
-    assert "cftc" not in mandatory
 
 
-def test_no_hidden_default_enablement():
-    # Every mandatory matrix row must be backed by verified enabled members.
-    cfg = load_config(
-        DEFAULT_CONFIG,
-        DEFAULT_PROVIDERS,
-        manifest_root=DEFAULT_MANIFEST_ROOT,
-        require_verified_enabled=True,
-    )
-    assert cfg.provider("cftc").enabled  # activated; still outside every row
+def test_shipped_config_declares_exact_required_providers_and_groups():
+    cfg = _config()
+    assert {provider.id for provider in cfg.providers} == REQUIRED
+    assert {row.group: row.members for row in cfg.coverage.rows} == MANDATORY_ROWS
+    assert cfg.coverage.row("cftc_positioning").minimum == 1
+
+
+def test_shipped_matrix_minima_are_achievable():
+    cfg = _config()
     for row in cfg.coverage.rows:
-        enabled = [m for m in row.members if cfg.provider(m).enabled and cfg.provider(m).verified]
-        assert len(enabled) >= row.minimum, f"{row.group}: insufficient verified coverage"
+        enabled = [member for member in row.members if cfg.provider(member).enabled]
+        assert len(enabled) >= row.minimum
 
 
-def test_every_shipped_provider_has_manifest():
-    cfg = load_config(
-        DEFAULT_CONFIG,
-        DEFAULT_PROVIDERS,
-        manifest_root=DEFAULT_MANIFEST_ROOT,
-        require_verified_enabled=False,
-    )
+def test_every_shipped_provider_has_a_verified_credential_free_manifest():
+    cfg = _config()
     manifests = load_all_manifests()
-    for p in cfg.providers:
-        # provider ids in config use underscores; manifest dirs match.
-        assert p.id in manifests, f"provider {p.id} missing contract manifest"
-
-
-def test_manifest_charset_and_source_link_rules_present():
-    manifests = load_all_manifests()
-    for pid, m in manifests.items():
-        assert m["charset"]["allowed"], f"{pid} missing allowed charset"
-        assert "source_link_hosts" in m, f"{pid} missing source_link_hosts"
+    assert set(manifests) == REQUIRED
+    for provider in cfg.providers:
+        manifest = manifests[provider.id]
+        assert manifest["provider_id"] == provider.id
+        assert manifest["verification"]["verified"]
+        assert manifest["authentication"] == "none"
+        assert set(manifest["time"]["payload_types"]) <= RETAINED_DOMAINS
 
 
 def test_all_shipped_adapters_are_implemented():
-    # Every shipped provider — including the activated verified CFTC adapter —
-    # has a concrete adapter.
     from follow_the_money.providers.adapters import (
         BlsAdapter,
         CftcAdapter,
@@ -132,20 +76,18 @@ def test_all_shipped_adapters_are_implemented():
         SecEdgarAdapter,
         SseAdapter,
         SzseAdapter,
-        YahooMarketAdapter,
     )
 
     for adapter_cls in (
         FedAdapter,
         BlsAdapter,
-        SecEdgarAdapter,
         CftcAdapter,
-        PbocAdapter,
         NbsAdapter,
+        PbocAdapter,
+        SecEdgarAdapter,
         SseAdapter,
         SzseAdapter,
-        YahooMarketAdapter,
     ):
-        a = adapter_cls()
-        assert a.provider_id
-        assert a._rules  # every adapter binds source-link rules
+        adapter = adapter_cls()
+        assert adapter.provider_id in REQUIRED
+        assert adapter._rules

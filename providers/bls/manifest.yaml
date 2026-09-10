@@ -49,8 +49,7 @@ attempt_timeout_seconds: 20
 
 time:
   knowledge_time: released_at
-  payload_types: [macro_release, calendar]
-  calendar_capability: future_release_calendar
+  payload_types: [news]
 
 identity:
   stable_record_id: series_id_plus_release_date

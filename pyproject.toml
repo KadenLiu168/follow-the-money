@@ -1,7 +1,7 @@
 [project]
 name = "follow-the-money"
 version = "0.1.0"
-description = "Credential-free evidence Feed for AI Agents, plus private on-demand deterministic Audit and Event Structuring; other research libraries remain retained without production orchestration."
+description = "Credential-free five-domain Evidence Feed for Host Agents."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Proprietary" }
@@ -10,7 +10,6 @@ dependencies = [
     "PyYAML>=6.0,<7",
     "jsonschema>=4.22,<5",
     "feedparser>=6.0,<7",
-    "exchange-calendars>=4.8,<5",
 ]
 
 [dependency-groups]

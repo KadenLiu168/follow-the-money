@@ -1,1 +1,0 @@
-{"capacity": "30", "cooldown_until": "2026-09-10T04:53:54.633Z", "last_dispatch_wall": "2026-09-10T04:53:53.633Z", "minimum_interval_seconds": 1, "policy_fingerprint": null, "refill_period_seconds": 60, "refill_wall_anchor": "2026-09-10T04:53:53.633Z", "scope_id": "yahoo_market", "status": "active", "tokens": "29", "version": "1"}

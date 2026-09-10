@@ -1,183 +1,94 @@
 # Follow the Money
 
-Evidence-based information digest Skill for AI Agents: a deterministic,
-credential-free evidence Feed from free China/US official and public sources,
-plus retained deterministic libraries (ledger, candidate events, market
-snapshot/state, watchlist, scoring/ranking rules, safety audit). The semantic
-Skill capability surface, responsibility boundary, and private on-demand Audit
-and Event Structuring invocation boundary are implemented; integration beyond
-Audit and Event Structuring remains deferred.
+A credential-free, deterministic five-domain Evidence Feed for Host Agents.
+The repository provides an evidence-based information digest skill boundary:
+it collects, normalizes, validates, and publishes evidence; the Host Agent
+consumes the current Feed and produces an evidence-preserving information
+digest.
 
-The Host Agent summarizes and formats the current validated Feed as an
-evidence-based information digest; `follow-the-money` supplies facts, rules,
-deterministic computation, provenance, and verifiability. The digest does not
-add financial judgment.
+## Capability boundary
 
-## What this repository is
+The repository exposes one capability: the Evidence Feed. It owns Provider
+contracts, provenance, fixed-cutoff collection, freshness, coverage,
+degradation, deterministic identity, canonical serialization, atomic
+publication, and canonical current-Feed consumption.
 
-A Python 3.12 package whose hosted production path collects and publishes a
-schema-validated, identity-bearing evidence-only Feed, while normal Skill
-invocation consumes that published Feed directly from the canonical `main/feeds/` raw root:
-run identity, one fixed
-evidence cutoff, per-item provider provenance, canonical digests, contract
-snapshots, and explicit per-Provider freshness and availability results. Concrete HTTP 401/403 source denials can be published as bounded degraded diagnostics; other Provider incompleteness remains fatal. Payload observation /
-effective time, source publication/update time, Provider retrieval/check time,
-and Feed generation time remain distinct. A valid unchanged slice may be
-carried only after complete acquisition from the fully validated active bundle;
-blocked or failed Provider acquisition never carries prior evidence. No credential, model, or LLM runtime
-exists anywhere in the repository. A separate private one-shot boundary provides on-demand deterministic
-Audit and Event Structuring; the other retained libraries have no current
-production caller.
+The normal path is:
 
-The retained deterministic libraries other than Audit and Event Structuring are
-typed, reproducible, independently tested, and reusable, but have no current
-production orchestration caller. Normal Skill consumption gives the Host Agent
-the current validated Feed for an evidence-preserving digest; naming a retained
-capability does not add a production caller.
+```text
+published Feed -> validation -> Host Agent summarization/formatting -> information digest
+```
 
-## Semantic capability surface
+The Feed contains no financial interpretation, importance, ranking, regime,
+market-impact, prediction, recommendation, or trading conclusion. The Host
+Agent may group, order, consolidate, and compress evidence for readability,
+but must preserve semantic support and disclose omissions.
 
-The closed semantic catalog has exactly six families:
+## Current Feed contract
 
-- Evidence Feed — `live-production`.
-- Evidence and Event Structuring — `live-production` (on demand).
-- Market Analytics and State — `retained-no-production-caller`.
-- Confidence and Watchlist — `retained-no-production-caller`.
-- Scoring and Ranking — `retained-no-production-caller`.
-- Deterministic Audit — `live-production` (on demand).
+New bundles use logical Feed schema major **4**, manifest major **4**, and
+artifact major **2**. The fixed artifact order is the retained evidence surface:
 
-These are descriptive architecture labels, not runtime state, configuration,
-serialized metadata, a capability registry, or workflow stages. The
-repository/Skill owns the accepted deterministic behavior, invariants, and
-capability-local validation; detailed behavior remains in the existing living
-specs. For normal Skill invocation, the Host Agent owns evidence-preserving
-digest summarization, editorial grouping and formatting, transparent
-consolidation/compression, and user-facing presentation without adding
-importance, causality, prediction, market impact, investment, or trading
-judgment. Outside that digest path, the Host Agent owns research intent,
-interpretation, reasoning, hypotheses, conclusions, working analysis, and
-narrative. The digest is not a seventh deterministic capability family. The deterministic
-engine is an internal Skill layer, not a third participant or Agent-callable
-endpoint. A result is authoritative only within its governing spec; consumer
-derivation outside that governing capability remains consumer/Agent-owned, and
-boundary crossing or deterministic processing does not upgrade provenance,
-verification, or authority. The runtime-neutral
-`agent-grounding-validation-contract` defines semantic grounding, validation
-authority, constrained output admissibility, unsupported assertions, and
-semantic recovery. Evidence-reference presence alone does not establish
-semantic support, deterministic success does not establish entailment or
-complete answer validity, and the Host Agent owns semantic support assessment
-and narrative emission while deterministic findings retain bounded Skill
-authority. Known unsupported grounded assertions and unresolved applicable
-critical findings are not admissible unchanged. The private one-shot Agent
-invocation contract is implemented through `schemas/agent-invocation.schema.json`;
-it defines only `audit.text`, `audit.claims`, and `event.structure`, with no
-orchestration, retry, rewrite loop, or runtime registry.
+```text
+news
+macro_release
+policy
+positioning
+filing
+```
 
-## Accepted invocation contract and Phase 5 plan
+Every artifact is required, including when empty. The required credential-free
+Providers are Federal Reserve, BLS, PBOC, NBS, SSE, SZSE, SEC EDGAR, and CFTC.
+CFTC is a required minimum-one weekly positioning coverage member.
 
-The private Host-Agent boundary accepts one UTF-8 JSON request on stdin and
-returns one JSON response on stdout; diagnostics belong on stderr. Version 1
-defines `audit.text`, `audit.claims`, and `event.structure`. A successful
-response carries the bounded deterministic Audit or Event result; typed
-invocation errors are separate from capability results. There is no session,
-streaming, discovery, registry, remote transport, shared state, automatic
-chaining, LLM runtime, or caller for any capability other than on-demand Audit
-and Event Structuring.
-
-The activation plan records the verified state: Feed remains live and unchanged;
-Audit is `live-production` through its implemented private boundary; Evidence
-and Event Structuring is `live-production` through its implemented
-`event.structure` operation and remains on demand; Market Analytics and State,
-Confidence and Watchlist, and Scoring and Ranking remain deferred and
-`retained-no-production-caller`.
-
-## Investment-assistance boundary
-
-The retained safety audit (`ClaimAuditor`) flags prohibited trading
-instructions (buy, sell, add, reduce, position-size, entry, exit, stop-loss,
-target price — Chinese or English) with descriptive exceptions. Nothing here
-is investment advice.
+A validated previous eight-domain bundle may enter only the explicit bounded
+migration path. Normal loading and remote consumption reject the previous
+major and never use removed-domain artifacts as current evidence.
 
 ## Repository layout
 
-```
-config/           closed versioned YAML configuration (v1 defaults, no secrets)
-providers/        provider contract manifests and fixture provenance
-schemas/          JSON Schema 2020-12 contracts (logical Feed, typed bundle, Agent invocation)
-src/follow_the_money/  live Feed/Audit/Event paths plus retained deterministic libraries
-scripts/feed/     minimal internal Feed entry: follow-the-money-feed
-scripts/skill/    normal Skill entry: prepare-feed (remote-only consumer)
-feeds/            active Feed bundle (feed-manifest.json plus eight typed artifacts)
-.feed-state/      repository-backed lock, RateRegistry, lease, and checkpoint
-tests/            pytest suite (credential-free)
-docs/             architecture, contracts, runbooks
-.github/workflows/ hosted CI + active scheduled Feed workflow
-
-Configuration authority and the single resolved Provider contract are documented
-in [`docs/configuration.md`](docs/configuration.md).
+```text
+config/                    closed Feed configuration and Provider activation
+providers/                 verified Provider manifests and deterministic fixtures
+schemas/                   Feed, manifest, and artifact JSON Schemas
+src/follow_the_money/feed  producer, validation, publication, and consumption
+scripts/feed/              internal deterministic producer entry
+scripts/skill/             canonical published-Feed consumer entry
+feeds/                     current manifest-led Feed product
+.feed-state/               lock, rate registry, lease, and checkpoint state
+tests/                     credential-free tests
+docs/                     current Feed contracts and runbooks
+.github/workflows/         CI and scheduled Feed production
 ```
 
 ## Quick start
 
 ```bash
 uv sync --frozen --all-groups
-uv run pytest            # full credential-free test suite
-scripts/skill/prepare-feed       # normal Skill: canonical logical Feed on stdout
-# hosted/development/diagnostic/operator producer check:
+uv run pytest
+scripts/skill/prepare-feed
 scripts/feed/follow-the-money-feed --dry-run
 ```
 
-## Exit-code contract (minimal internal Feed entry)
+The producer requires no API key or paid data credential. The normal Skill
+consumer retrieves `feeds/feed-manifest.json` from canonical `main`, then
+retrieves exactly the five manifest-declared artifacts. It performs no local,
+stale, partial, historical, or unvalidated fallback.
 
-- `0` — healthy/degraded Feed success (warnings on stderr/status)
-- `1` — generation/publication/schema/integrity failure
-- `2` — usage, configuration, or startup-capability error
+## Exit codes
 
-There is no public user-facing CLI product form: `brief`, `eval`, and
-`replay` subcommands and the standalone console script were removed.
+- `0` — healthy or accepted degraded Feed
+- `1` — Feed generation, publication, schema, or integrity failure
+- `2` — usage, configuration, or startup-capability failure
 
-## Published Feed consumption
+## Scheduled production
 
-Normal Skill invocation uses only `scripts/skill/prepare-feed`. It retrieves
-`feeds/feed-manifest.json` first from
-`raw.githubusercontent.com/KadenLiu168/follow-the-money/main/feeds/`, then
-retrieves exactly its declared artifacts from that same canonical raw root.
-Retrieval is credential-free, temporary, makes zero GitHub REST API requests,
-and does not write `feeds/` or `.feed-state/`; the logical Feed contains no
-transport metadata or consumer-age policy.
+GitHub Actions runs the Feed producer on the configured schedule or via
+`workflow_dispatch`. Collection state uses `.feed-state/`; the active product
+uses `feeds/`. Fixed cutoff/window planning, Provider freshness and provenance,
+required coverage, bounded blocked-Provider degradation, atomic manifest
+activation, checkpoint continuity, and durable rate safety remain enforced.
 
-The consumer accepts healthy and valid degraded bundles, preserves their exact
-warnings and Provider availability metadata, and rejects `pipeline.status:
-failure` or any invalid/incomplete bundle. A remote failure is terminal: there
-is no Provider collection, stale local substitution, partial evidence, or local fallback.
-The local producer remains available only for hosted Actions,
-development, tests, Provider diagnostics, and explicit operator execution. The
-Host Agent presents the validated current Feed as the information digest; this
-presentation is not a new Feed field or deterministic capability result. It may
-compress or consolidate evidence, but for every domain it reports the total item
-count and reconciles individually summarized, consolidated, and omitted items;
-omissions are disclosed as editorial compression.
-
-## Scheduled Feed boundary
-
-GitHub Actions runs the credential-free Feed producer on `ubuntu-latest` at
-`20 0 * * *` (08:20 Asia/Shanghai), or through `workflow_dispatch`. It uses
-`feeds/` only for the current consumer bundle and `.feed-state/` for
-repository-backed runtime state. Normal Skill consumers use the separate canonical-main raw entry above; they
-do not invoke Providers or local generation. The producer's local loader discovers `feed-manifest.json` first; a
-fully validated `latest.json` is read only when the manifest is absent. The first invocation may perform a zero-Provider legacy migration
-or bootstrap; normal arming and incomplete-run recovery use the recorded
-checkpoint and conservative lease boundary. `evidence_cutoff_at` is captured
-from actual runtime, not from the nominal schedule; retrieval and generation
-timestamps do not refresh old observations. Checkpoint state owns runtime
-continuity; Git history is repository history, not a Feed archive or query API.
-Verify Actions `contents: write` and branch policy before calling deployment
-operational; Host-Agent consumption and reasoning remain a separate later action.
-
-## Documentation
-
-- `docs/architecture.md` — live Feed path, retained capabilities, future boundary
-- `docs/feed-contract.md` — Feed schema, window/cutoff model, publication
-- `docs/scoring.md` — deterministic scoring and ranking contract
-- Runbooks: `docs/runbooks/`
+See [`docs/feed-contract.md`](docs/feed-contract.md),
+[`docs/configuration.md`](docs/configuration.md), and
+[`docs/architecture.md`](docs/architecture.md) for the current contracts.

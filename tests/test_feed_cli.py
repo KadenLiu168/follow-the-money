@@ -154,7 +154,7 @@ def test_publication_failure_is_execution_error(tmp_path, monkeypatch):
     assert baseline.status == "healthy"
     previous_manifest = (out / "feed-manifest.json").read_bytes()
 
-    monkeypatch.setattr(feed_cli, "publish_feed", fail)
+    monkeypatch.setattr(feed_cli, "publish_bundle", fail)
     with pytest.raises(FeedExecutionError):
         run_feed(
             output_root=str(out),
@@ -347,7 +347,7 @@ def test_run_feed_separates_product_and_runtime_state_roots(tmp_path, monkeypatc
     assert result.status == "healthy"
     manifest = json.loads((product_root / "feed-manifest.json").read_bytes())
     assert manifest["evidence_cutoff_at"] == "2026-08-11T00:20:00.123Z"
-    assert manifest["schema_version"] == 3
+    assert manifest["schema_version"] == 4
     assert all(
         set(outcome)
         >= {
@@ -383,7 +383,7 @@ def test_checkpoint_advances_after_accepted_publication_and_before_unlock(tmp_pa
     planned = _planned_provider_ids(cfg)
     registry = {provider_id: _OutcomeAdapter() for provider_id in planned}
     events: list[str] = []
-    original_publish = feed_cli.publish_feed
+    original_publish = feed_cli.publish_bundle
     original_write = feed_cli.write_checkpoint
 
     def publish(**kwargs):
@@ -394,7 +394,7 @@ def test_checkpoint_advances_after_accepted_publication_and_before_unlock(tmp_pa
         events.append("checkpoint")
         return original_write(path, checkpoint)
 
-    monkeypatch.setattr(feed_cli, "publish_feed", publish)
+    monkeypatch.setattr(feed_cli, "publish_bundle", publish)
     monkeypatch.setattr(feed_cli, "write_checkpoint", write)
 
     result = run_feed(
@@ -449,7 +449,7 @@ def test_accepted_degraded_publication_advances_checkpoint(tmp_path, monkeypatch
         "candidate_validation",
         "publication_failure",
         "durability_unknown",
-        "latest_not_replaced",
+        "manifest_not_replaced",
     ],
 )
 def test_failed_or_dry_run_outcomes_do_not_advance_checkpoint(tmp_path, monkeypatch, outcome):
@@ -490,23 +490,23 @@ def test_failed_or_dry_run_outcomes_do_not_advance_checkpoint(tmp_path, monkeypa
         if outcome == "publication_failure":
             monkeypatch.setattr(
                 feed_cli,
-                "publish_feed",
+                "publish_bundle",
                 lambda **_kwargs: (_ for _ in ()).throw(PublishError("publication failed")),
             )
         elif outcome == "durability_unknown":
             monkeypatch.setattr(
                 feed_cli,
-                "publish_feed",
+                "publish_bundle",
                 lambda **_kwargs: SimpleNamespace(
-                    commit_durability_unknown=True, latest_replaced=True, idempotent=False
+                    commit_durability_unknown=True, manifest_replaced=True, idempotent=False
                 ),
             )
         else:
             monkeypatch.setattr(
                 feed_cli,
-                "publish_feed",
+                "publish_bundle",
                 lambda **_kwargs: SimpleNamespace(
-                    commit_durability_unknown=False, latest_replaced=False, idempotent=False
+                    commit_durability_unknown=False, manifest_replaced=False, idempotent=False
                 ),
             )
 
@@ -514,7 +514,7 @@ def test_failed_or_dry_run_outcomes_do_not_advance_checkpoint(tmp_path, monkeypa
         "candidate_validation",
         "publication_failure",
         "durability_unknown",
-        "latest_not_replaced",
+        "manifest_not_replaced",
     }:
         with pytest.raises(FeedExecutionError):
             run_feed(**kwargs)
@@ -526,6 +526,11 @@ def test_failed_or_dry_run_outcomes_do_not_advance_checkpoint(tmp_path, monkeypa
 
 
 def _accepted_item(provider_id: str, item_id: str) -> dict:
+    source_url = (
+        f"https://www.sec.gov/Archives/edgar/data/0001067983/{item_id}"
+        if provider_id == "sec_edgar"
+        else f"https://www.federalreserve.gov/newsevents/pressreleases/{item_id}.htm"
+    )
     return {
         "id": item_id,
         "provider_id": provider_id,
@@ -534,12 +539,12 @@ def _accepted_item(provider_id: str, item_id: str) -> dict:
             "name": "Fixture source",
             "tier": "Tier 1",
             "kind": "news",
-            "url": f"https://example.com/{item_id}",
+            "url": source_url,
             "published_at": "2026-08-11T00:10:00Z",
             "knowledge_available_at": "2026-08-11T00:10:00Z",
         },
         "payload": {
-            "type": "policy",
+            "type": "filing" if provider_id == "sec_edgar" else "policy",
             "title": item_id,
             "announced_at": "2026-08-11T00:10:00Z",
             "raw_metadata": {},
@@ -548,17 +553,23 @@ def _accepted_item(provider_id: str, item_id: str) -> dict:
 
 
 def test_failed_provider_and_successful_provider_fail_with_both_causes(tmp_path):
+    cfg = _source_complete_cfg()
+    planned = _planned_provider_ids(cfg)
+    registry = {
+        provider_id: _OutcomeAdapter(
+            items=[_accepted_item("federal_reserve", "accepted")]
+            if provider_id == "federal_reserve"
+            else [],
+            error=RuntimeError("provider unavailable") if provider_id == "bls" else None,
+        )
+        for provider_id in planned
+    }
     result = run_feed(
         output_root=str(tmp_path / "out"),
         cutoff=_cutoff(),
         dry_run=True,
-        providers_fn=lambda: {
-            "federal_reserve": _OutcomeAdapter(
-                items=[_accepted_item("federal_reserve", "accepted")]
-            ),
-            "bls": _OutcomeAdapter(error=RuntimeError("provider unavailable")),
-        },
-        enabled_provider_ids=["federal_reserve", "bls"],
+        providers_fn=lambda: registry,
+        enabled_provider_ids=planned,
     )
 
     assert result.status == "failure"
@@ -586,12 +597,12 @@ def test_dry_run_late_result_after_retained_evidence_is_execution_failure(tmp_pa
             cutoff=_cutoff(),
             dry_run=True,
             providers_fn=lambda: {
-                "yahoo_market": [
-                    _OutcomeAdapter(items=[_accepted_item("yahoo_market", "accepted")]),
-                    LateAdapter(items=[_accepted_item("yahoo_market", "late")]),
+                "sec_edgar": [
+                    _OutcomeAdapter(items=[_accepted_item("sec_edgar", "accepted")]),
+                    LateAdapter(items=[_accepted_item("sec_edgar", "late")]),
                 ]
             },
-            enabled_provider_ids=["yahoo_market"],
+            enabled_provider_ids=["sec_edgar"],
             monotonic_now=lambda: clock["now"],
         )
 
@@ -632,9 +643,9 @@ def test_dry_run_provider_start_after_global_deadline_is_execution_failure(tmp_p
                 "federal_reserve": FirstAdapter(
                     items=[_accepted_item("federal_reserve", "accepted")]
                 ),
-                "yahoo_market": _OutcomeAdapter(items=[_accepted_item("yahoo_market", "late")]),
+                "sec_edgar": _OutcomeAdapter(items=[_accepted_item("sec_edgar", "late")]),
             },
-            enabled_provider_ids=["federal_reserve", "yahoo_market"],
+            enabled_provider_ids=["federal_reserve", "sec_edgar"],
             monotonic_now=monotonic,
         )
 
@@ -650,7 +661,7 @@ def test_rate_state_failure_remains_execution_error_with_other_accepted_evidence
     original = feed_cli._ensure_scope_state
 
     def fail_market_rate_state(rate, scope_id, cfg, now_fn):
-        if scope_id == "yahoo_market":
+        if scope_id == "sec_edgar":
             raise RateStateError("config invalid provider")
         return original(rate, scope_id, cfg, now_fn)
 
@@ -665,9 +676,9 @@ def test_rate_state_failure_remains_execution_error_with_other_accepted_evidence
                 "federal_reserve": _OutcomeAdapter(
                     items=[_accepted_item("federal_reserve", "accepted")]
                 ),
-                "yahoo_market": _OutcomeAdapter(items=[_accepted_item("yahoo_market", "market")]),
+                "sec_edgar": _OutcomeAdapter(items=[_accepted_item("sec_edgar", "market")]),
             },
-            enabled_provider_ids=["federal_reserve", "yahoo_market"],
+            enabled_provider_ids=["federal_reserve", "sec_edgar"],
         )
 
     assert not (out / "feed-manifest.json").exists()
@@ -680,7 +691,7 @@ def test_rate_wait_beyond_deadline_is_execution_failure_with_other_accepted_evid
     from follow_the_money.feed import cli as feed_cli
 
     def delay_beyond_deadline(state, *, now):
-        return 10_000.0 if state.scope_id == "yahoo_market" else 0.0
+        return 10_000.0 if state.scope_id == "sec_edgar" else 0.0
 
     monkeypatch.setattr(feed_cli, "eligibility_delay", delay_beyond_deadline)
     out = tmp_path / "out"
@@ -693,9 +704,9 @@ def test_rate_wait_beyond_deadline_is_execution_failure_with_other_accepted_evid
                 "federal_reserve": _OutcomeAdapter(
                     items=[_accepted_item("federal_reserve", "accepted")]
                 ),
-                "yahoo_market": _OutcomeAdapter(items=[_accepted_item("yahoo_market", "market")]),
+                "sec_edgar": _OutcomeAdapter(items=[_accepted_item("sec_edgar", "market")]),
             },
-            enabled_provider_ids=["federal_reserve", "yahoo_market"],
+            enabled_provider_ids=["federal_reserve", "sec_edgar"],
         )
 
     assert not (out / "feed-manifest.json").exists()
@@ -716,9 +727,9 @@ def test_retry_wait_beyond_deadline_is_execution_failure_with_other_accepted_evi
                 "federal_reserve": _OutcomeAdapter(
                     items=[_accepted_item("federal_reserve", "accepted")]
                 ),
-                "yahoo_market": retrying,
+                "sec_edgar": retrying,
             },
-            enabled_provider_ids=["federal_reserve", "yahoo_market"],
+            enabled_provider_ids=["federal_reserve", "sec_edgar"],
         )
 
     assert not (out / "feed-manifest.json").exists()
@@ -733,7 +744,7 @@ def test_rate_reconcile_failure_is_not_retried_as_provider_degradation(tmp_path,
 
     def fail_market_reconcile_once(registry, state, **kwargs):
         nonlocal failed
-        if state.scope_id == "yahoo_market" and not failed:
+        if state.scope_id == "sec_edgar" and not failed:
             failed = True
             raise RateStateError("provider unavailable during reconcile")
         return original(registry, state, **kwargs)
@@ -749,9 +760,9 @@ def test_rate_reconcile_failure_is_not_retried_as_provider_degradation(tmp_path,
                 "federal_reserve": _OutcomeAdapter(
                     items=[_accepted_item("federal_reserve", "accepted")]
                 ),
-                "yahoo_market": _OutcomeAdapter(items=[_accepted_item("yahoo_market", "market")]),
+                "sec_edgar": _OutcomeAdapter(items=[_accepted_item("sec_edgar", "market")]),
             },
-            enabled_provider_ids=["federal_reserve", "yahoo_market"],
+            enabled_provider_ids=["federal_reserve", "sec_edgar"],
         )
 
     assert failed
@@ -760,16 +771,14 @@ def test_rate_reconcile_failure_is_not_retried_as_provider_degradation(tmp_path,
 
 
 def test_incomplete_single_empty_provider_is_failure_in_dry_run(tmp_path):
-    result = run_feed(
-        output_root=str(tmp_path / "out"),
-        cutoff=_cutoff(),
-        dry_run=True,
-        providers_fn=lambda: {"federal_reserve": _OutcomeAdapter()},
-        enabled_provider_ids=["federal_reserve"],
-    )
-
-    assert result.status == "failure"
-    assert result.exit_code == 1
+    with pytest.raises(FeedExecutionError, match="exactly the eight required Providers"):
+        run_feed(
+            output_root=str(tmp_path / "out"),
+            cutoff=_cutoff(),
+            dry_run=True,
+            providers_fn=lambda: {"federal_reserve": _OutcomeAdapter()},
+            enabled_provider_ids=["federal_reserve"],
+        )
     assert not (tmp_path / "out" / "feed-manifest.json").exists()
     assert (
         not list((tmp_path / "out" / "daily").rglob("*.json"))
@@ -850,7 +859,7 @@ def test_source_incomplete_run_keeps_latest_and_reports_provider_diagnostics(tmp
         published = True
         raise AssertionError("source-incomplete Feed must not publish")
 
-    monkeypatch.setattr(feed_cli, "publish_feed", fail_if_called)
+    monkeypatch.setattr(feed_cli, "publish_bundle", fail_if_called)
     result = run_feed(
         output_root=str(out),
         cutoff=_cutoff().replace(hour=1),
@@ -882,16 +891,14 @@ def test_failure_does_not_call_publication_or_replace_latest(tmp_path, monkeypat
         called = True
         raise AssertionError("failure candidates must not enter publication")
 
-    monkeypatch.setattr(feed_cli, "publish_feed", fail_if_called)
-    result = run_feed(
-        output_root=str(tmp_path / "out"),
-        cutoff=_cutoff(),
-        providers_fn=lambda: {"federal_reserve": _OutcomeAdapter()},
-        enabled_provider_ids=["federal_reserve"],
-    )
-
-    assert result.status == "failure"
-    assert result.exit_code == 1
+    monkeypatch.setattr(feed_cli, "publish_bundle", fail_if_called)
+    with pytest.raises(FeedExecutionError, match="exactly the eight required Providers"):
+        run_feed(
+            output_root=str(tmp_path / "out"),
+            cutoff=_cutoff(),
+            providers_fn=lambda: {"federal_reserve": _OutcomeAdapter()},
+            enabled_provider_ids=["federal_reserve"],
+        )
     assert not called
     assert not (tmp_path / "out" / "feed-manifest.json").exists()
     assert (
@@ -964,21 +971,20 @@ def test_dry_run_publishes_nothing(tmp_path):
             ]
 
     registry = {"federal_reserve": FakeAdapter()}
-    result = run_feed(
-        config_path=str(REPO_ROOT / "config" / "config.yaml"),
-        output_root=str(out),
-        cutoff=_cutoff(),
-        dry_run=True,
-        providers_fn=lambda: registry,
-        enabled_provider_ids=["federal_reserve"],
-    )
-    # The one-provider fixture leaves mandatory groups incomplete, but
+    with pytest.raises(FeedExecutionError, match="exactly the eight required Providers"):
+        run_feed(
+            config_path=str(REPO_ROOT / "config" / "config.yaml"),
+            output_root=str(out),
+            cutoff=_cutoff(),
+            dry_run=True,
+            providers_fn=lambda: registry,
+            enabled_provider_ids=["federal_reserve"],
+        )
+    # The one-provider fixture leaves mandatory groups incomplete, so
     # dry-run still publishes no Feed bundle artifact.
     assert not (out / "feed-manifest.json").exists()
     assert not list((out / "daily").glob("**/*.json")) if (out / "daily").exists() else True
     assert not (out / "rate-registry.json").exists()
-    assert result.feed is not None
-    assert result.feed["pipeline"]["status"] == "failure"
 
 
 def test_cli_usage_error_exit_2():

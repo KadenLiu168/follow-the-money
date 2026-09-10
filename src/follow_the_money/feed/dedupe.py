@@ -186,33 +186,6 @@ def _merge_lineage(group: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
     return survivor
 
 
-def deduplicate_observations(
-    observations: Sequence[Mapping[str, Any]],
-) -> tuple[list[Mapping[str, Any]], list[Mapping[str, Any]]]:
-    """Strict-chronological observation dedup.
-
-    Exact duplicates collapse deterministically; same timestamp with
-    incompatible values is a conflict (returned separately); the serialized
-    result is strictly chronological.
-    """
-    by_ts: dict[str, list[Mapping[str, Any]]] = {}
-    for obs in observations:
-        by_ts.setdefault(obs["as_of"], []).append(obs)
-
-    cleaned: list[Mapping[str, Any]] = []
-    conflicts: list[Mapping[str, Any]] = []
-    for ts in sorted(by_ts):
-        group = by_ts[ts]
-        values = {obs["value"] for obs in group}
-        if len(values) > 1:
-            conflicts.append({"as_of": ts, "values": sorted(values)})
-            # Do not silently select; keep the first for reference.
-            cleaned.append(dict(group[0]))
-        else:
-            cleaned.append(dict(group[0]))
-    return cleaned, conflicts
-
-
 def deterministic_item_order(items: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     """Deterministic ordering independent of input permutation: by knowledge
     time, then stable ID (the shared Feed item total order)."""

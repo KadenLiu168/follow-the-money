@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 
 from follow_the_money.canonical import canonical_bytes
-from tests.test_feed_boundary import _valid_v3_blocked_feed
+from follow_the_money.feed.validate import recompute_feed_identity
 from tests.test_feed_bundle import _feed
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -33,13 +33,33 @@ def test_prepare_feed_emits_canonical_logical_feed(monkeypatch, capsys):
 
 def test_prepare_feed_preserves_degraded_warnings_on_stderr(monkeypatch, capsys):
     remote = _remote_module()
-    feed = _valid_v3_blocked_feed()
+    feed = _feed()
+    cftc = next(
+        outcome for outcome in feed["provider_outcomes"] if outcome["provider_id"] == "cftc"
+    )
+    cftc.update(
+        state="failed",
+        succeeded=False,
+        failed=True,
+        accepted=0,
+        availability="blocked",
+        availability_reason="HTTP 403",
+        upstream_http_status=403,
+        freshness={
+            "cadence": "weekly",
+            "status": "not_evaluated",
+            "origin_contract_hash": None,
+            "carried_forward_from_run_id": None,
+        },
+    )
+    feed["pipeline"] = {"status": "degraded", "warnings": ["blocked Provider cftc"]}
+    feed["content_digest"], feed["run_id"] = recompute_feed_identity(feed)
     monkeypatch.setattr(remote, "consume_published_feed", lambda: feed)
 
     assert remote.main([]) == 0
     captured = capsys.readouterr()
     assert captured.out == canonical_bytes(feed).decode("utf-8")
-    assert captured.err == "warning: blocked Provider p\n"
+    assert captured.err == "warning: blocked Provider cftc\n"
 
 
 def test_prepare_feed_reports_typed_failure_on_stderr(monkeypatch, capsys):

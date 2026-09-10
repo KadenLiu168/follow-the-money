@@ -23,8 +23,11 @@
   ],
   "properties": {
     "schema_version": {
-      "description": "Logical Feed schema major; v2 is read-compatible and v3 is Provider-availability-capable production.",
-      "enum": [2, 3]
+      "description": "Logical Feed schema major; v3 is the previous eight-domain contract and v4 is the five-domain production contract.",
+      "enum": [
+        3,
+        4
+      ]
     },
     "run_id": {
       "description": "Semantic run identifier: '{evidence_cutoff_at}::{first 32 hex of content_digest}'. Identifies the semantic evidence, not a specific execution.",
@@ -35,10 +38,19 @@
     "window": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["start", "end"],
+      "required": [
+        "start",
+        "end"
+      ],
       "properties": {
-        "start": { "type": "string", "format": "date-time" },
-        "end": { "type": "string", "format": "date-time" }
+        "start": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "end": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "collection_started_at": {
@@ -62,27 +74,47 @@
       "format": "date-time"
     },
     "provider_outcomes": {
-      "description": "Exactly one outcome per planned provider, in ascending provider_id order (healthy, empty, partial, failed, or skipped); v2 and v3 outcomes carry one required freshness result, and v3 also carries Provider availability diagnostics.",
+      "description": "Exactly one outcome per planned provider in ascending provider_id order; v4 carries Provider availability diagnostics and the five-domain contract.",
       "type": "array",
-      "items": { "$ref": "#/$defs/provider_outcome" }
+      "items": {
+        "$ref": "#/$defs/provider_outcome"
+      }
     },
-    "producer": { "$ref": "#/$defs/application_build" },
+    "producer": {
+      "$ref": "#/$defs/application_build"
+    },
     "feed_config": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["snapshot", "hash"],
+      "required": [
+        "snapshot",
+        "hash"
+      ],
       "properties": {
-        "snapshot": { "type": "object" },
-        "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        "snapshot": {
+          "type": "object"
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
       }
     },
     "feed_schema": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "sha256"],
+      "required": [
+        "path",
+        "sha256"
+      ],
       "properties": {
-        "path": { "type": "string" },
-        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
       }
     },
     "provider_contracts": {
@@ -90,49 +122,105 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["provider_id", "snapshot", "hash"],
+        "required": [
+          "provider_id",
+          "snapshot",
+          "hash"
+        ],
         "properties": {
-          "provider_id": { "type": "string" },
-          "snapshot": { "type": "object" },
-          "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          "provider_id": {
+            "type": "string"
+          },
+          "snapshot": {
+            "type": "object"
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
         }
       }
     },
     "git": {
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
-      "required": ["sha", "dirty"],
+      "required": [
+        "sha",
+        "dirty"
+      ],
       "properties": {
-        "sha": { "type": "string" },
-        "dirty": { "type": "boolean" }
+        "sha": {
+          "type": "string"
+        },
+        "dirty": {
+          "type": "boolean"
+        }
       }
     },
     "content_digest": {
-      "description": "Semantic identity digest: canonical SHA-256 of the allowlisted semantic projection, including freshness and v3 availability fields but excluding execution audit metadata; this is not a whole-file checksum.",
+      "description": "Semantic SHA-256 of the allowlisted Feed projection, excluding execution metadata, identity fields, and physical bundle layout.",
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
-    "calendar_horizon_end": { "type": ["string", "null"], "format": "date-time" },
-    "items": { "type": "array", "items": { "$ref": "#/$defs/feed_item" } },
+    "calendar_horizon_end": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "Legacy v3 migration metadata; absent from v4."
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/feed_item"
+      }
+    },
     "pipeline": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "warnings"],
+      "required": [
+        "status",
+        "warnings"
+      ],
       "properties": {
-        "status": { "enum": ["healthy", "degraded", "failure"] },
+        "status": {
+          "enum": [
+            "healthy",
+            "degraded",
+            "failure"
+          ]
+        },
         "warnings": {
           "description": "Free-form execution reporting; excluded from content_digest.",
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "coverage_gap": {
           "description": "Structured semantic coverage gap; part of the semantic projection when present.",
-          "type": ["object", "null"],
+          "type": [
+            "object",
+            "null"
+          ],
           "additionalProperties": false,
-          "required": ["uncovered_start", "uncovered_end"],
+          "required": [
+            "uncovered_start",
+            "uncovered_end"
+          ],
           "properties": {
-            "uncovered_start": { "type": "string", "format": "date-time" },
-            "uncovered_end": { "type": "string", "format": "date-time" }
+            "uncovered_start": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "uncovered_end": {
+              "type": "string",
+              "format": "date-time"
+            }
           }
         }
       }
@@ -140,35 +228,91 @@
   },
   "allOf": [
     {
-      "if": { "properties": { "schema_version": { "const": 3 } } },
+      "if": {
+        "properties": {
+          "schema_version": {
+            "const": 4
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "calendar_horizon_end"
+          ]
+        },
+        "properties": {
+          "provider_outcomes": {
+            "items": {
+              "required": [
+                "freshness",
+                "availability",
+                "availability_reason",
+                "upstream_http_status",
+                "affected_coverage_groups"
+              ],
+              "properties": {
+                "freshness": {
+                  "properties": {
+                    "cadence": {
+                      "enum": [
+                        "weekly",
+                        "scheduled",
+                        "event_driven"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "items": {
+            "items": {
+              "properties": {
+                "payload": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/news"
+                    },
+                    {
+                      "$ref": "#/$defs/macro_release"
+                    },
+                    {
+                      "$ref": "#/$defs/policy"
+                    },
+                    {
+                      "$ref": "#/$defs/positioning"
+                    },
+                    {
+                      "$ref": "#/$defs/filing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "schema_version": {
+            "const": 3
+          }
+        }
+      },
       "then": {
         "properties": {
           "provider_outcomes": {
             "items": {
               "required": [
-                "freshness", "availability", "availability_reason",
-                "upstream_http_status", "affected_coverage_groups"
+                "freshness",
+                "availability",
+                "availability_reason",
+                "upstream_http_status",
+                "affected_coverage_groups"
               ]
-            }
-          }
-        }
-      },
-      "else": {
-        "if": { "properties": { "schema_version": { "const": 2 } } },
-        "then": {
-          "properties": {
-            "provider_outcomes": {
-              "items": {
-                "required": ["freshness"],
-                "not": {
-                  "anyOf": [
-                    { "required": ["availability"] },
-                    { "required": ["availability_reason"] },
-                    { "required": ["upstream_http_status"] },
-                    { "required": ["affected_coverage_groups"] }
-                  ]
-                }
-              }
             }
           }
         }
@@ -180,95 +324,218 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "provider_id", "state", "attempted", "fetched", "succeeded",
-        "empty", "partial", "failed", "skipped", "accepted", "rejected"
+        "provider_id",
+        "state",
+        "attempted",
+        "fetched",
+        "succeeded",
+        "empty",
+        "partial",
+        "failed",
+        "skipped",
+        "accepted",
+        "rejected"
       ],
       "properties": {
         "provider_id": {
           "description": "Stable provider identity; outcomes serialize in ascending provider_id order.",
           "type": "string"
         },
-        "state": { "enum": ["healthy", "empty", "partial", "failed", "skipped"] },
-        "attempted": { "type": "integer", "minimum": 0 },
-        "fetched": { "type": "integer", "minimum": 0 },
-        "succeeded": { "type": "boolean" },
-        "empty": { "type": "boolean" },
-        "partial": { "type": "boolean" },
-        "failed": { "type": "boolean" },
-        "skipped": { "type": "boolean" },
-        "accepted": { "type": "integer", "minimum": 0 },
-        "rejected": { "type": "integer", "minimum": 0 },
+        "state": {
+          "enum": [
+            "healthy",
+            "empty",
+            "partial",
+            "failed",
+            "skipped"
+          ]
+        },
+        "attempted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fetched": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "succeeded": {
+          "type": "boolean"
+        },
+        "empty": {
+          "type": "boolean"
+        },
+        "partial": {
+          "type": "boolean"
+        },
+        "failed": {
+          "type": "boolean"
+        },
+        "skipped": {
+          "type": "boolean"
+        },
+        "accepted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rejected": {
+          "type": "integer",
+          "minimum": 0
+        },
         "availability": {
           "description": "Provider availability is separate from acquisition completion.",
-          "enum": ["success", "blocked", "failed", "disabled"]
+          "enum": [
+            "success",
+            "blocked",
+            "failed",
+            "disabled"
+          ]
         },
         "availability_reason": {
           "description": "Bounded redacted Provider availability reason.",
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 256
         },
         "upstream_http_status": {
           "description": "Concrete upstream HTTP status when a response was observed.",
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 100,
           "maximum": 599
         },
         "affected_coverage_groups": {
           "description": "Configured coverage groups containing this planned Provider, sorted ascending.",
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "uniqueItems": true
         },
-        "error": { "type": ["string", "null"] },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "retrieved_at": {
           "description": "Execution audit metadata: observed instant when the provider response returned; null for failed/skipped work with no observed response. Excluded from content_digest.",
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "format": "date-time"
         },
-        "freshness": { "$ref": "#/$defs/freshness" }
+        "freshness": {
+          "$ref": "#/$defs/freshness"
+        }
       }
     },
     "freshness": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["cadence", "status", "origin_contract_hash", "carried_forward_from_run_id"],
+      "required": [
+        "cadence",
+        "status",
+        "origin_contract_hash",
+        "carried_forward_from_run_id"
+      ],
       "properties": {
-        "cadence": { "enum": ["weekly", "scheduled", "event_driven", "market_session"] },
-        "status": { "enum": ["fresh", "valid_unchanged", "stale", "no_snapshot", "not_evaluated"] },
+        "cadence": {
+          "enum": [
+            "weekly",
+            "scheduled",
+            "event_driven",
+            "market_session"
+          ]
+        },
+        "status": {
+          "enum": [
+            "fresh",
+            "valid_unchanged",
+            "stale",
+            "no_snapshot",
+            "not_evaluated"
+          ]
+        },
         "origin_contract_hash": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "pattern": "^[0-9a-f]{64}$"
         },
-        "carried_forward_from_run_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 }
+        "carried_forward_from_run_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 128
+        }
       }
     },
     "application_build": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["package_version", "files", "fingerprint"],
+      "required": [
+        "package_version",
+        "files",
+        "fingerprint"
+      ],
       "properties": {
-        "package_version": { "type": "string" },
+        "package_version": {
+          "type": "string"
+        },
         "files": {
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["path", "size", "sha256"],
+            "required": [
+              "path",
+              "size",
+              "sha256"
+            ],
             "properties": {
-              "path": { "type": "string" },
-              "size": { "type": "integer", "minimum": 0 },
-              "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+              "path": {
+                "type": "string"
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
             }
           }
         },
-        "fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
         "git": {
-          "type": ["object", "null"],
+          "type": [
+            "object",
+            "null"
+          ],
           "additionalProperties": false,
-          "required": ["sha", "dirty"],
+          "required": [
+            "sha",
+            "dirty"
+          ],
           "properties": {
-            "sha": { "type": "string" },
-            "dirty": { "type": "boolean" }
+            "sha": {
+              "type": "string"
+            },
+            "dirty": {
+              "type": "boolean"
+            }
           }
         }
       }
@@ -276,41 +543,122 @@
     "feed_item": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "provider_id", "source", "payload"],
+      "required": [
+        "id",
+        "provider_id",
+        "source",
+        "payload"
+      ],
       "properties": {
-        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "provider_id": { "type": "string" },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "provider_id": {
+          "type": "string"
+        },
         "source": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["id", "name", "tier", "kind", "url", "published_at", "knowledge_available_at"],
+          "required": [
+            "id",
+            "name",
+            "tier",
+            "kind",
+            "url",
+            "published_at",
+            "knowledge_available_at"
+          ],
           "properties": {
-            "id": { "type": "string" },
-            "name": { "type": "string" },
-            "tier": { "enum": ["Tier 1", "Tier 2", "Tier 3"] },
-            "kind": { "type": "string" },
-            "url": { "type": "string", "format": "uri" },
-            "published_at": { "type": ["string", "null"], "format": "date-time" },
-            "updated_at": { "type": ["string", "null"], "format": "date-time" },
-            "knowledge_available_at": { "type": "string", "format": "date-time" },
-            "original_publisher": { "type": ["string", "null"] },
-            "syndication_origin": { "type": ["string", "null"] }
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "tier": {
+              "enum": [
+                "Tier 1",
+                "Tier 2",
+                "Tier 3"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "published_at": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            },
+            "updated_at": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            },
+            "knowledge_available_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "original_publisher": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "syndication_origin": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
         },
-        "payload": { "$ref": "#/$defs/payloads" },
+        "payload": {
+          "$ref": "#/$defs/payloads"
+        },
         "source_lineage": {
           "description": "Collapsed duplicate records for one survivor, ordered by the stable (knowledge_available_at, id) total order; absent on independent items.",
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "provider_id", "source_id"],
+            "required": [
+              "id",
+              "provider_id",
+              "source_id"
+            ],
             "properties": {
-              "id": { "type": "string" },
-              "provider_id": { "type": "string" },
-              "source_id": { "type": "string" },
-              "original_publisher": { "type": ["string", "null"] },
-              "syndication_origin": { "type": ["string", "null"] }
+              "id": {
+                "type": "string"
+              },
+              "provider_id": {
+                "type": "string"
+              },
+              "source_id": {
+                "type": "string"
+              },
+              "original_publisher": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "syndication_origin": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
             }
           }
         }
@@ -318,144 +666,371 @@
     },
     "payloads": {
       "oneOf": [
-        { "$ref": "#/$defs/news" },
-        { "$ref": "#/$defs/macro_release" },
-        { "$ref": "#/$defs/policy" },
-        { "$ref": "#/$defs/market_data" },
-        { "$ref": "#/$defs/flow" },
-        { "$ref": "#/$defs/positioning" },
-        { "$ref": "#/$defs/filing" },
-        { "$ref": "#/$defs/calendar" }
+        {
+          "$ref": "#/$defs/news"
+        },
+        {
+          "$ref": "#/$defs/macro_release"
+        },
+        {
+          "$ref": "#/$defs/policy"
+        },
+        {
+          "$ref": "#/$defs/market_data"
+        },
+        {
+          "$ref": "#/$defs/flow"
+        },
+        {
+          "$ref": "#/$defs/positioning"
+        },
+        {
+          "$ref": "#/$defs/filing"
+        },
+        {
+          "$ref": "#/$defs/calendar"
+        }
       ]
     },
     "news": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "title", "snippet", "occurred_at", "raw_metadata"],
+      "required": [
+        "type",
+        "title",
+        "snippet",
+        "occurred_at",
+        "raw_metadata"
+      ],
       "properties": {
-        "type": { "const": "news" },
-        "title": { "type": "string", "maxLength": 300 },
-        "snippet": { "type": "string", "maxLength": 1000 },
-        "occurred_at": { "type": ["string", "null"], "format": "date-time" },
-        "raw_metadata": { "type": "object" }
+        "type": {
+          "const": "news"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "snippet": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "occurred_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "raw_metadata": {
+          "type": "object"
+        }
       }
     },
     "macro_release": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "series_id", "released_at", "observation_period", "raw_metadata"],
+      "required": [
+        "type",
+        "series_id",
+        "released_at",
+        "observation_period",
+        "raw_metadata"
+      ],
       "properties": {
-        "type": { "const": "macro_release" },
-        "series_id": { "type": "string" },
-        "released_at": { "type": "string", "format": "date-time" },
-        "observation_period": { "type": ["object", "null"] },
-        "actual": { "$ref": "#/$defs/numeric_value" },
-        "consensus": { "$ref": "#/$defs/numeric_value" },
-        "previous": { "$ref": "#/$defs/numeric_value" },
-        "raw_metadata": { "type": "object" }
+        "type": {
+          "const": "macro_release"
+        },
+        "series_id": {
+          "type": "string"
+        },
+        "released_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "observation_period": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "actual": {
+          "$ref": "#/$defs/numeric_value"
+        },
+        "consensus": {
+          "$ref": "#/$defs/numeric_value"
+        },
+        "previous": {
+          "$ref": "#/$defs/numeric_value"
+        },
+        "raw_metadata": {
+          "type": "object"
+        }
       }
     },
     "numeric_value": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["value", "unit"],
+      "required": [
+        "value",
+        "unit"
+      ],
       "properties": {
-        "value": { "type": ["string", "null"], "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$" },
-        "unit": { "type": "string" },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "unit": {
+          "type": "string"
+        },
         "unknown_reason": {
-          "type": ["string", "null"],
-          "enum": ["missing", "unsupported", "incompatible_unit", "non_numeric", null]
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "missing",
+            "unsupported",
+            "incompatible_unit",
+            "non_numeric",
+            null
+          ]
         }
       }
     },
     "policy": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "title", "announced_at", "raw_metadata"],
+      "required": [
+        "type",
+        "title",
+        "announced_at",
+        "raw_metadata"
+      ],
       "properties": {
-        "type": { "const": "policy" },
-        "title": { "type": "string", "maxLength": 300 },
-        "announced_at": { "type": "string", "format": "date-time" },
-        "effective_at": { "type": ["string", "null"], "format": "date-time" },
-        "raw_metadata": { "type": "object" }
+        "type": {
+          "const": "policy"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "announced_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "effective_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "raw_metadata": {
+          "type": "object"
+        }
       }
     },
     "market_data": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "instrument_id", "observations", "raw_metadata"],
+      "required": [
+        "type",
+        "instrument_id",
+        "observations",
+        "raw_metadata"
+      ],
       "properties": {
-        "type": { "const": "market_data" },
-        "instrument_id": { "type": "string" },
-        "unit": { "type": "string" },
+        "type": {
+          "const": "market_data"
+        },
+        "instrument_id": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
         "observations": {
           "type": "array",
           "maxItems": 260,
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["as_of", "value", "unit"],
+            "required": [
+              "as_of",
+              "value",
+              "unit"
+            ],
             "properties": {
-              "as_of": { "type": "string", "format": "date-time" },
-              "value": { "type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$" },
-              "unit": { "type": "string" },
-              "available_at": { "type": ["string", "null"], "format": "date-time" },
-              "volume": { "type": ["string", "null"], "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$" }
+              "as_of": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "value": {
+                "type": "string",
+                "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+              },
+              "unit": {
+                "type": "string"
+              },
+              "available_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "volume": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+              }
             }
           }
         },
-        "raw_metadata": { "type": "object" }
+        "raw_metadata": {
+          "type": "object"
+        }
       }
     },
     "flow": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "instrument_id", "as_of", "net_flow", "raw_metadata"],
+      "required": [
+        "type",
+        "instrument_id",
+        "as_of",
+        "net_flow",
+        "raw_metadata"
+      ],
       "properties": {
-        "type": { "const": "flow" },
-        "instrument_id": { "type": "string" },
-        "as_of": { "type": "string", "format": "date-time" },
-        "net_flow": { "$ref": "#/$defs/numeric_value" },
-        "raw_metadata": { "type": "object" }
+        "type": {
+          "const": "flow"
+        },
+        "instrument_id": {
+          "type": "string"
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "net_flow": {
+          "$ref": "#/$defs/numeric_value"
+        },
+        "raw_metadata": {
+          "type": "object"
+        }
       }
     },
     "positioning": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "instrument_id", "as_of", "position", "raw_metadata"],
+      "required": [
+        "type",
+        "instrument_id",
+        "as_of",
+        "position",
+        "raw_metadata"
+      ],
       "properties": {
-        "type": { "const": "positioning" },
-        "instrument_id": { "type": "string" },
-        "as_of": { "type": "string", "format": "date-time" },
-        "position": { "$ref": "#/$defs/numeric_value" },
-        "raw_metadata": { "type": "object" }
+        "type": {
+          "const": "positioning"
+        },
+        "instrument_id": {
+          "type": "string"
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "position": {
+          "$ref": "#/$defs/numeric_value"
+        },
+        "raw_metadata": {
+          "type": "object"
+        }
       }
     },
     "filing": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "form", "company", "accession_number", "filed_at", "raw_metadata"],
+      "required": [
+        "type",
+        "form",
+        "company",
+        "accession_number",
+        "filed_at",
+        "raw_metadata"
+      ],
       "properties": {
-        "type": { "const": "filing" },
-        "form": { "type": "string" },
-        "company": { "type": "string" },
-        "accession_number": { "type": "string" },
-        "filed_at": { "type": "string", "format": "date-time" },
-        "raw_metadata": { "type": "object" }
+        "type": {
+          "const": "filing"
+        },
+        "form": {
+          "type": "string"
+        },
+        "company": {
+          "type": "string"
+        },
+        "accession_number": {
+          "type": "string"
+        },
+        "filed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "raw_metadata": {
+          "type": "object"
+        }
       }
     },
     "calendar": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "calendar_id", "scheduled_at", "priority", "raw_metadata"],
+      "required": [
+        "type",
+        "calendar_id",
+        "scheduled_at",
+        "priority",
+        "raw_metadata"
+      ],
       "properties": {
-        "type": { "const": "calendar" },
-        "calendar_id": { "type": "string" },
-        "scheduled_at": { "type": "string", "format": "date-time" },
-        "priority": { "enum": ["critical", "high", "medium", "low"] },
-        "title": { "type": "string", "maxLength": 300 },
-        "announced_at": { "type": ["string", "null"], "format": "date-time" },
-        "raw_metadata": { "type": "object" }
+        "type": {
+          "const": "calendar"
+        },
+        "calendar_id": {
+          "type": "string"
+        },
+        "scheduled_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "priority": {
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "announced_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "raw_metadata": {
+          "type": "object"
+        }
       }
     }
   }

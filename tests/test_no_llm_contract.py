@@ -1,314 +1,75 @@
-"""remove-standalone-runtime — retained no-LLM regression contract.
-
-Covers requirement ``deterministic-core-retention``:
-
-- The repository contains no embedded LLM runtime surface.
-- Configuration loads credential-free and fails closed on deterministic
-  contracts only.
-- The minimal internal Feed entry publishes a validating Feed.
-- The retained rules (scoring/selection/ClaimAuditor) stay deterministic
-  and LLM-free.
-"""
+"""Feed-only architecture and credential-free startup regressions."""
 
 from __future__ import annotations
 
 import os
-import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from follow_the_money.audit import ClaimAuditor
 from follow_the_money.config import load_config
-from follow_the_money.feed.cli import (
-    FeedExecutionError,
-    FeedInputError,
-    FeedRunResult,
-)
-from follow_the_money.feed.cli import (
-    run_feed as _run_feed,
-)
-from follow_the_money.feed.validate import assert_feed_identity, validate_feed
-from follow_the_money.schema import validate_against
-from tests.test_gate_13_1 import CUTOFF, _fixture_registry
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-def run_feed(**kwargs):
-    if "runtime_state_root" not in kwargs and kwargs.get("output_root") is not None:
-        output = Path(kwargs["output_root"])
-        kwargs["runtime_state_root"] = str(output.parent / f".{output.name}-state")
-    return _run_feed(**kwargs)
-
-
-# Modules that existed under the embedded LLM runtime / old four-pass contract.
-REMOVED_MODULES = (
-    "llm",
-    "pipeline",
-    "brief_cli",
-    "cli",
-    "__main__",
-    "analysis",
-    "editor",
-    "brief",
-    "render",
-    "bundle",
-    "eval_offline",
-    "eval_live",
-    "eval_metrics",
-    "engine.resolution",
-)
-REMOVED_SCHEMAS = (
-    "resolver-output",
-    "analyst-output",
-    "editor-output",
-    "language-audit-output",
-    "event",
-    "analysis",
-    "verified-event-packet",
-    "brief",
-    "degraded-report",
-    "run-manifest",
+RETAINED_MODULES = (
+    "agent_invocation.py",
+    "analysis.py",
+    "audit.py",
+    "events.py",
+    "ledger.py",
+    "scoring.py",
+    "selection.py",
+    "state.py",
+    "watchlist.py",
 )
 
 
-# ---------------------------------------------------------------------------
-# Repository audit: no LLM surface
-# ---------------------------------------------------------------------------
-
-
-def test_repo_has_no_llm_surface():
-    pyproject = (REPO_ROOT / "pyproject.toml").read_text()
-    assert "openai" not in pyproject
-    assert "[project.scripts]" not in pyproject
-    lock = (REPO_ROOT / "uv.lock").read_text()
-    assert "openai" not in lock
+def test_removed_runtime_and_schema_surfaces_are_absent():
+    source_root = REPO_ROOT / "src" / "follow_the_money"
+    for name in RETAINED_MODULES:
+        assert not (source_root / name).exists(), name
+    assert not (source_root / "engine").exists()
+    assert not (source_root / "market").exists()
+    assert not (REPO_ROOT / "schemas" / "agent-invocation.schema.json").exists()
+    assert not (REPO_ROOT / "providers" / "yahoo_market").exists()
     assert not (REPO_ROOT / "prompts").exists()
-    assert not (REPO_ROOT / "evals").exists()
-    for mod in REMOVED_MODULES:
-        assert not (REPO_ROOT / "src" / "follow_the_money" / f"{mod}.py").exists(), mod
-        assert not (REPO_ROOT / "src" / "follow_the_money" / "engine" / f"{mod}.py").exists()
-    for name in REMOVED_SCHEMAS:
-        assert not (REPO_ROOT / "schemas" / f"{name}.schema.json").exists(), name
-    assert (REPO_ROOT / "schemas" / "feed.schema.json").exists()
-    config = (REPO_ROOT / "config" / "config.yaml").read_text()
-    assert re.search(r"^llm:", config, re.MULTILINE) is None
-    assert re.search(r"^audit_severity:", config, re.MULTILINE) is None
-    env = (REPO_ROOT / ".env.example").read_text()
-    assert "OPENAI_API_KEY" not in env
-    assert "OPENAI_MODEL" not in env
+    assert "exchange-calendars" not in (REPO_ROOT / "pyproject.toml").read_text()
 
 
-def test_package_imports_without_llm_sdk():
-    # The retained package must import with no OpenAI SDK installed in the
-    # environment and no credential present.
+def test_package_imports_without_model_or_credential_runtime():
     env = os.environ.copy()
-    for key in list(env):
-        if "OPENAI" in key or "FOLLOW_THE_MONEY_LLM" in key:
-            del env[key]
-    env["OPENAI_API_KEY"] = ""
+    env.pop("OPENAI_API_KEY", None)
+    env.pop("OPENAI_MODEL", None)
     proc = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            (
-                "import follow_the_money, follow_the_money.feed.cli, follow_the_money.scoring, "
-                "follow_the_money.selection, follow_the_money.audit; print('ok')"
-            ),
-        ],
-        capture_output=True,
-        text=True,
+        [sys.executable, "-c", "import follow_the_money, follow_the_money.feed.cli; print('ok')"],
         cwd=REPO_ROOT,
         env=env,
+        capture_output=True,
+        text=True,
         check=False,
     )
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.strip() == "ok"
 
 
-# ---------------------------------------------------------------------------
-# Credential-free configuration
-# ---------------------------------------------------------------------------
-
-
-def test_shipped_config_loads_credential_free():
+def test_shipped_configuration_loads_without_credentials():
     cfg = load_config(
         REPO_ROOT / "config" / "config.yaml",
         REPO_ROOT / "config" / "providers.yaml",
         manifest_root=REPO_ROOT / "providers",
         require_verified_enabled=True,
     )
-    assert cfg.schema_version == 1
-    assert not hasattr(cfg, "llm")
-    assert not hasattr(cfg, "audit_severity")
-    assert cfg.safety_lexicon.zh_terms
-    assert cfg.rate_registry.version == "1"
+    assert len(cfg.providers) == 8
+    assert all(provider.authentication == "none" for provider in cfg.providers)
 
 
-# ---------------------------------------------------------------------------
-# Minimal internal Feed entry
-# ---------------------------------------------------------------------------
-
-
-def test_minimal_entry_runs_via_skill_symlink_without_uv_on_path(tmp_path):
-    skill = tmp_path / "follow-the-money"
-    skill.symlink_to(REPO_ROOT, target_is_directory=True)
-    env = {**os.environ, "PATH": "/usr/bin:/bin"}
-    assert shutil.which("uv", path=env["PATH"]) is None
-
+def test_feed_entry_help_is_the_only_producer_surface():
     proc = subprocess.run(
-        [str(skill / "scripts" / "feed" / "follow-the-money-feed"), "--help"],
-        cwd=tmp_path,
-        env=env,
+        [sys.executable, "-m", "follow_the_money.feed.cli", "--help"],
+        cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         check=False,
     )
-
     assert proc.returncode == 0, proc.stderr
-    assert "usage: follow-the-money-feed" in proc.stdout
-
-
-def test_minimal_entry_reports_missing_project_environment(tmp_path):
-    script = tmp_path / "repo" / "scripts" / "feed" / "follow-the-money-feed"
-    script.parent.mkdir(parents=True)
-    shutil.copy2(REPO_ROOT / "scripts" / "feed" / "follow-the-money-feed", script)
-
-    proc = subprocess.run(
-        [str(script), "--help"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert proc.returncode == 2
-    assert "run uv sync --frozen --all-groups" in proc.stderr
-
-
-def test_minimal_entry_publishes_validating_feed(tmp_path):
-    out = tmp_path / "out"
-    result = run_feed(output_root=str(out), cutoff=CUTOFF, providers_fn=_fixture_registry)
-    assert result.exit_code == 0
-    assert result.status == "healthy"
-    assert result.feed is not None
-    validate_feed(result.feed)
-    assert_feed_identity(result.feed)
-    validate_against("feed.schema.json", result.feed)
-    assert (out / "feed-manifest.json").exists()
-
-
-def test_minimal_entry_status_file_and_exit_contract(tmp_path, monkeypatch, capsys):
-    from follow_the_money.feed import cli as feed_cli
-
-    out = tmp_path / "out"
-    status = tmp_path / "status.json"
-
-    # The same run_feed the entry calls, producing a validating Feed.
-    result = run_feed(output_root=str(out), cutoff=CUTOFF, providers_fn=_fixture_registry)
-    assert result.exit_code == 0
-
-    monkeypatch.setattr(feed_cli, "run_feed", lambda **kw: result)
-    code = feed_cli.main(
-        [
-            "--output-root",
-            str(out),
-            "--cutoff",
-            "2026-08-11T00:20:00Z",
-            "--status-file",
-            str(status),
-        ]
-    )
-    assert code == 0
-    payload = __import__("json").loads(status.read_text())
-    assert payload["status"] == "healthy"
-    assert payload["run_id"] == result.feed["run_id"]
-    assert payload["evidence_cutoff_at"] == result.feed["evidence_cutoff_at"]
-    assert payload["manifest_relative_path"] == "feed-manifest.json"
-    assert "dated_relative_path" not in payload
-
-    # Warnings surface on stderr.
-    warned = FeedRunResult(
-        status="degraded",
-        exit_code=0,
-        feed=result.feed,
-        warnings=["coverage gap"],
-    )
-    monkeypatch.setattr(feed_cli, "run_feed", lambda **kw: warned)
-    assert feed_cli.main(["--output-root", str(out)]) == 0
-    assert "warning: coverage gap" in capsys.readouterr().err
-
-    # Usage/config failures map to exit 2; runtime failures to exit 1.
-    def _config_error(**kw):
-        raise FeedInputError("publication invalid non_advancing")
-
-    monkeypatch.setattr(feed_cli, "run_feed", _config_error)
-    assert feed_cli.main(["--output-root", str(out)]) == 2
-
-    def _runtime_error(**kw):
-        raise FeedExecutionError("config invalid provider")
-
-    monkeypatch.setattr(feed_cli, "run_feed", _runtime_error)
-    assert feed_cli.main(["--output-root", str(out)]) == 1
-
-
-# ---------------------------------------------------------------------------
-# Retained rules stay deterministic and LLM-free
-# ---------------------------------------------------------------------------
-
-
-def test_retained_rules_deterministic_and_llm_free():
-    from decimal import Decimal
-
-    from follow_the_money.scoring import (
-        base_priority,
-        event_relevance,
-        event_significance,
-        significance_components,
-    )
-
-    cfg = load_config(
-        REPO_ROOT / "config" / "config.yaml",
-        REPO_ROOT / "config" / "providers.yaml",
-        manifest_root=REPO_ROOT / "providers",
-        require_verified_enabled=True,
-    )
-    comps = significance_components(
-        scoring=cfg.scoring,
-        scope="cross_market",
-        fundamental_depth="systemic",
-        reversibility="effectively_irreversible",
-        structural_horizon="months",
-        surprise_values=[Decimal("2.5")],
-        affected_groups=3,
-        observable_repricing_z=Decimal("2.0"),
-    )
-    sig1, cov1 = event_significance(comps)
-    sig2, cov2 = event_significance(comps)
-    assert (sig1, cov1) == (sig2, cov2)
-    relevance = event_relevance(
-        scoring=cfg.scoring,
-        age_hours=Decimal(5),
-        cn_hk_exposure="direct",
-        us_next_session_exposure="direct",
-        catalyst_present=True,
-    )
-    assert relevance == event_relevance(
-        scoring=cfg.scoring,
-        age_hours=Decimal(5),
-        cn_hk_exposure="direct",
-        us_next_session_exposure="direct",
-        catalyst_present=True,
-    )
-    assert base_priority(sig1, relevance, cfg.scoring) == base_priority(
-        sig1, relevance, cfg.scoring
-    )
-
-    # ClaimAuditor: deterministic standalone text boundary flags prohibited
-    # trading instructions without a Brief-shaped input.
-    auditor = ClaimAuditor(cfg.safety_lexicon)
-    result = auditor.audit_text("今天买入腾讯。", claim_id="c1")
-    assert not result.passed
-    assert any(f.category == "trading_instruction" for f in result.findings)
-    assert auditor.audit_text("该政策旨在抑制过热。", claim_id="c1").passed  # descriptive exception
+    assert "usage:" in proc.stdout
+    assert "--dry-run" in proc.stdout

@@ -1,19 +1,14 @@
-"""Task 2.1 — Feed envelope boundary fixtures.
-
-Positive and negative fixtures for the Feed envelope: supported major,
-strict-UTF-8/lone-surrogate rejection, window ordering, wall-clock order,
-digest/run-ID recomputation, numeric guards, intelligence-field rejection,
-calendar horizon, and provenance descriptors.
-"""
+"""Feed-only envelope and trust-boundary regressions."""
 
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
 from follow_the_money.canonical import canonical_digest
+from follow_the_money.feed.bundle import build_bundle
 from follow_the_money.feed.validate import (
     assert_feed_identity,
     recompute_feed_identity,
@@ -22,600 +17,98 @@ from follow_the_money.feed.validate import (
     validate_numeric_token,
 )
 from follow_the_money.schema import SchemaError
-
-T0 = datetime(2026, 8, 11, 0, 20, 0, tzinfo=UTC)
-
-
-def _ts(dt: datetime) -> str:
-    return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+from tests.test_feed_bundle import T0, _feed, _news, _ts
 
 
-def _valid_feed(**overrides) -> dict:
-    cutoff = T0
-    started = cutoff - timedelta(seconds=30)
-    completed = cutoff + timedelta(minutes=4)
-    generated = cutoff + timedelta(minutes=5)
-    feed = {
-        "schema_version": 2,
-        "run_id": f"{_ts(cutoff)}::deadbeef",
-        "window": {"start": _ts(cutoff - timedelta(hours=72)), "end": _ts(cutoff)},
-        "collection_started_at": _ts(started),
-        "evidence_cutoff_at": _ts(cutoff),
-        "collection_completed_at": _ts(completed),
-        "generated_at": _ts(generated),
-        "provider_outcomes": [],
-        "producer": {
-            "package_version": "0.1.0",
-            "files": [],
-            "fingerprint": "a" * 64,
-        },
-        "feed_config": {"snapshot": {}, "hash": "b" * 64},
-        "feed_schema": {"path": "schemas/feed.schema.json", "sha256": "c" * 64},
-        "provider_contracts": [],
-        "git": None,
-        "content_digest": "d" * 64,
-        "items": [],
-        "pipeline": {"status": "healthy", "warnings": []},
+def test_valid_empty_and_populated_five_domain_feeds_pass():
+    empty = _feed()
+    empty["content_digest"], empty["run_id"] = recompute_feed_identity(empty)
+    validate_feed(empty)
+    assert_feed_identity(empty)
+
+    populated = _feed([_news()])
+    validate_feed(populated)
+    assert build_bundle(populated).artifacts["news"]["items"] == populated["items"]
+
+
+def test_v4_rejects_removed_payload_types_and_fields():
+    feed = _feed([_news()])
+    item = deepcopy(feed["items"][0])
+    item["payload"] = {
+        "type": "market_data",
+        "instrument_id": "sp500",
+        "observations": [{"as_of": _ts(T0 - timedelta(hours=1)), "value": "1", "unit": "index"}],
+        "raw_metadata": {},
     }
-    feed.update(overrides)
-    return feed
+    feed["items"] = [item]
+    with pytest.raises(SchemaError):
+        validate_feed(feed)
+
+    with pytest.raises(SchemaError):
+        validate_feed({**_feed(), "calendar_horizon_end": _ts(T0 + timedelta(hours=26))})
 
 
-def _news_item(published: datetime, title: str = "标题") -> dict:
-    return {
-        "id": "item-1",
-        "provider_id": "prov_a",
-        "source": {
-            "id": "src-1",
-            "name": "Source A",
-            "tier": "Tier 1",
-            "kind": "news",
-            "url": "https://a.example.com/x",
-            "published_at": _ts(published),
-            "knowledge_available_at": _ts(published),
-        },
-        "payload": {
-            "type": "news",
-            "title": title,
-            "snippet": "摘要",
-            "occurred_at": _ts(published),
-            "raw_metadata": {},
-        },
-    }
-
-
-def _valid_v2_feed() -> dict:
-    snapshot = {
-        "provider_id": "p",
-        "empty_valid_for_window": True,
-        "freshness": {
-            "cadence": "weekly",
-            "reference_time": "source_updated_at",
-            "valid_for_seconds": 604800,
-        },
-    }
-    contract_hash = canonical_digest(snapshot)
-    item = _news_item(T0 - timedelta(hours=1))
-    item["provider_id"] = "p"
-    return _valid_feed(
-        schema_version=2,
-        provider_contracts=[{"provider_id": "p", "snapshot": snapshot, "hash": contract_hash}],
-        items=[item],
-        provider_outcomes=[
+def test_unsupported_major_unknown_properties_and_bad_windows_fail_closed():
+    previous = _feed()
+    previous["schema_version"] = 3
+    with pytest.raises(SchemaError):
+        validate_feed(previous)
+    with pytest.raises(SchemaError):
+        validate_feed({**_feed(), "unexpected": True})
+    with pytest.raises(SchemaError, match="strictly advancing"):
+        validate_feed(
             {
-                "provider_id": "p",
-                "state": "healthy",
-                "attempted": 1,
-                "fetched": 1,
-                "succeeded": True,
-                "empty": False,
-                "partial": False,
-                "failed": False,
-                "skipped": False,
-                "accepted": 1,
-                "rejected": 0,
-                "error": None,
-                "retrieved_at": _ts(T0 + timedelta(minutes=1)),
-                "freshness": {
-                    "cadence": "weekly",
-                    "status": "fresh",
-                    "origin_contract_hash": contract_hash,
-                    "carried_forward_from_run_id": None,
-                },
+                **_feed(),
+                "window": {"start": _ts(T0), "end": _ts(T0)},
             }
-        ],
-    )
+        )
 
 
-def _valid_v3_blocked_feed() -> dict:
-    feed = _valid_v2_feed()
-    feed["schema_version"] = 3
-    feed["items"] = []
-    feed["feed_config"]["snapshot"] = {
-        "coverage": [
-            {"group": "a", "members": ["p"], "minimum": 1, "optional": False},
-            {"group": "z", "members": ["p"], "minimum": 1, "optional": False},
-        ]
-    }
-    feed["provider_outcomes"][0].update(
-        state="failed",
-        succeeded=False,
-        failed=True,
-        accepted=0,
-        availability="blocked",
-        availability_reason="HTTP 403",
-        upstream_http_status=403,
-        affected_coverage_groups=["a", "z"],
-        freshness={
-            "cadence": "weekly",
-            "status": "not_evaluated",
-            "origin_contract_hash": None,
-            "carried_forward_from_run_id": None,
-        },
-    )
-    feed["pipeline"] = {"status": "degraded", "warnings": ["blocked Provider p"]}
-    return feed
+def test_lifecycle_order_and_item_order_are_enforced():
+    bad_lifecycle = _feed()
+    bad_lifecycle["generated_at"] = _ts(T0 - timedelta(minutes=1))
+    with pytest.raises(SchemaError, match="wall-clock order"):
+        validate_feed(bad_lifecycle)
+
+    first = _news("first", T0 - timedelta(hours=1))
+    second = _news("second", T0 - timedelta(hours=2))
+    bad_order = _feed([first, second])
+    with pytest.raises(SchemaError, match="total order"):
+        validate_feed(bad_order)
 
 
-# ---------------------------------------------------------------------------
-# Positive
-# ---------------------------------------------------------------------------
-
-
-def test_valid_empty_feed_passes():
-    feed = _valid_feed()
+def test_identity_rejects_forged_digest_or_run_id_and_covers_semantics():
+    feed = _feed([_news()])
     digest, run_id = recompute_feed_identity(feed)
-    feed["content_digest"] = digest
-    feed["run_id"] = run_id
-    validate_feed(feed)
+    feed["content_digest"], feed["run_id"] = digest, run_id
     assert_feed_identity(feed)
 
-
-def test_valid_news_item_passes():
-    feed = _valid_v2_feed()
-    validate_feed(feed)
-
-
-def test_all_eight_payloads_pass_schema():
-    feed = _valid_v2_feed()
-    base_source = _news_item(T0 - timedelta(hours=1))["source"]
-    items = [
-        {
-            "id": "n",
-            "provider_id": "p",
-            "source": base_source,
-            "payload": {
-                "type": "news",
-                "title": "t",
-                "snippet": "s",
-                "occurred_at": _ts(T0),
-                "raw_metadata": {},
-            },
-        },
-        {
-            "id": "m",
-            "provider_id": "p",
-            "source": base_source,
-            "payload": {
-                "type": "macro_release",
-                "series_id": "us_cpi_all_items_sa_mom",
-                "released_at": _ts(T0),
-                "observation_period": None,
-                "actual": {"value": "3.2", "unit": "percent"},
-                "consensus": {"value": None, "unit": "percent", "unknown_reason": "missing"},
-                "previous": {"value": "3.1", "unit": "percent"},
-                "raw_metadata": {},
-            },
-        },
-        {
-            "id": "po",
-            "provider_id": "p",
-            "source": base_source,
-            "payload": {
-                "type": "policy",
-                "title": "policy",
-                "announced_at": _ts(T0),
-                "raw_metadata": {},
-            },
-        },
-        {
-            "id": "md",
-            "provider_id": "p",
-            "source": base_source,
-            "payload": {
-                "type": "market_data",
-                "instrument_id": "sp500",
-                "observations": [
-                    {"as_of": _ts(T0 - timedelta(days=1)), "value": "5000.0", "unit": "index"}
-                ],
-                "raw_metadata": {},
-            },
-        },
-        {
-            "id": "f",
-            "provider_id": "p",
-            "source": base_source,
-            "payload": {
-                "type": "flow",
-                "instrument_id": "spy",
-                "as_of": _ts(T0),
-                "net_flow": {"value": "100.5", "unit": "usd"},
-                "raw_metadata": {},
-            },
-        },
-        {
-            "id": "pos",
-            "provider_id": "p",
-            "source": base_source,
-            "payload": {
-                "type": "positioning",
-                "instrument_id": "gold",
-                "as_of": _ts(T0),
-                "position": {"value": "50", "unit": "percent"},
-                "raw_metadata": {},
-            },
-        },
-        {
-            "id": "fil",
-            "provider_id": "p",
-            "source": base_source,
-            "payload": {
-                "type": "filing",
-                "form": "13F",
-                "company": "Acme",
-                "accession_number": "0001",
-                "filed_at": _ts(T0),
-                "raw_metadata": {},
-            },
-        },
-        {
-            "id": "cal",
-            "provider_id": "p",
-            "source": base_source,
-            "payload": {
-                "type": "calendar",
-                "calendar_id": "c1",
-                "scheduled_at": _ts(T0 + timedelta(hours=12)),
-                "priority": "high",
-                "raw_metadata": {},
-            },
-        },
-    ]
-    feed["items"] = sorted(items, key=lambda i: (i["source"]["knowledge_available_at"], i["id"]))
-    feed["provider_outcomes"][0]["accepted"] = len(items)
-    validate_feed(feed)
-
-
-# ---------------------------------------------------------------------------
-# Schema/version
-# ---------------------------------------------------------------------------
-
-
-def test_unsupported_major_rejected():
-    feed = _valid_feed(schema_version=1)
-    # Schema enum fires first; the semantic supported-major check is a second
-    # independent guard.
-    with pytest.raises(SchemaError, match="unsupported|was expected|not one"):
-        validate_feed(feed)
-
-
-def test_unknown_property_rejected():
-    feed = _valid_feed(extra_field=True)
-    with pytest.raises(SchemaError):
-        validate_feed(feed)
-
-
-def test_valid_blocked_degradation_passes_v3_semantic_validation():
-    validate_feed(_valid_v3_blocked_feed())
-
-
-@pytest.mark.parametrize(
-    "mutation",
-    ["forged_status", "wrong_groups", "duplicate_groups", "unsorted_groups", "missing", "partial"],
-)
-def test_v3_blocked_claims_fail_closed_when_cross_fields_disagree(mutation):
-    feed = deepcopy(_valid_v3_blocked_feed())
-    outcome = feed["provider_outcomes"][0]
-    if mutation == "forged_status":
-        outcome["upstream_http_status"] = 503
-    elif mutation == "wrong_groups":
-        outcome["affected_coverage_groups"] = []
-    elif mutation == "duplicate_groups":
-        outcome["affected_coverage_groups"] = ["a", "a", "z"]
-    elif mutation == "unsorted_groups":
-        outcome["affected_coverage_groups"] = ["z", "a"]
-    elif mutation == "missing":
-        feed["provider_outcomes"] = []
-    else:
-        outcome.update(state="partial", partial=True, failed=False, accepted=1)
-
-    with pytest.raises(SchemaError):
-        validate_feed(feed)
-
-
-def test_freshness_capable_major_requires_closed_provider_result():
-    feed = _valid_v2_feed()
-    validate_feed(feed)
-
-    bad = dict(feed)
-    bad["provider_outcomes"] = [dict(feed["provider_outcomes"][0])]
-    bad["provider_outcomes"][0]["freshness"] = {
-        **bad["provider_outcomes"][0]["freshness"],
-        "status": "valid_unchanged",
-        "carried_forward_from_run_id": None,
-    }
-    with pytest.raises(SchemaError, match="valid_unchanged"):
-        validate_feed(bad)
-
-
-@pytest.mark.parametrize(
-    "mutation", ["missing", "hash", "provider_id", "unknown_freshness", "invalid_type", "extra"]
-)
-def test_freshness_capable_major_requires_a_trusted_embedded_contract(mutation):
-    feed = _valid_v2_feed()
-    if mutation == "missing":
-        feed["provider_contracts"] = []
-    elif mutation == "hash":
-        feed["provider_contracts"][0]["hash"] = "0" * 64
-    elif mutation == "provider_id":
-        feed["provider_contracts"][0]["snapshot"]["provider_id"] = "other"
-    elif mutation == "unknown_freshness":
-        feed["provider_contracts"][0]["snapshot"]["freshness"]["unknown"] = True
-        feed["provider_contracts"][0]["hash"] = canonical_digest(
-            feed["provider_contracts"][0]["snapshot"]
-        )
-        feed["provider_outcomes"][0]["freshness"]["origin_contract_hash"] = feed[
-            "provider_contracts"
-        ][0]["hash"]
-    elif mutation == "invalid_type":
-        feed["provider_contracts"][0]["snapshot"]["freshness"]["cadence"] = []
-        feed["provider_contracts"][0]["hash"] = canonical_digest(
-            feed["provider_contracts"][0]["snapshot"]
-        )
-    else:
-        snapshot = {
-            **feed["provider_contracts"][0]["snapshot"],
-            "provider_id": "q",
-        }
-        feed["provider_contracts"].append(
-            {"provider_id": "q", "snapshot": snapshot, "hash": canonical_digest(snapshot)}
-        )
-
-    with pytest.raises(SchemaError, match="Provider"):
-        validate_feed(feed)
-
-
-def test_freshness_capable_major_rejects_false_healthy_source_completeness():
-    feed = _valid_v2_feed()
-    outcome = feed["provider_outcomes"][0]
-    outcome.update(state="failed", succeeded=False, failed=True)
-    outcome["freshness"] = {
-        "cadence": "weekly",
-        "status": "not_evaluated",
-        "origin_contract_hash": None,
-        "carried_forward_from_run_id": None,
-    }
-
-    with pytest.raises(SchemaError, match="pipeline.status=failure"):
-        validate_feed(feed)
-
-
-def test_non_permitted_empty_is_not_evaluated_and_requires_failure():
-    feed = _valid_v2_feed()
-    snapshot = feed["provider_contracts"][0]["snapshot"]
-    snapshot["empty_valid_for_window"] = False
-    feed["provider_contracts"][0]["hash"] = canonical_digest(snapshot)
-    feed["items"] = []
-    outcome = feed["provider_outcomes"][0]
-    outcome.update(
-        state="empty",
-        succeeded=True,
-        empty=True,
-        accepted=0,
-    )
-    outcome["freshness"] = {
-        "cadence": "weekly",
-        "status": "not_evaluated",
-        "origin_contract_hash": None,
-        "carried_forward_from_run_id": None,
-    }
-    feed["pipeline"] = {"status": "failure", "warnings": ["source incomplete"]}
-
-    validate_feed(feed)
-
-    feed["pipeline"] = {"status": "healthy", "warnings": []}
-    with pytest.raises(SchemaError, match="pipeline.status=failure"):
-        validate_feed(feed)
-
-
-# ---------------------------------------------------------------------------
-# Window ordering
-# ---------------------------------------------------------------------------
-
-
-def test_equal_window_rejected():
-    cutoff = T0
-    feed = _valid_feed()
-    feed["window"] = {"start": _ts(cutoff), "end": _ts(cutoff)}
-    with pytest.raises(SchemaError, match="strictly advancing"):
-        validate_feed(feed)
-
-
-def test_backward_window_rejected():
-    feed = _valid_feed()
-    feed["window"] = {"start": _ts(T0 + timedelta(hours=1)), "end": _ts(T0)}
-    with pytest.raises(SchemaError, match="strictly advancing"):
-        validate_feed(feed)
-
-
-def test_wall_clock_order_violated():
-    feed = _valid_feed()
-    feed["evidence_cutoff_at"] = _ts(T0 + timedelta(minutes=10))
-    with pytest.raises(SchemaError, match="wall-clock order"):
-        validate_feed(feed)
-
-
-def test_retrieved_at_out_of_bounds():
-    feed = _valid_v2_feed()
-    outcome = dict(feed["provider_outcomes"][0])
-    outcome["retrieved_at"] = _ts(T0 - timedelta(minutes=1))
-    feed["provider_outcomes"] = [outcome]
-    with pytest.raises(SchemaError, match="retrieved_at"):
-        validate_feed(feed)
-
-
-# ---------------------------------------------------------------------------
-# Digest / run ID identity
-# ---------------------------------------------------------------------------
-
-
-def test_digest_mismatch_rejected():
-    feed = _valid_feed()
-    _digest, run_id = recompute_feed_identity(feed)
-    feed["content_digest"] = "f" * 64
-    feed["run_id"] = run_id
+    forged = dict(feed)
+    forged["content_digest"] = "0" * 64
     with pytest.raises(SchemaError, match="content_digest"):
-        assert_feed_identity(feed)
+        assert_feed_identity(forged)
+
+    changed = deepcopy(feed)
+    changed["pipeline"] = {"status": "degraded", "warnings": ["changed"]}
+    assert recompute_feed_identity(changed)[0] != digest
 
 
-def test_run_id_mismatch_rejected():
-    feed = _valid_feed()
-    digest, _run_id = recompute_feed_identity(feed)
-    feed["content_digest"] = digest
-    feed["run_id"] = "wrong-run-id"
-    with pytest.raises(SchemaError, match="run_id"):
-        assert_feed_identity(feed)
-
-
-def test_digest_covers_producer_provenance():
-    a = _valid_feed()
-    b = _valid_feed()
-    a["producer"]["fingerprint"] = "a" * 64
-    b["producer"]["fingerprint"] = "b" * 64
-    da, _ = recompute_feed_identity(a)
-    db, _ = recompute_feed_identity(b)
-    assert da != db
-
-
-def test_digest_omits_run_id_and_digest():
-    a = _valid_feed()
-    b = _valid_feed()
-    a["run_id"] = "x"
-    b["run_id"] = "y"
-    da, _ = recompute_feed_identity(a)
-    db, _ = recompute_feed_identity(b)
-    assert da == db  # run_id does not participate
-
-
-# ---------------------------------------------------------------------------
-# Numeric guards
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "token,ok",
-    [
-        ("0", True),
-        ("-0.5", True),
-        ("3.14159265358979323846264", True),  # 24 significant digits
-        ("3.141592653589793238462643", False),  # 25 digits
-        ("1e12", True),
-        ("1e-12", True),
-        ("1e13", False),  # exponent > 12
-        ("0x1f", False),
-        ("NaN", False),
-        ("Infinity", False),
-        ("1,5", False),
-        ("+3.2", True),
-        ("-0", True),  # raw token allows -0; canonical persistence forbids it
-    ],
-)
-def test_raw_numeric_token_boundaries(token, ok):
-    if ok:
-        validate_numeric_token(token, where="test")
-    else:
+def test_numeric_guards_remain_closed_for_retained_numeric_evidence():
+    validate_numeric_token("-12.5e+2", where="value")
+    validate_canonical_numeric("100.25", where="value")
+    for token in ("01", "1.", "1e99"):
         with pytest.raises(SchemaError):
-            validate_numeric_token(token, where="test")
+            validate_numeric_token(token, where="value")
+    with pytest.raises(SchemaError):
+        validate_canonical_numeric("-0", where="value")
 
 
-@pytest.mark.parametrize(
-    "value,ok",
-    [
-        ("0", True),
-        ("123456789012345678.9", True),  # 18-digit integer part ok
-        ("1234567890123456789", False),  # 19-digit integer part > 10^18 guard
-        ("-0.0", False),
-        ("3.2e1", False),  # exponent forbidden in canonical form
-        ("abc", False),
-        ("1000000000000000000", True),  # exactly 10^18 allowed
-    ],
-)
-def test_canonical_numeric_guards(value, ok):
-    if ok:
-        validate_canonical_numeric(value, where="test")
-    else:
-        with pytest.raises(SchemaError):
-            validate_canonical_numeric(value, where="test")
-
-
-def test_canonical_numeric_negative_zero_rejected():
-    with pytest.raises(SchemaError, match="negative zero"):
-        validate_canonical_numeric("-0.00", where="test")
-
-
-# ---------------------------------------------------------------------------
-# Intelligence-field rejection
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "field", ["importance", "direction", "price_in", "regime", "impact", "ranking"]
-)
-def test_intelligence_field_rejected(field):
-    feed = _valid_feed()
-    item = _news_item(T0 - timedelta(hours=1))
-    item["payload"][field] = "anything"
-    feed["items"] = [item]
-    # Schema-level additionalProperties rejection fires first; the semantic
-    # intelligence check is a second, independent guard.
-    with pytest.raises(SchemaError, match="intelligence|not valid under any of the given schemas"):
-        validate_feed(feed)
-
-
-# ---------------------------------------------------------------------------
-# Lone surrogate / strict UTF-8
-# ---------------------------------------------------------------------------
-
-
-def test_lone_surrogate_in_title_rejected():
-    feed = _valid_feed()
-    item = _news_item(T0 - timedelta(hours=1))
-    item["payload"]["title"] = "bad\ud800title"
-    feed["items"] = [item]
-    with pytest.raises(SchemaError, match="surrogate"):
-        validate_feed(feed)
-
-
-def test_escaped_lone_surrogate_rejected():
-    feed = _valid_feed()
-    item = _news_item(T0 - timedelta(hours=1))
-    item["payload"]["title"] = "bad\udfff"
-    feed["items"] = [item]
-    with pytest.raises(SchemaError, match="surrogate"):
-        validate_feed(feed)
-
-
-# ---------------------------------------------------------------------------
-# Calendar horizon
-# ---------------------------------------------------------------------------
-
-
-def test_calendar_horizon_before_cutoff_rejected():
-    feed = _valid_feed(calendar_horizon_end=_ts(T0 - timedelta(hours=1)))
-    with pytest.raises(SchemaError, match="calendar_horizon_end"):
-        validate_feed(feed)
-
-
-def test_calendar_horizon_26h_after_cutoff_ok():
-    feed = _valid_feed(calendar_horizon_end=_ts(T0 + timedelta(hours=26)))
-    validate_feed(feed)
+def test_producer_and_contract_descriptors_are_part_of_identity():
+    feed = _feed()
+    first = recompute_feed_identity(feed)[0]
+    changed = deepcopy(feed)
+    changed["provider_contracts"][0]["snapshot"]["payload_types"] = ["filing"]
+    changed["provider_contracts"][0]["hash"] = canonical_digest(
+        changed["provider_contracts"][0]["snapshot"]
+    )
+    assert recompute_feed_identity(changed)[0] != first

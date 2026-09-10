@@ -1,51 +1,38 @@
-"""Closed versioned configuration for Follow the Money.
-
-Config loading is strict and explicit:
-
-- Files must be valid UTF-8 with only Unicode scalar values (lone surrogates
-  are rejected before any further processing).
-- Every closed categorical enum is validated against its versioned allowed
-  values; unknown members are rejected, never silently defaulted.
-- Numeric/reference unknown values are represented as ``null`` plus a required
-  closed ``unknown_reason``; categorical unknowns use the literal ``unknown``
-  enum plus a required bounded ``audit_reason``.
-- Cross-field invariants (duplicate provider IDs, unverified enabled
-  adapters, coverage-matrix rows, role mappings, weight sums) are validated.
-"""
+"""Strict Feed-only configuration loading and typed models."""
 
 from .load import ConfigError, load_config
 from .model import (
-    V1_ROLE_IDS,
+    REQUIRED_PROVIDER_IDS,
+    SUPPORTED_FEED_PAYLOAD_TYPES,
     AppConfig,
     CoverageMatrix,
     CoverageRow,
     FeedLimits,
+    FetchRule,
     FreshnessContract,
-    MarketRole,
-    MarketState,
     ProviderEntry,
     RatePolicy,
-    Scoring,
-    Session,
+    RateRegistry,
     SourceFamily,
-    SurpriseScale,
+    SourceLinkRule,
+    WatchCompany,
 )
 
 __all__ = [
-    "V1_ROLE_IDS",
+    "REQUIRED_PROVIDER_IDS",
+    "SUPPORTED_FEED_PAYLOAD_TYPES",
     "AppConfig",
     "ConfigError",
     "CoverageMatrix",
     "CoverageRow",
     "FeedLimits",
+    "FetchRule",
     "FreshnessContract",
-    "MarketRole",
-    "MarketState",
     "ProviderEntry",
     "RatePolicy",
-    "Scoring",
-    "Session",
+    "RateRegistry",
     "SourceFamily",
-    "SurpriseScale",
+    "SourceLinkRule",
+    "WatchCompany",
     "load_config",
 ]

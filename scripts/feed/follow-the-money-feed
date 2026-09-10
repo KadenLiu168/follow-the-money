@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Minimal internal Feed entry for Agent/Skill use. Forwards arguments and
+# Minimal internal Feed entry for Host Agent/Skill use. Forwards arguments and
 # exit codes to the deterministic feed pipeline; there is no public CLI.
 set -euo pipefail
 

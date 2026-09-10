@@ -1,18 +1,17 @@
-"""Concrete provider adapters (Fed, BLS, SEC EDGAR, PBOC, NBS, SSE, SZSE, Yahoo).
+"""Concrete credential-free Provider adapters for the Evidence Feed.
 
 Each adapter implements ``fetch`` and ``normalize`` per the small Provider
 protocol and validates every emitted source URL against its owning manifest's
 ``source_link_hosts`` rules. Adapters remain usable from fixtures with
 injected clients; they never dereference source URLs.
 
-The six mandatory v1 coverage-matrix rows are backed by these adapters:
+The shipped Feed coverage rows are backed by these adapters:
 
 - ``us_official_macro_policy``: federal_reserve + bls
 - ``us_company_filings``: sec_edgar (watched-company filing contract)
 - ``china_official_macro_policy``: pboc + nbs
 - ``china_exchange_evidence``: sse + szse
-- ``verified_market_data``: yahoo_market (verified mappings only)
-- ``future_calendar``: federal_reserve + bls + nbs
+- ``cftc_positioning``: cftc
 """
 
 from __future__ import annotations
@@ -25,7 +24,7 @@ from decimal import Decimal, InvalidOperation
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import quote, urlencode, urljoin
+from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 from ..config.model import ProviderEntry
@@ -586,114 +585,6 @@ class SzseAdapter(BaseAdapter):
         return items
 
 
-class YahooMarketAdapter(BaseAdapter):
-    """Yahoo-compatible market data for the 13 v1 dashboard roles.
-
-    ``fetch`` requests the chart API for one verified configured symbol with an
-    explicit cutoff-derived 90-calendar-day daily-history query; production
-    orchestration fans out over verified mappings only. ``normalize`` decodes the chart
-    JSON into strictly chronological bounded ``market_data`` observations.
-    Daily timestamps are session labels, not completed closes, so
-    observation-level eligibility (session close plus the role's configured
-    availability lag) is applied by the market snapshot, not here. Missing/
-    empty result sets are retained as role-absent records so the coverage
-    matrix can record missing roles instead of silently degrading.
-    """
-
-    provider_id: str = "yahoo_market"
-
-    def __init__(
-        self,
-        manifest: Mapping[str, Any] | ProviderEntry | None = None,
-        instrument: str = "^GSPC",
-        role_id: str = "sp500",
-        unit: str | None = None,
-    ) -> None:
-        super().__init__(manifest)
-        self._instrument = instrument
-        self._role_id = role_id
-        self._unit = unit or self._contract.units.get("index", "index")
-
-    def fetch(self, window: Mapping[str, str], client: Any) -> Any:
-        cutoff = _parse_timestamp(window["end"])
-        period2 = int(cutoff.timestamp())
-        period1 = int((cutoff - timedelta(days=90)).timestamp())
-        query = urlencode({"period1": period1, "period2": period2, "interval": "1d"})
-        instrument = quote(self._instrument, safe="")
-        return self._fetch(
-            client,
-            f"https://query1.finance.yahoo.com/v8/finance/chart/{instrument}?{query}",
-        )
-
-    def normalize(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
-        data = self._json_body(raw)
-        if not isinstance(data, dict):
-            return []
-        result = ((data.get("chart") or {}).get("result") or [None])[0]
-        if not isinstance(result, dict):
-            return []
-        timestamps = result.get("timestamp") or []
-        indicators = result.get("indicators") or {}
-        quotes = (indicators.get("quote") or [None])[0] or {}
-        closes = quotes.get("close") or []
-        if self._contract.adjustment_policy.get("splits_dividends_adjusted"):
-            closes = ((indicators.get("adjclose") or [None])[0] or {}).get("adjclose") or closes
-        if not timestamps or not closes:
-            return []
-
-        observations: list[Mapping[str, Any]] = []
-        for ts, close in zip(timestamps, closes):
-            if close is None:
-                continue
-            as_of = _epoch_to_iso(int(ts))
-            observations.append(
-                {
-                    "as_of": as_of,
-                    "value": str(close),
-                    "unit": self._unit,
-                    # Yahoo's daily timestamp is a session label/open for
-                    # exchange instruments, not proof that the close exists.
-                    # The snapshot applies the role's configured close + lag.
-                    "available_at": None,
-                }
-            )
-        observations = _chronological_dedup(observations)
-        max_observations = self._contract.max_observations or 260
-        observations = observations[-max_observations:]
-        if not observations:
-            return []
-
-        url = f"https://finance.yahoo.com/quote/{self._instrument}"
-        source = self._source(
-            source_id=f"yahoo-{stable_item_id(self.provider_id, self._instrument)}",
-            name="Yahoo Finance",
-            tier="Tier 2",
-            url=url,
-            published_at=None,
-            knowledge=_format_timestamp(_parse_timestamp(window["end"])),
-        )
-        return [
-            {
-                "id": stable_item_id(self.provider_id, f"{self._instrument}|{self._role_id}"),
-                "provider_id": self.provider_id,
-                "source": source,
-                "payload": {
-                    "type": "market_data",
-                    "instrument_id": self._role_id,
-                    "unit": self._unit,
-                    "observations": observations,
-                    "raw_metadata": {},
-                },
-            }
-        ]
-
-
-def _epoch_to_iso(epoch: int) -> str:
-    from datetime import datetime
-
-    return datetime.fromtimestamp(epoch, tz=UTC).strftime("%Y-%m-%dT%H:%M:%S") + "Z"
-
-
 def _parse_timestamp(value: str) -> datetime:
     text = str(value).strip()
     try:
@@ -810,32 +701,10 @@ def _canonical_number(value: Any) -> str:
     return format(number, "f")
 
 
-def _chronological_dedup(observations: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
-    """Strict-chronological dedup: exact duplicate timestamps collapse; the
-    serialized result is strictly ordered by ``as_of``."""
-    by_ts: dict[str, list[Mapping[str, Any]]] = {}
-    for obs in observations:
-        by_ts.setdefault(obs["as_of"], []).append(obs)
-    cleaned: list[Mapping[str, Any]] = []
-    for ts in sorted(by_ts):
-        group = by_ts[ts]
-        values = {o["value"] for o in group}
-        if len(values) > 1:
-            cleaned.append(dict(group[0]))  # keep first; conflict retained by caller
-        else:
-            cleaned.append(dict(group[0]))
-    return cleaned
-
-
 def build_registry(
     providers: Mapping[str, ProviderEntry] | Sequence[ProviderEntry] | None = None,
 ) -> ProviderRegistry:
-    """Build the explicit provider registry from resolved Provider entries.
-
-    Returns every adapter required by the six mandatory v1 coverage rows,
-    plus verified-optional CFTC. The registry itself never enables anything;
-    enablement is configuration.
-    """
+    """Build the explicit registry for the eight required Feed Providers."""
     resolved_runtime = providers is not None
     if providers is None:
         from .manifest import load_all_manifests
@@ -858,7 +727,6 @@ def build_registry(
         "nbs": NbsAdapter,
         "sse": SseAdapter,
         "szse": SzseAdapter,
-        "yahoo_market": YahooMarketAdapter,
     }
     adapters = {
         provider_id: adapter_types[provider_id](provider)

@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from follow_the_money.canonical import canonical_bytes, canonical_digest
+from follow_the_money.canonical import canonical_bytes
 from follow_the_money.config.model import FreshnessContract
 from follow_the_money.feed.bundle import artifact_relative_path, build_bundle
 from follow_the_money.feed.freshness import FreshnessError, evaluate_freshness
@@ -66,32 +66,14 @@ def test_bounded_and_event_driven_freshness_use_different_authorities():
     )
 
 
-def test_market_session_expiry_ignores_retrieval_time():
-    item = policy_item()
-    item["payload"] = {
-        "type": "market_data",
-        "instrument_id": "sp500",
-        "observations": [{"as_of": ts(T0 - timedelta(days=2)), "value": "1", "unit": "index"}],
-        "raw_metadata": {},
-    }
-    assert (
+def test_removed_market_session_cadence_is_rejected():
+    with pytest.raises(FreshnessError, match="unsupported cadence"):
         evaluate_freshness(
-            [item],
+            [policy_item()],
             FreshnessContract("market_session", "data_as_of", 86400),
             ts(T0),
             checked_at=ts(T0 + timedelta(minutes=1)),
         )
-        == "stale"
-    )
-    assert (
-        evaluate_freshness(
-            [item],
-            FreshnessContract("market_session", "data_as_of", 3 * 86400),
-            ts(T0),
-            checked_at=ts(T0 + timedelta(minutes=1)),
-        )
-        == "fresh"
-    )
 
 
 @pytest.mark.parametrize(
@@ -163,7 +145,7 @@ def test_repeated_carry_preserves_original_contract_hash():
         outcomes={"provider": outcome},
         current_items=[],
         active_feed={
-            "schema_version": 2,
+            "schema_version": 3,
             "run_id": "prior-run",
             "items": prior,
             "provider_contracts": [{"provider_id": "provider", "snapshot": {}, "hash": "b" * 64}],
@@ -230,67 +212,9 @@ def test_blocked_outcome_never_carries_prior_slice():
 
 
 def _active_bundle():
-    contract_snapshot = {
-        "provider_id": "provider",
-        "empty_valid_for_window": True,
-        "freshness": {
-            "cadence": "scheduled",
-            "reference_time": "source_updated_at",
-            "valid_for_seconds": 86400,
-        },
-    }
-    contract_hash = canonical_digest(contract_snapshot)
-    outcome = {
-        "provider_id": "provider",
-        "state": "healthy",
-        "attempted": 1,
-        "fetched": 1,
-        "succeeded": True,
-        "empty": False,
-        "partial": False,
-        "failed": False,
-        "skipped": False,
-        "accepted": 1,
-        "rejected": 0,
-        "error": None,
-        "retrieved_at": ts(T0 + timedelta(minutes=1)),
-        "availability": "success",
-        "availability_reason": None,
-        "upstream_http_status": None,
-        "affected_coverage_groups": [],
-        "freshness": {
-            "cadence": "scheduled",
-            "status": "fresh",
-            "origin_contract_hash": contract_hash,
-            "carried_forward_from_run_id": None,
-        },
-    }
-    feed = {
-        "schema_version": 3,
-        "run_id": "",
-        "window": {"start": ts(T0 - timedelta(days=1)), "end": ts(T0)},
-        "collection_started_at": ts(T0 - timedelta(minutes=1)),
-        "evidence_cutoff_at": ts(T0),
-        "collection_completed_at": ts(T0 + timedelta(minutes=2)),
-        "generated_at": ts(T0 + timedelta(minutes=3)),
-        "provider_outcomes": [outcome],
-        "producer": {"package_version": "0.1.0", "files": [], "fingerprint": "b" * 64},
-        "feed_config": {"snapshot": {}, "hash": "c" * 64},
-        "feed_schema": {"path": "schemas/feed.schema.json", "sha256": "d" * 64},
-        "provider_contracts": [
-            {
-                "provider_id": "provider",
-                "snapshot": contract_snapshot,
-                "hash": contract_hash,
-            }
-        ],
-        "git": None,
-        "content_digest": "",
-        "items": [policy_item()],
-        "pipeline": {"status": "healthy", "warnings": []},
-    }
-    feed["content_digest"], feed["run_id"] = recompute_feed_identity(feed)
-    return build_bundle(feed)
+    from tests.test_feed_bundle import _feed
+
+    return build_bundle(_feed())
 
 
 def _write_active_bundle(root, bundle) -> None:
@@ -312,7 +236,7 @@ def test_freshness_is_semantic_but_audit_times_are_not():
 
     audit = dict(feed)
     audit["generated_at"] = ts(T0 + timedelta(hours=1))
-    audit["provider_outcomes"] = [dict(feed["provider_outcomes"][0])]
+    audit["provider_outcomes"] = [dict(outcome) for outcome in feed["provider_outcomes"]]
     audit["provider_outcomes"][0]["retrieved_at"] = ts(T0 + timedelta(minutes=2))
     assert recompute_feed_identity(audit) == (digest, run_id)
 

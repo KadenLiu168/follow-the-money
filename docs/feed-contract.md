@@ -1,186 +1,64 @@
-# Feed Contract
+# Feed contract
 
-## Manifest-led bundle
+The repository publishes one deterministic, credential-free Evidence Feed. New
+production bundles use logical Feed schema major 4, manifest major 4, and
+artifact major 2.
 
-New Feed production writes one authoritative `feeds/feed-manifest.json` and
-exactly one generation-qualified artifact for each closed payload domain, in
-this order:
+## Closed domains
+
+Artifacts are always present and ordered as:
 
 1. `news`
 2. `macro_release`
 3. `policy`
-4. `market_data`
-5. `flow`
-6. `positioning`
-7. `filing`
-8. `calendar`
+4. `positioning`
+5. `filing`
 
-Every artifact exists, including when its `items` array is empty. Its envelope
-contains only `schema_version`, `run_id`, `domain`, and `items`. Items retain
-the existing `feed.schema.json` payload shapes and are routed solely by
-`payload.type`; Provider identity does not affect routing.
+`market_data`, `flow`, `calendar`, and unknown domains are not current Feed
+capabilities. A previous eight-domain major is accepted only by the bounded
+migration helper, which validates it first, projects retained evidence, and
+recomputes identity before publication.
 
-## Canonical-main raw normal consumption
+## Bundle shape
 
-Normal Skill invocation uses `scripts/skill/prepare-feed`, not the local Feed
-producer. It retrieves `feeds/feed-manifest.json` first from
-`raw.githubusercontent.com/KadenLiu168/follow-the-money/main/feeds/`, validates
-its complete ordered inventory, and retrieves exactly those artifacts from the
-same canonical raw root. It makes zero GitHub REST API requests.
-The consumer uses temporary storage and emits the existing logical Feed; it
-does not require a token or Provider credential and does not mutate `feeds/` or
-`.feed-state/`.
+`feed-manifest.json` is the only entry point. It contains the logical Feed
+envelope without `items`, plus exactly one generation-qualified artifact entry
+for each domain. Each artifact contains only its schema version, bundle
+`run_id`, domain discriminator, and evidence items. Empty artifacts are still
+required. Artifact paths, byte sizes, hashes, item counts, and inventory order
+are validated before any artifact is consumed.
 
-Healthy and valid degraded bundles are consumable with their warnings and
-Provider availability metadata unchanged. A remote failure or invalid bundle
-is terminal: there is no Provider collection, partial evidence, stale local
-substitution, or local fallback. The local producer remains available only for
-hosted Actions, development, tests, Provider diagnostics, and explicit
-operator execution.
+The logical Feed retains:
 
-The manifest contains the logical Feed metadata, producer/configuration and
-Provider contract snapshots, Provider outcomes, pipeline result, logical
-`feed_schema` descriptor, physical `bundle_schemas` descriptors, and the exact
-artifact inventory (`domain`, safe `path`, `item_count`, `size_bytes`, and
-`sha256`). New production uses logical/manifest major `3`; major `2` is
-read-only compatibility for the immediately preceding bundle, and major `1` is
-unsupported at these boundaries. Domain artifacts
-remain major `1`. It contains no evidence item or financial interpretation.
+- one fixed half-open window `[window.start, evidence_cutoff_at)`;
+- observed collection lifecycle timestamps;
+- exactly eight required Provider outcomes and contract snapshots;
+- source provenance, payload-specific source time, freshness, and availability;
+- required coverage and bounded blocked-Provider degradation;
+- canonical Feed configuration/schema descriptors;
+- semantic `content_digest` and cutoff-derived `run_id`;
+- evidence-only pipeline status and structured coverage gaps.
 
-The physical contracts are:
+Execution observations such as Provider `retrieved_at` and Feed `generated_at`
+are not source-semantic timestamps and do not refresh carried evidence.
 
-- `schemas/feed-manifest.schema.json`
-- `schemas/feed-artifact.schema.json`
-- `schemas/feed.schema.json` for the reconstructed logical identity and
-  manifest-absent legacy reads.
+## Validation and publication
 
-## Semantic identity
+Provider manifests are verified, HTTPS-only, credential-free, and closed over
+the five payload types. Normalization validates source URLs before items enter
+the Feed. Items are deduplicated and serialized in the deterministic
+`(source.knowledge_available_at, id)` order. Intelligence fields and unsupported
+payloads fail closed.
 
-`content_digest` remains the SHA-256 of the canonical serialization of the
-explicit logical projection. Provider freshness, availability, bounded reason,
-upstream status, affected coverage groups, origin contract hash, and
-carry-forward run ID are semantic fields in that projection:
+Publication writes immutable generation-qualified artifacts, validates the
+installed candidate, and atomically activates the manifest. Existing equal
+bundles are idempotent; an older active bundle is retained. Invalid or partial
+bundles are never consumed.
 
-- `schema_version`, `window`, and `evidence_cutoff_at`;
-- semantic Provider outcomes, ordered by `provider_id`, without
-  execution-audit `retrieved_at`;
-- `producer`, `feed_config`, `feed_schema`, and `provider_contracts`;
-- globally ordered normalized items, including source lineage; and
-- pipeline `status` and structured `coverage_gap`.
+## Skill consumption
 
-Lifecycle timestamps, Provider `retrieved_at`, Git metadata, physical schema
-descriptors, artifact paths/sizes/checksums, `content_digest`, and `run_id` are
-outside the projection. `run_id` remains
-`{evidence_cutoff_at}::{content_digest[:32]}`. Splitting and reconstructing
-unchanged logical evidence therefore preserves identity.
-
-## Provider freshness and snapshot retention
-
-Each resolved Provider manifest owns one closed cadence contract:
-`weekly`, `scheduled`, `event_driven`, or `market_session`, with one reference
-selector (`data_as_of`, `source_updated_at`, or `checked_at`). Bounded cadences
-also declare a positive `valid_for_seconds`; `event_driven` uses `checked_at`
-and has no age window. The resolved contract and embedded Provider snapshot are
-the same authority; Feed code supplies no defaults or lookup table.
-
-Every v2 or v3 Provider outcome carries exactly one freshness result: `fresh`,
-`valid_unchanged`, `stale`, `no_snapshot`, or `not_evaluated`. Major 3 outcomes
-also carry `availability` (`success`, `blocked`, `failed`, or `disabled` in
-planning), a bounded reason, upstream HTTP status, and ordered affected
-coverage groups. Only concrete HTTP 401/403 responses are `blocked`; timeouts,
-parser errors, and other failures remain `failed`. Payload
-observation/effective time and source publication/update time are distinct from
-the current Provider response `retrieved_at` and the bundle `generated_at`.
-A complete successful no-observation check may carry an unchanged slice only
-from the fully validated active manifest-led bundle. Blocked or otherwise
-incomplete acquisition never carries a prior slice; a wholly blocked planned
-Provider may reduce affected mandatory coverage and produce a publishable
-`degraded` Feed, while partial data and unconfirmed failures remain
-non-publishable. Carried items retain their IDs, source times, provenance,
-lineage, and origin contract hash. Failed, partial, skipped, missing,
-ambiguous, duplicate, identity-mismatched, or non-permitted-empty acquisition
-is `not_evaluated` and remains a pipeline failure; a stale slice remains
-explicit.
-
-## Validation and consumption
-
-Bundle validation is fail-closed. It requires canonical UTF-8 JSON, supported
-logical/manifest majors (`2` for read compatibility and `3` for production),
-the unchanged domain-artifact major, the exact eight-domain inventory in fixed order, safe
-repository-relative generation paths, matching bytes/size/SHA-256, shared
-`run_id`, matching domain/type, deterministic item order, unchanged
-provenance, and a reconstructed Feed whose digest and `run_id` recompute
-exactly. Missing, extra, duplicate, reordered, corrupt, mixed-generation,
-traversal, or identity-invalid state is not consumable.
-
-The complete local bundle loader first checks `feed-manifest.json`. If it exists,
-any manifest or artifact error is terminal and `latest.json` is never used as
-fallback. Only when the manifest is absent may a supported, fully validated
-legacy `latest.json` be read. The normal canonical-main raw consumer always retrieves a manifest and
-therefore has no local fallback. Healthy bundles are
-accepted; degraded bundles are accepted with warnings; `pipeline.status:
-failure` is rejected. Freshness and calendar-horizon checks remain the existing
-engine boundary checks.
-
-## Cutoff, ordering, and health
-
-The evidence window is `[window.start, evidence_cutoff_at)` and must advance
-strictly. `window.start` and `evidence_cutoff_at` govern acquisition eligibility.
-Payload fields retain observation/effective/reference time; `source.published_at`
-and `source.updated_at` retain source publication/update facts;
-`source.knowledge_available_at` governs event-like cutoff eligibility;
-Provider `retrieved_at` records the current response/check; and `generated_at`
-records bundle finalization. Retrieval and generation never refresh source or
-data-as-of time. Persisted timestamps are RFC 3339 UTC. Items use the stable
-`(source.knowledge_available_at, id)` order, and the calendar snapshot covers
-the configured horizon. A planned Provider is complete only when healthy or
-contract-permitted empty. A wholly blocked Provider reduces each affected
-mandatory group's effective minimum by one; all other incomplete work remains
-failure. Provenance, numeric bounds, and the evidence-only boundary are
-unchanged.
-
-## Publication and continuity
-
-Publication writes immutable `feed-<domain>-<sha256(run_id)[:32]>.json`
-candidates first, using create-only same-parent staging, file and directory
-`fsync`, then stages and atomically replaces `feed-manifest.json` as the sole
-activation point. Monotonic ownership is the maximum
-`(evidence_cutoff_at, content_digest)` tuple. Equal semantic identity with
-identical inventory integrity is idempotent; stale, conflicting, unsafe, or
-invalid candidates fail closed. A post-rename directory-`fsync` failure is
-durability uncertainty: no rollback is claimed and the checkpoint does not
-advance. Orphan and superseded files are cleanup state, never query history.
-
-A successful status names `manifest_relative_path: "feed-manifest.json"` and
-its `run_id`/cutoff; when publication removed a superseded generation, it also
-carries those deleted relative artifact paths for exact Git staging. The
-unchanged versioned checkpoint advances only after
-accepted durable manifest ownership, and deployment validates it against that
-manifest. Dry-run builds and validates the same in-memory v3 bundle without
-writing Feed products or advancing the checkpoint.
-
-## Current-state migration
-
-Deployment can split a valid current legacy `latest.json` into the equivalent
-bundle without Provider requests. It activates the manifest, keeps
-`latest.json` unchanged until the same generated-state commit stages its
-deletion, and leaves the legacy product intact when validation or publication
-fails. If a valid manifest already exists, migration treats it as the sole
-authority and does not reinterpret `latest.json`.
-
-## Minimal internal Feed entry
-
-Normal Skill consumption uses `scripts/skill/prepare-feed` and emits canonical
-logical Feed JSON on stdout; its canonical raw source and `main` branch are
-closed, and it accepts no producer or configuration options. The local producer
-`python -m follow_the_money.feed.cli` (also
-`scripts/feed/follow-the-money-feed`) accepts explicit config/product/runtime
-roots, dry-run, and fixture clocks/windows. Exit codes remain:
-
-- `0` — healthy/degraded success;
-- `1` — generation, publication, schema, integrity, deadline, or runtime
-  failure;
-- `2` — usage, configuration, or startup-capability error.
-
-The Feed is deterministic, credential-free, and evidence-only. It does not
-contain an LLM/model path or Host Agent orchestration.
+`scripts/skill/prepare-feed` retrieves the canonical manifest first and then its
+five declared artifacts. It uses temporary storage, makes no Provider request,
+and has no local or stale fallback. Healthy and accepted degraded bundles are
+returned with their provenance, warnings, freshness, coverage, and source
+availability limits intact.

@@ -11,7 +11,6 @@ Design section 10:
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -89,17 +88,3 @@ def build_fingerprint_to_dict(build: BuildFingerprint) -> dict[str, Any]:
         "files": list(build.files),
         "git": build.git,
     }
-
-
-def recompute_build_fingerprint(build: Mapping[str, Any], root: Path) -> str:
-    """Recompute the fingerprint from a stored manifest (for replay checks)."""
-    files = tuple(
-        {"path": f["path"], "size": f["size"], "sha256": f["sha256"]}
-        for f in build.get("files", [])
-    )
-    payload = {
-        "package_version": build.get("package_version"),
-        "files": files,
-        "git": build.get("git"),
-    }
-    return canonical_digest(payload)

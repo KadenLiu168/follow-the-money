@@ -36,6 +36,9 @@ def _rules() -> list[SourceLinkRule]:
             host="publisher.example.net",
             allow_subdomains=False,
             allowed_ports=(443,),
+            allowed_query_params=(),
+            query_value_grammar="plain",
+            drop_query_params=(),
         ),
     ]
 
@@ -124,8 +127,11 @@ def test_query_value_grammar_is_enforced():
     numeric = [
         SourceLinkRule(
             host="numbers.example.com",
+            allow_subdomains=False,
+            allowed_ports=(443,),
             allowed_query_params=("value",),
             query_value_grammar="numeric",
+            drop_query_params=(),
         )
     ]
     assert canonicalize_url("https://numbers.example.com/x?value=-12.5", rules=numeric).endswith(
@@ -170,6 +176,8 @@ def test_secret_leakage_rejected():
             allow_subdomains=True,
             allowed_ports=(443,),
             allowed_query_params=("q",),
+            query_value_grammar="plain",
+            drop_query_params=(),
         )
     ]
     with pytest.raises(UrlValidationError, match="secret"):

@@ -9,11 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from follow_the_money.boundary import (
-    application_build_fingerprint,
-    build_fingerprint_to_dict,
-    recompute_build_fingerprint,
-)
+from follow_the_money.boundary import application_build_fingerprint
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -42,21 +38,6 @@ def test_build_fingerprint_covers_uv_lock():
     assert "uv.lock" in paths
     assert "pyproject.toml" in paths
     assert not any("__pycache__" in path or path.endswith((".pyc", ".pyo")) for path in paths)
-
-
-def test_build_fingerprint_recompute_matches():
-    build = application_build_fingerprint(REPO_ROOT, "0.1.0")
-    payload = build_fingerprint_to_dict(build)
-    assert recompute_build_fingerprint(payload, REPO_ROOT) == payload["fingerprint"]
-
-
-def test_build_fingerprint_reject_mismatch():
-    build = application_build_fingerprint(REPO_ROOT, "0.1.0")
-    payload = build_fingerprint_to_dict(build)
-    payload["files"] = list(payload["files"]) + [
-        {"path": "injected.py", "size": 1, "sha256": "0" * 64}
-    ]
-    assert recompute_build_fingerprint(payload, REPO_ROOT) != payload["fingerprint"]
 
 
 def test_build_fingerprint_git_metadata_optional():

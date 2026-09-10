@@ -73,25 +73,18 @@ def _clock(value: datetime):
 
 
 def _healthy_feed() -> dict:
-    cutoff = "2026-08-30T00:20:00Z"
-    feed = {
-        "schema_version": 3,
-        "run_id": "",
-        "window": {"start": "2026-08-27T00:20:00Z", "end": cutoff},
-        "collection_started_at": "2026-08-30T00:19:00Z",
-        "evidence_cutoff_at": cutoff,
-        "collection_completed_at": "2026-08-30T00:21:00Z",
-        "generated_at": "2026-08-30T00:22:00Z",
-        "provider_outcomes": [],
-        "producer": {"package_version": "0.1.0", "files": [], "fingerprint": "a" * 64},
-        "feed_config": {"snapshot": {}, "hash": "b" * 64},
-        "feed_schema": {"path": "schemas/feed.schema.json", "sha256": "c" * 64},
-        "provider_contracts": [],
-        "git": None,
-        "content_digest": "",
-        "items": [],
-        "pipeline": {"status": "healthy", "warnings": []},
-    }
+    from tests.test_feed_bundle import _feed
+
+    def shift(value):
+        if isinstance(value, dict):
+            return {key: shift(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [shift(item) for item in value]
+        if isinstance(value, str):
+            return value.replace("2026-08-11", "2026-08-30")
+        return value
+
+    feed = shift(_feed())
     feed["content_digest"], feed["run_id"] = recompute_feed_identity(feed)
     return feed
 
@@ -348,7 +341,7 @@ def test_success_and_failure_finalization_keep_exact_paths(tmp_path: Path):
             {
                 "status": "healthy",
                 "run_id": run_id,
-                "evidence_cutoff_at": "2026-08-30T00:20:00Z",
+                "evidence_cutoff_at": feed["evidence_cutoff_at"],
                 "manifest_relative_path": "feed-manifest.json",
             }
         ),
@@ -358,7 +351,7 @@ def test_success_and_failure_finalization_keep_exact_paths(tmp_path: Path):
         tmp_path / "feed-checkpoint.json",
         FeedCheckpoint(
             previous_success=PreviousSuccess(
-                evidence_cutoff_at="2026-08-30T00:20:00Z",
+                evidence_cutoff_at=feed["evidence_cutoff_at"],
                 run_id=run_id,
             )
         ),

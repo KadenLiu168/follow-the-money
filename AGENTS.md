@@ -1,23 +1,16 @@
 # AGENTS.md
 
-本文件约束在 `follow-the-money` 仓库中执行开发、审查和 OpenSpec 迭代的 coding agent。
-
-这里的 **coding agent** 与产品中的 **Host Agent** 不同：
-
-* coding agent：修改和审查代码、测试、规格与文档。
-* Host Agent：消费本仓库能力，负责金融理解、推理和表达。
-
-本文件是开发协作约束，不是产品运行时 Agent contract。
+本文件约束在 `follow-the-money` 仓库中执行开发、审查和 OpenSpec 迭代的 coding
+agent。coding agent 负责代码、测试、规格和文档；Host Agent 只消费已发布 Feed 并
+负责 evidence-preserving 的信息摘要表达。
 
 ## 1. Architecture Boundary
 
-`follow-the-money` 是面向 Host Agent 的当前 evidence-based information digest
-Skill，核心是 credential-free deterministic evidence engine，不是通用金融研究助手。
-
-当前 Skill surface：
+本仓库只有一个能力：credential-free、deterministic、typed、evidence-only 的
+五域 Evidence Feed。当前边界为：
 
 ```text
-Published evidence Feed
+Published Feed
       ↓
 Feed validation
       ↓
@@ -26,240 +19,95 @@ Host Agent summarization/formatting
 Evidence-based information digest
 ```
 
-Skill 仅消费当前 published Feed，经过验证后直接生成 evidence-based information
-digest，不接收公司、资产、主题、时间范围或研究问题，也不读取历史 Feed 或 checkpoint。
-Host Agent 可以进行 evidence-preserving 的 grouping、heading、ordering、consolidation
-与 compression，但不得把这些 presentation choice 变成重要性、因果、market impact、
-prediction、投资或交易判断。
+Feed 只发布 `news`、`macro_release`、`policy`、`positioning` 和 `filing`。生产计划
+只包含 Federal Reserve、BLS、PBOC、NBS、SSE、SZSE、SEC EDGAR 和 CFTC 八个必需的
+verified、credential-free Provider。CFTC 是 minimum-one 的必需 weekly positioning
+coverage。
 
-Host Agent 仍可通过仓库的 private one-shot boundary 显式、独立地按需调用
-Deterministic Audit 或 Event Structuring；这些是独立 repository capabilities，
-不是 Skill 行为，也不是 normal information-digest behavior，不组成 mandatory sequence，
-也不通过 Feed 自动串联。
+Skill 只消费当前 validated published Feed，不接收公司、资产、主题、时间范围或
+研究问题，也不读取历史 Feed 或 checkpoint。Host Agent 可以进行 grouping、heading、
+ordering、consolidation 和 compression，但不得把 presentation choice 变成重要性、
+因果、market impact、prediction、投资或交易判断。
 
-仓库负责事实、provenance、确定性规则、计算与验证；normal digest path 中 Host Agent
-负责 evidence-preserving summarization/formatting，其他分析和叙事仍属于 Host Agent。
-
-除非当前已批准的 OpenSpec Change 明确要求，不得引入：
-
-* embedded LLM runtime / model SDK / LLM request path
-* API key / model configuration
-* application-runtime prompt pipeline
-* Resolver / Analyst / Editor / Brief 固定流水线
-* standalone public CLI product
-* 自动交易或投资执行能力
-* 为补全 pipeline 而 fake-wire retained deterministic libraries
-
+不得引入 model/LLM runtime、credential/API-key request path、prompt pipeline、
+Agent orchestration、standalone public CLI、自动交易或投资执行能力。运行时不得
+恢复已移除的 evidence domain 或分析能力。
 
 ## 2. Sources of Truth
 
-不同信息源承担不同职责，不设置简单的全局优先级。
+不同信息源承担不同职责：
 
-### Linear
+* `openspec/specs/` 是当前 accepted contract；
+* `openspec/changes/` 是当前未归档 contract delta；
+* `openspec/changes/archive/` 只保存历史记录，不是当前 requirement；
+* `src/`、`tests/`、`config/`、`providers/`、`schemas/`、`scripts/` 描述实际实现；
+* README、`SKILL.md`、`docs/` 和 `references/` 只能描述真实的当前能力。
 
-定义当前 iteration 的：
-
-* Goal / In Scope / Out of Scope
-* milestone
-* status
-* `blockedBy` / `blocks`
-
-### OpenSpec
-
-* `openspec/specs/`：当前 accepted contract
-* `openspec/changes/`：当前未归档 contract delta
-* `openspec/changes/archive/`：历史记录，不是当前 requirement
-
-### Code and Tests
-
-描述当前实际实现。
-
-根据变更范围检查：
-
-```text
-src/follow_the_money/
-tests/
-config/
-providers/
-schemas/
-scripts/
-```
-
-### Docs and Skill
-
-`README*`、`SKILL.md`、`docs/` 必须只描述真实存在的当前能力。
-
-### Conflicts
-
-如果 Linear、OpenSpec、代码、测试或文档不一致：
-
-1. 明确指出冲突；
-2. 区分 current implementation、accepted contract、planned delta 和 future direction；
-3. 不得静默选择其中一方；
-4. 只有当前 issue scope 包含该问题时才修复；
-5. scope 外问题记录出来，不扩大当前 Change。
-
-不要把 `AGENTS.md` 扩展成 OpenSpec 的平行规格；具体 domain behavior 以 living specs 为准。
+发生 Linear、OpenSpec、代码、测试或文档冲突时，明确区分 current implementation、
+accepted contract、planned delta 和 future direction；不得静默选择，也不得在 scope
+外扩大 Change。不要把 `AGENTS.md` 变成 domain spec 的第二真相源。
 
 ## 3. Iteration Rules
 
-本项目遵循：
+一个 Linear execution issue 对应一个 OpenSpec Change。实现前检查相关 issue（如可用）、
+Change proposal/spec/design/tasks、受影响代码、测试、配置和文档。依赖只依据显式
+`blockedBy`/`blocks` 或明确 architecture gate，不依据编号或 milestone 名称推断。
+不要提前实现后续需求。
+
+## 4. Implementation Invariants
+
+Deterministic core 必须保持 deterministic、reproducible、credential-free、typed、
+testable，并在 trust boundary fail-closed。不得弱化：
+
+* verified provenance、source time 与 freshness；
+* fixed cutoff/window、coverage、degradation 和完整 Provider outcomes；
+* deterministic ordering、Feed identity/digest 和 canonical bytes；
+* manifest-led atomic publication、checkpoint、lease、rate safety 和 typed exits；
+* evidence-only Feed 与 Host-Agent evidence-preserving digest boundary。
+
+Feed 不是 intelligence output，不得加入 analysis、ranking、regime、asset impact、
+recommendation 或 trading instruction。不得把 unknown/unverified 数据伪装成 verified，
+不得添加 hidden fallback 或 duplicated runtime authority。
+
+## 5. Configuration and Providers
+
+配置和 Provider manifest 是 trust boundary。保持 credential-free default operation、
+closed contract、verified provenance 和运行时与 authoritative manifest/config 一致。
+配置必须显式解析所有 surviving normative fields；unknown、removed、unsupported、
+missing、unverified 或 over-declared 内容必须在 Provider work 和持久化 mutation 前
+失败。
+
+Provider manifests 是 Provider identity/version、verification、HTTPS URL policy、
+source-link policy、charset/content limits、rate policy、pagination、empty semantics、
+implemented payload types、cadence 和 fixture provenance 的 authority。`config/config.yaml`
+负责应用/Feed字段，`config/providers.yaml` 负责 activation/coverage；不得创建第二个
+独立 authority。
+
+## 6. Scope and Contract Alignment
+
+只修改当前 issue 必需的 implementation、对应 tests、必要 contract/config/schema/docs，
+以及 proposal 明确要求的重构。不要顺手重构无关代码、升级无关依赖、添加 speculative
+adapter/framework，或修改 archived Change。Contract 变化应检查并同步：
 
 ```text
-1 Linear execution issue = 1 OpenSpec Change
+openspec/specs/  schemas/  tests/  docs/  references/  SKILL.md  README*.md
 ```
 
-Before implementation, inspect the relevant:
+## 7. Verification
 
-* Linear issue；
-* OpenSpec contract；
-* affected implementation；
-* related tests / config / docs。
-
-Inspection depth should match the change scope. 明确当前能力、当前 Gap、本 issue
-要解决的 Gap，以及 explicit non-goals / future work。
-
-### Dependency
-
-不得根据 ECO 编号或 milestone 名称自行推断严格串行顺序。
-
-执行顺序以：
-
-1. Linear 显式 `blockedBy` / `blocks`
-2. 项目明确 architecture gate
-
-为准。
-
-没有依赖冲突、修改边界独立的工作可以并行。
-
-不得因为后续需求已经可预见而提前实现。
-
-## 4. Architecture Gates
-
-在 Pre-Agent Baseline Acceptance 明确通过前，不得定义或实现：
-
-```text
-ResearchContext
-AgentAnalysis
-BriefContext
-Agent runtime orchestration
-fixed Agent delivery pipeline
-replacement LLM pipeline
-```
-
-Future architecture 可以作为方向存在，但不是 current contract。
-
-Skill–Agent Contract 被正式接受前，也不得自行设计 Phase 5 runtime architecture。
-
-不要为未来 contract 提前增加 schema、adapter、placeholder 或 speculative abstraction。
-
-## 5. Implementation Invariants
-
-Deterministic core 必须保持：
-
-* deterministic
-* reproducible
-* credential-free
-* typed
-* testable
-* fail-closed at trust boundaries
-
-不得弱化 living specs 已定义的：
-
-* provenance
-* verification
-* evidence-only boundary
-* identity / digest
-* deterministic ordering
-* coverage / degradation semantics
-* typed failure handling
-
-Feed 是 evidence contract，不是 intelligence output。
-
-不要在 Feed 中加入金融分析、ranking、market regime、asset impact 或投资判断。
-
-Market Analytics and State、Confidence and Watchlist、Scoring and Ranking
-保持 retained 状态，当前没有 production orchestration caller。
-
-“没有 caller”本身不能作为删除或接线理由。
-
-内部 Python structure 也不应仅为了形式完整而增加 external JSON Schema；只有明确建立 serialized boundary 的 Change 才设计对应 contract。
-
-## 6. Configuration, Providers and Safety
-
-配置与 provider 属于 trust boundary。
-
-相关修改必须保持：
-
-* credential-free default operation
-* closed and explicit contracts
-* verified provenance
-* fail-closed validation
-* runtime behavior 与 authoritative contract 一致
-
-不得增加 hidden fallback、duplicated truth source，或把 unknown / unverified 内容伪装成 verified。
-
-仓库提供证据与 information-digest 能力，不提供确定性交易指令。
-
-`ClaimAuditor` 应保持 deterministic safety capability，不得演变成 LLM policy layer 或自动文本重写系统。
-
-## 7. Scope and Contract Alignment
-
-遵守最小必要变更原则。
-
-可以修改：
-
-* 当前 issue 必需的 implementation
-* 对应 tests
-* 必需的 config / provider / schema / contract
-* 为保持事实一致必须同步的 docs / SKILL
-* proposal 明确要求的重构
-
-不要：
-
-* 顺手重构无关模块
-* 提前实现后续 ECO
-* 添加 speculative framework
-* 因无 caller 删除 retained capability
-* 为测试方便弱化 production invariant
-* 做无关 dependency upgrade
-* 修改 archived Change 来改写历史
-
-Contract-changing modification 应检查是否需要同步：
-
-```text
-openspec/specs/
-openspec/changes/
-schemas/
-tests/
-docs/
-SKILL.md
-README.md
-README.zh-CN.md
-```
-
-不要只修改 implementation 而留下 stale contract 或 capability claim。
-
-## 8. Verification
-
-开发期间运行与当前修改直接相关的 focused tests。
-
-需要准备完整环境时：
+开发期间先运行与修改直接相关的 focused tests。需要完整环境时运行：
 
 ```bash
 uv sync --frozen --all-groups
 ```
 
-在 iteration 完成前需要 repository-level validation 时，运行 canonical
-quality gate：
+iteration 完成前运行 canonical quality gate：
 
 ```bash
 .venv/bin/python scripts/quality_gate.py
 ```
 
-不要用较弱的自定义检查集合替代所需的 canonical quality gate。
-
-OpenSpec Change 完成前检查：
+OpenSpec Change 完成前运行：
 
 ```bash
 openspec doctor
@@ -267,58 +115,29 @@ openspec validate <change-name> --strict
 openspec validate --all --strict
 ```
 
-### Feed Dry Run
+`--dry-run` 仍可能访问真实 Provider 并修改 rate state；只有在 output root 明确安全
+且确需验证真实 execution boundary 时运行。普通测试使用 deterministic fixtures，不
+依赖网络。不得声称未实际执行的检查已经通过。
 
-`--dry-run` 不是完全无副作用的测试。
+## 8. Final Review and Completion Report
 
-它可能访问真实 provider，并持久修改 rate state。
+完成前确认：scope 和 blocker 满足；Feed 仍为五域、八 Provider、evidence-only；没有
+model/credential/orchestration runtime；deterministic、provenance、freshness、coverage、
+publication、identity 和 fail-closed guarantees 未削弱；tests、specs、implementation
+和 docs 一致；未解决风险已说明。
 
-仅在确实需要验证真实 Feed execution boundary，且运行环境与 output root 明确安全时执行：
-
-```bash
-uv run python -m follow_the_money.feed.cli --dry-run
-```
-
-普通测试优先使用 deterministic fixtures，不依赖真实网络。
-
-不得声称未实际执行的检查已经通过。
-
-## 9. Final Review
-
-完成前确认：
-
-* Linear blocker 已满足；
-* 没有超出当前 issue scope；
-* 没有引入 LLM / model / credential runtime；
-* 没有把 future Agent Contract 当成 current contract；
-* Feed 仍保持 evidence-only；
-* deterministic / fail-closed invariants 未被削弱；
-* provenance / verification claim 真实；
-* retained libraries 未被误删或 fake-wire；
-* tests 覆盖当前 contract delta；
-* specs、implementation、tests 和 docs 一致；
-* 未解决冲突和风险已明确说明。
-
-## 10. Completion Report
-
-完成工作后简洁说明：
+完成报告简洁说明：
 
 1. 实现了什么；
-2. 修改了哪些 contract / architecture boundaries；
-3. 实际执行了哪些验证及结果；
-4. 是否存在 unresolved conflict / risk；
-5. 是否发现应由后续 Linear issue 处理的问题。
-
-不要把“代码可以运行”等同于 iteration 完成。
+2. 修改了哪些 contract/architecture boundary；
+3. 实际执行的验证及结果；
+4. unresolved conflict/risk；
+5. 是否发现应由后续 issue 处理的问题。
 
 完成标准是：
 
 ```text
-Linear scope
-+ accepted OpenSpec delta
-+ implementation
-+ tests
-+ truthful documentation
+Linear scope + accepted OpenSpec delta + implementation + tests + truthful documentation
 ```
 
 彼此一致。

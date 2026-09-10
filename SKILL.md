@@ -7,7 +7,8 @@ disable-model-invocation: true
 # Follow the Money
 
 Generate the current evidence-based information digest from the validated
-published Feed.
+published five-domain Evidence Feed (`news`, `macro_release`, `policy`,
+`positioning`, and `filing`).
 
 ## Execution
 
@@ -57,8 +58,7 @@ impact, prediction, investment judgment, investment recommendation, or trading
 instruction. The digest preserves evidence and its limits; it does not add
 financial analysis or trading direction.
 
-GitHub Actions owns Provider collection and deterministic Feed production. The
-Skill owns validated Feed consumption, while the Host Agent owns digest
-summarization and formatting. The Feed remains evidence-only. Audit, Event
-Structuring, and retained deterministic capabilities remain independent
-private or retained capabilities and are not invoked by this digest path.
+GitHub Actions owns collection and deterministic Feed production. The Skill
+owns validated Feed consumption, while the Host Agent owns evidence-preserving
+digest summarization and formatting. The Feed remains evidence-only; this path
+does not invoke a private analysis, audit, event, ranking, or trading runtime.

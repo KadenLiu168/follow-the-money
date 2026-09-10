@@ -1,28 +1,36 @@
-# Configuration authority
+# Configuration
 
-The Feed resolves checked-in configuration before creating runtime state.
+Configuration is closed and credential-free. `config/config.yaml` owns Feed
+runtime limits and roots. `config/providers.yaml` owns activation and coverage.
+Provider-specific facts remain in `providers/<provider>/manifest.yaml`.
 
-| Source | Authority |
-| --- | --- |
-| `config/config.yaml` | application identity and paths, time/freshness policy, Feed limits and global ceilings, scoring, Market State, calendar, safety lexicon, rate-registry contract, sessions, source families, entities, watched companies, and the canonical role registry |
-| `providers/<provider_id>/manifest.yaml` | Provider identity and contract version, verification evidence, authentication/protocol, hosts and source-link rules, charset/content type, request/response limits, rate, timing/units/freshness, pagination, empty-window semantics, existing mapping declarations, and fixture provenance |
-| `config/providers.yaml` | versioned Provider enablement policy and the complete multi-row coverage matrix |
+## Surviving configuration
 
-`ProviderEntry` is the single resolved contract consumed by adapters, rate and
-host planning, coverage assessment, and the redacted `provider_contracts`
-snapshot. Each Provider manifest also owns exactly one closed freshness
-contract (`weekly`, `scheduled`, `event_driven`, or `market_session`) with its
-permitted reference selector and, for bounded cadences, a positive
-`valid_for_seconds`; resolution supplies no inferred freshness defaults. A retained registry field is a validation-only compatibility mirror;
-it cannot control runtime behavior. Coverage membership comes only from matrix
-rows, so a Provider may belong to multiple groups.
+- Feed window, deadline, concurrency, response, item, serialization, and lock
+  limits;
+- output, runtime-state, and run roots;
+- rate-registry persistence contract;
+- source-family provenance;
+- SEC watched-company CIK filters;
+- exactly eight required Provider activation entries;
+- exactly five required coverage groups.
 
-`output_root` and `runtime_state_root` are separate required application paths.
-The former is the consumer Feed product root (`feeds/`); the latter owns the
-collection lock, RateRegistry, deployment lease, and Feed continuity checkpoint
-(`.feed-state/`). Runtime layout is excluded from the Feed semantic
-configuration snapshot.
+The required Providers are Federal Reserve, BLS, PBOC, NBS, SSE, SZSE, SEC EDGAR,
+and CFTC. CFTC is enabled and required with minimum one in
+`cftc_positioning`.
 
-This remains an evidence-only, credential-free Provider → Feed → Host Agent
-boundary. It does not perform mapping research or introduce an Agent/LLM
-runtime.
+Each Provider manifest owns identity, verification evidence, authentication and
+protocol, fetch/redirect/source-link policy, charset/content type, limits, rate
+policy, pagination, empty-window semantics, implemented payload types, cadence,
+and fixture provenance. All shipped manifests are HTTPS and credential-free.
+
+Unknown keys, removed analytics/Agent fields, unsupported Provider IDs,
+missing required values, disabled required Providers, over-declared payloads,
+and invalid coverage fail closed before requests or normal rate-state mutation.
+The loader does not provide hidden defaults for surviving normative values.
+
+## Removed configuration
+
+There is no configuration for Agent invocation, Audit/Event processing,
+entities, market roles or sessions, Market State, watchlists, scoring/ranking,
+calendar horizons, flow, Yahoo, model credentials, or Brief-era runtime policy.

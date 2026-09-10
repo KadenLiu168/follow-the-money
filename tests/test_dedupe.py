@@ -6,7 +6,6 @@ from datetime import UTC, datetime, timedelta
 
 from follow_the_money.feed.dedupe import (
     deduplicate_items,
-    deduplicate_observations,
     deterministic_item_order,
     normalize_title,
     stable_item_id,
@@ -164,23 +163,3 @@ def test_deterministic_input_permutations():
     ordered = deterministic_item_order(items)
     assert [i["id"] for i in ordered] == ["iA", "iB"]
     assert [i["id"] for i in deterministic_item_order(list(reversed(items)))] == ["iA", "iB"]
-
-
-# ---------------------------------------------------------------------------
-# Observation ordering / conflicts
-# ---------------------------------------------------------------------------
-
-
-def test_observation_chronological_and_conflicts():
-    obs = [
-        {"as_of": _ts(T0 - timedelta(days=2)), "value": "100", "unit": "index"},
-        {"as_of": _ts(T0 - timedelta(days=1)), "value": "101", "unit": "index"},
-        {"as_of": _ts(T0 - timedelta(days=1)), "value": "102", "unit": "index"},  # conflict
-        {"as_of": _ts(T0 - timedelta(days=2)), "value": "100", "unit": "index"},  # exact dup
-    ]
-    cleaned, conflicts = deduplicate_observations(obs)
-    assert len(cleaned) == 2  # dedup exact, keep first of conflict
-    assert len(conflicts) == 1
-    assert conflicts[0]["as_of"] == _ts(T0 - timedelta(days=1))
-    # strictly chronological
-    assert cleaned[0]["as_of"] < cleaned[1]["as_of"]

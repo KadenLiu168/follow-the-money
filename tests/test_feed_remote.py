@@ -14,7 +14,6 @@ import pytest
 from follow_the_money.canonical import canonical_bytes, canonical_sha256
 from follow_the_money.feed.bundle import build_bundle
 from follow_the_money.feed.validate import recompute_feed_identity
-from tests.test_feed_boundary import _valid_v3_blocked_feed
 from tests.test_feed_bundle import _feed, _news
 
 REPOSITORY = "KadenLiu168/follow-the-money"
@@ -97,7 +96,7 @@ def test_consumer_retrieves_manifest_first_under_canonical_main_root():
     prefix = f"{remote.RAW_BASE_URL}/{REPOSITORY}/main/feeds/"
     assert feed == _feed([_news()])
     assert calls[0] == f"{prefix}feed-manifest.json"
-    assert len(calls) == 9
+    assert len(calls) == 6
     assert all(url.startswith(prefix) for url in calls)
     assert all("api.github.com" not in url for url in calls)
     assert [url.removeprefix(prefix) for url in calls] == [
@@ -210,7 +209,7 @@ def test_invalid_manifest_is_rejected_before_artifact_retrieval(failure_kind):
     bundle = build_bundle(_feed())
     manifest = json.loads(bundle.manifest_bytes)
     if failure_kind == "unsupported":
-        manifest["schema_version"] = 4
+        manifest["schema_version"] = 3
     elif failure_kind == "missing":
         manifest["artifacts"].pop()
     elif failure_kind == "duplicate":
@@ -248,7 +247,26 @@ def test_http_manifest_failure_is_typed_and_does_not_read_local_feed():
 
 def test_degraded_bundle_preserves_warnings_and_provider_availability_without_recheck():
     remote = _remote_module()
-    feed = _valid_v3_blocked_feed()
+    feed = _feed()
+    cftc = next(
+        outcome for outcome in feed["provider_outcomes"] if outcome["provider_id"] == "cftc"
+    )
+    cftc.update(
+        state="failed",
+        succeeded=False,
+        failed=True,
+        accepted=0,
+        availability="blocked",
+        availability_reason="HTTP 403",
+        upstream_http_status=403,
+        freshness={
+            "cadence": "weekly",
+            "status": "not_evaluated",
+            "origin_contract_hash": None,
+            "carried_forward_from_run_id": None,
+        },
+    )
+    feed["pipeline"] = {"status": "degraded", "warnings": ["blocked Provider cftc"]}
     feed["content_digest"], feed["run_id"] = recompute_feed_identity(feed)
     bundle = build_bundle(feed)
     calls: list[str] = []
@@ -258,7 +276,7 @@ def test_degraded_bundle_preserves_warnings_and_provider_availability_without_re
 
     assert consumed["pipeline"] == feed["pipeline"]
     assert consumed["provider_outcomes"] == feed["provider_outcomes"]
-    assert len(calls) == 9
+    assert len(calls) == 6
 
 
 @pytest.mark.parametrize(
@@ -293,7 +311,7 @@ def test_unusable_remote_bundle_exposes_no_logical_feed(failure_kind):
         overrides[target_path] = bytes([original[0] ^ 1]) + original[1:]
     elif failure_kind == "schema":
         artifact = json.loads(original)
-        artifact["schema_version"] = 2
+        artifact["schema_version"] = 1
         overrides[target_path] = canonical_bytes(artifact)
         target["size_bytes"] = len(overrides[target_path])
         target["sha256"] = canonical_sha256(overrides[target_path])
@@ -333,7 +351,7 @@ def test_identity_valid_failure_bundle_is_not_consumable():
         ),
     ):
         remote.consume_published_feed(client=client)
-    assert len(calls) == 9
+    assert len(calls) == 6
 
 
 @pytest.mark.parametrize("status", [429, 500])

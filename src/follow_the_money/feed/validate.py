@@ -3,7 +3,7 @@
 JSON Schema enforces shape; this module enforces the cross-field semantics
 from design sections 1/4:
 
-- Supported logical schema majors (v2 read compatibility and v3 production).
+- Supported logical schema majors (v3 read compatibility and v4 production).
 - Strictly advancing half-open window ``window.start < evidence_cutoff_at``.
 - Wall-clock order ``collection_started_at <= evidence_cutoff_at <=
   non-null request/retrieved_at <= collection_completed_at <= generated_at``;
@@ -14,9 +14,9 @@ from design sections 1/4:
 - Canonical digest/run-ID recomputation from an explicit allowlisted
   semantic projection (``content_digest``/``run_id`` are derived, never
   hashed); ``run_id`` derives from the fixed cutoff plus the digest.
-- Legacy read compatibility: an already-published schema-v2 artifact remains
-  consumable under its original freshness contract; producers write the v3
-  availability-capable form.
+- Legacy read compatibility: an already-published schema-v3 Feed remains
+  available only to the bounded migration path; producers write the v4
+  availability-capable five-domain form.
 - Raw numeric tokens bounded to 64 bytes / 24 significant digits / exponent
   in [-12, 12]; canonical persisted values are plain decimals with no
   exponent, no negative zero, at most 64 bytes/24 digits, magnitude <= 1e18.
@@ -33,14 +33,27 @@ from datetime import datetime
 from typing import Any
 
 from ..canonical import canonical_digest
-from ..config.model import FreshnessContract
+from ..config.model import REQUIRED_COVERAGE_GROUPS, FreshnessContract
 from ..schema import SchemaError, validate_against
 from .freshness import FreshnessError, evaluate_freshness
 
 FEED_SCHEMA = "feed.schema.json"
-SUPPORTED_FEED_MAJOR = 3
-SUPPORTED_FEED_MAJORS = (2, 3)
-PREVIOUS_FEED_MAJOR = 2
+SUPPORTED_FEED_MAJOR = 4
+SUPPORTED_FEED_MAJORS = (3, 4)
+PREVIOUS_FEED_MAJOR = 3
+REQUIRED_PROVIDER_IDS = frozenset(
+    {
+        "federal_reserve",
+        "bls",
+        "pboc",
+        "nbs",
+        "sse",
+        "szse",
+        "sec_edgar",
+        "cftc",
+    }
+)
+SUPPORTED_PAYLOAD_TYPES = frozenset({"news", "macro_release", "policy", "positioning", "filing"})
 
 #: Top-level semantic projection members. Execution-audit metadata
 #: (``collection_started_at``, ``collection_completed_at``, ``generated_at``,
@@ -131,16 +144,23 @@ def validate_canonical_numeric(value: str, *, where: str) -> None:
         raise SchemaError(f"{where}: magnitude exceeds 10^18: {value!r}")
 
 
-def validate_feed(feed: Mapping[str, Any]) -> None:
-    """Full semantic validation of a decoded Feed object."""
+def validate_feed(feed: Mapping[str, Any], *, allow_previous: bool = False) -> None:
+    """Full semantic validation of the current Feed object.
+
+    The previous major is accepted only by explicit bounded migration callers.
+    """
     validate_against(FEED_SCHEMA, feed)
 
-    if feed.get("schema_version") not in SUPPORTED_FEED_MAJORS:
-        raise SchemaError(f"unsupported Feed schema_version {feed.get('schema_version')!r}")
-    if feed.get("schema_version") in {PREVIOUS_FEED_MAJOR, SUPPORTED_FEED_MAJOR}:
-        if feed.get("schema_version") == SUPPORTED_FEED_MAJOR:
-            _validate_availability_outcomes(feed)
-        _validate_freshness_outcomes(feed)
+    schema_version = feed.get("schema_version")
+    if schema_version not in SUPPORTED_FEED_MAJORS:
+        raise SchemaError(f"unsupported Feed schema_version {schema_version!r}")
+    if schema_version == PREVIOUS_FEED_MAJOR and not allow_previous:
+        raise SchemaError("previous Feed schema requires bounded migration")
+    if schema_version in {PREVIOUS_FEED_MAJOR, SUPPORTED_FEED_MAJOR}:
+        _validate_availability_outcomes(feed)
+    if schema_version == SUPPORTED_FEED_MAJOR:
+        _validate_five_domain_surface(feed)
+    _validate_freshness_outcomes(feed)
 
     window = feed["window"]
     start = _parse_ts(window["start"], "window.start")
@@ -187,7 +207,7 @@ def validate_feed(feed: Mapping[str, Any]) -> None:
         previous_item_key = item_key
 
     # Numeric guards across all payloads.
-    _validate_numerics(feed.get("items", []))
+    _validate_numerics(feed.get("items", []), legacy=schema_version == PREVIOUS_FEED_MAJOR)
 
     # No intelligence fields inside items.
     for item in feed.get("items", []):
@@ -196,8 +216,111 @@ def validate_feed(feed: Mapping[str, Any]) -> None:
             if key in payload:
                 raise SchemaError(f"intelligence field {key!r} rejected in Feed item")
 
-    # Calendar horizon covers [cutoff, cutoff + 26h] when present.
-    _validate_calendar_horizon(feed)
+    # The v3 migration input may carry legacy calendar metadata; v4 cannot.
+    if schema_version == PREVIOUS_FEED_MAJOR:
+        _validate_calendar_horizon(feed)
+
+
+def _validate_five_domain_surface(feed: Mapping[str, Any]) -> None:
+    """Enforce the closed v4 Provider and payload surface."""
+    if "calendar_horizon_end" in feed:
+        raise SchemaError("v4 Feed must not contain calendar_horizon_end")
+
+    raw_contracts = feed.get("provider_contracts")
+    raw_outcomes = feed.get("provider_outcomes")
+    if not isinstance(raw_contracts, list) or not isinstance(raw_outcomes, list):
+        raise SchemaError("v4 Feed Provider contracts and outcomes must be lists")
+    contracts: list[Any] = raw_contracts
+    outcomes: list[Any] = raw_outcomes
+    contract_ids = {entry.get("provider_id") for entry in contracts if isinstance(entry, Mapping)}
+    outcome_ids = {
+        outcome.get("provider_id") for outcome in outcomes if isinstance(outcome, Mapping)
+    }
+    if contract_ids != REQUIRED_PROVIDER_IDS or outcome_ids != REQUIRED_PROVIDER_IDS:
+        raise SchemaError("v4 Feed must contain exactly the eight required Providers")
+
+    payload_types_by_provider: dict[str, set[str]] = {}
+    for index, entry in enumerate(contracts):
+        snapshot = entry.get("snapshot") if isinstance(entry, Mapping) else None
+        provider_id = entry.get("provider_id") if isinstance(entry, Mapping) else None
+        if not isinstance(provider_id, str) or not isinstance(snapshot, Mapping):
+            raise SchemaError(f"provider_contracts[{index}] is invalid")
+        payload_types = snapshot.get("payload_types")
+        if (
+            not isinstance(payload_types, list)
+            or not payload_types
+            or any(payload not in SUPPORTED_PAYLOAD_TYPES for payload in payload_types)
+        ):
+            raise SchemaError(f"provider_contracts[{index}] declares a removed payload domain")
+        removed_contract_fields = {
+            "calendar_capability",
+            "calendar_horizon_end",
+            "calendar_horizon_hours",
+            "flow",
+            "market_data",
+            "market_lookback_hours",
+            "market_roles",
+            "role_mappings",
+            "adjustment_policy",
+            "max_observations",
+            "availability_lag_seconds",
+            "yahoo_market",
+        }
+        if removed_contract_fields.intersection(snapshot):
+            raise SchemaError(
+                f"provider_contracts[{index}] contains removed market/calendar contract fields"
+            )
+        if provider_id in payload_types_by_provider:
+            raise SchemaError("v4 Provider contracts contain duplicate provider IDs")
+        payload_types_by_provider[provider_id] = set(payload_types)
+
+    feed_config = feed.get("feed_config")
+    snapshot = feed_config.get("snapshot") if isinstance(feed_config, Mapping) else None
+    if not isinstance(snapshot, Mapping):
+        raise SchemaError("v4 Feed configuration snapshot is invalid")
+    coverage = snapshot.get("coverage")
+    if not isinstance(coverage, list):
+        raise SchemaError("v4 Feed configuration must contain a coverage snapshot")
+    groups = {row.get("group") for row in coverage if isinstance(row, Mapping)}
+    if groups != REQUIRED_COVERAGE_GROUPS:
+        raise SchemaError("v4 Feed coverage must contain exactly the five required groups")
+    removed_config_fields = {
+        "calendar",
+        "calendar_horizon_end",
+        "calendar_horizon_hours",
+        "flow",
+        "market_data",
+        "market_lookback_hours",
+        "market_roles",
+        "role_mappings",
+        "sessions",
+        "yahoo_market",
+    }
+    if removed_config_fields.intersection(snapshot):
+        raise SchemaError("v4 Feed configuration contains removed fields")
+    feed_limits = snapshot.get("feed")
+    if isinstance(feed_limits, Mapping) and removed_config_fields.intersection(feed_limits):
+        raise SchemaError("v4 Feed configuration contains removed fields")
+    for index, row in enumerate(coverage):
+        if not isinstance(row, Mapping):
+            raise SchemaError(f"feed_config.snapshot.coverage[{index}] is invalid")
+        values = (row.get("group"), row.get("capability"))
+        if any(
+            isinstance(value, str)
+            and any(term in value.lower() for term in ("calendar", "flow", "market", "yahoo"))
+            for value in values
+        ):
+            raise SchemaError("v4 Feed coverage contains a removed claim")
+
+    for index, item in enumerate(feed.get("items", [])):
+        payload = item.get("payload") if isinstance(item, Mapping) else None
+        provider_id = item.get("provider_id") if isinstance(item, Mapping) else None
+        if not isinstance(payload, Mapping) or payload.get("type") not in SUPPORTED_PAYLOAD_TYPES:
+            raise SchemaError(f"items[{index}] uses a removed Feed payload domain")
+        if not isinstance(provider_id, str):
+            raise SchemaError(f"items[{index}].provider_id is invalid")
+        if payload.get("type") not in payload_types_by_provider.get(provider_id, set()):
+            raise SchemaError(f"items[{index}] is outside its Provider payload contract")
 
 
 def _is_blocked_exempt(outcome: Mapping[str, Any]) -> bool:
@@ -363,7 +486,8 @@ def _validate_availability_outcomes(feed: Mapping[str, Any]) -> None:
 
 
 def _validate_freshness_outcomes(feed: Mapping[str, Any]) -> None:
-    """Validate the closed v2/v3 freshness result and its nullability rules."""
+    """Validate the closed v3/v4 freshness result and its nullability rules."""
+    legacy = feed.get("schema_version") == PREVIOUS_FEED_MAJOR
     contracts: dict[str, Mapping[str, Any]] = {}
     resolved_contracts: dict[str, FreshnessContract] = {}
     previous_contract_id: str | None = None
@@ -389,12 +513,10 @@ def _validate_freshness_outcomes(feed: Mapping[str, Any]) -> None:
         contract_cadence = contract_freshness.get("cadence")
         contract_reference = contract_freshness.get("reference_time")
         valid_for = contract_freshness.get("valid_for_seconds")
-        if not isinstance(contract_cadence, str) or contract_cadence not in {
-            "weekly",
-            "scheduled",
-            "event_driven",
-            "market_session",
-        }:
+        allowed_cadences = {"weekly", "scheduled", "event_driven"}
+        if legacy:
+            allowed_cadences.add("market_session")
+        if not isinstance(contract_cadence, str) or contract_cadence not in allowed_cadences:
             raise SchemaError("embedded Provider freshness cadence is invalid")
         if not isinstance(contract_reference, str) or contract_reference not in {
             "data_as_of",
@@ -416,8 +538,6 @@ def _validate_freshness_outcomes(feed: Mapping[str, Any]) -> None:
                 raise SchemaError("embedded Provider bounded contract is not closed")
             if contract_reference == "checked_at":
                 raise SchemaError("embedded bounded contract cannot use checked_at")
-            if contract_cadence == "market_session" and contract_reference != "data_as_of":
-                raise SchemaError("embedded market_session contract must use data_as_of")
             if isinstance(valid_for, bool) or not isinstance(valid_for, int) or valid_for <= 0:
                 raise SchemaError("embedded bounded contract needs a positive validity window")
         contracts[provider_id] = entry
@@ -440,7 +560,10 @@ def _validate_freshness_outcomes(feed: Mapping[str, Any]) -> None:
         status = freshness.get("status")
         origin = freshness.get("origin_contract_hash")
         carried = freshness.get("carried_forward_from_run_id")
-        if cadence not in {"weekly", "scheduled", "event_driven", "market_session"}:
+        allowed_cadences = {"weekly", "scheduled", "event_driven"}
+        if legacy:
+            allowed_cadences.add("market_session")
+        if cadence not in allowed_cadences:
             raise SchemaError(f"provider_outcomes[{index}].freshness.cadence is invalid")
         if status not in {"fresh", "valid_unchanged", "stale", "no_snapshot", "not_evaluated"}:
             raise SchemaError(f"provider_outcomes[{index}].freshness.status is invalid")
@@ -512,6 +635,7 @@ def _validate_freshness_outcomes(feed: Mapping[str, Any]) -> None:
                     feed["evidence_cutoff_at"],
                     carried_forward=carried is not None,
                     checked_at=outcome.get("retrieved_at"),
+                    legacy=legacy,
                 )
             except FreshnessError as exc:
                 raise SchemaError(f"invalid Provider freshness authority: {exc}") from exc
@@ -527,20 +651,24 @@ def _validate_freshness_outcomes(feed: Mapping[str, Any]) -> None:
         raise SchemaError("Provider contracts do not exactly match Provider outcomes")
 
 
-def _validate_numerics(items: list[Any]) -> None:
+def _validate_numerics(items: list[Any], *, legacy: bool = False) -> None:
+    keys = ["actual", "consensus", "previous", "position"]
+    if legacy:
+        keys.append("net_flow")
     for idx, item in enumerate(items):
         payload = item.get("payload", {})
         where = f"items[{idx}].payload"
-        for key in ("actual", "consensus", "previous", "net_flow", "position"):
+        for key in keys:
             value = payload.get(key)
             if isinstance(value, dict) and value.get("value") is not None:
                 validate_canonical_numeric(str(value["value"]), where=f"{where}.{key}.value")
-        for obs in payload.get("observations", []):
-            validate_canonical_numeric(str(obs["value"]), where=f"{where}.observations[].value")
-            if obs.get("volume") is not None:
-                validate_canonical_numeric(
-                    str(obs["volume"]), where=f"{where}.observations[].volume"
-                )
+        if legacy:
+            for obs in payload.get("observations", []):
+                validate_canonical_numeric(str(obs["value"]), where=f"{where}.observations[].value")
+                if obs.get("volume") is not None:
+                    validate_canonical_numeric(
+                        str(obs["volume"]), where=f"{where}.observations[].volume"
+                    )
 
 
 def _validate_calendar_horizon(feed: Mapping[str, Any]) -> None:

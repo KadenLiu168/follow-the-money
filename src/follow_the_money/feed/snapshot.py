@@ -11,7 +11,7 @@ from typing import Any
 
 from ..canonical import canonical_bytes, canonical_digest
 from ..config.model import FreshnessContract
-from .bundle import MANIFEST_FILENAME, BundleError, validate_bundle
+from .bundle import MANIFEST_FILENAME, PREVIOUS_BUNDLE_MAJOR, BundleError, validate_bundle
 from .dedupe import item_total_order_key
 from .freshness import FreshnessError, evaluate_freshness
 from .plan import ProviderOutcome
@@ -245,7 +245,8 @@ def select_provider_slices(
         if prior:
             origin_hash = (
                 prior_origins.get(provider_id)
-                if active_feed is not None and active_feed.get("schema_version") == 2
+                if active_feed is not None
+                and active_feed.get("schema_version") == PREVIOUS_BUNDLE_MAJOR
                 else _contract_hash(prior_contracts.get(provider_id))
             )
             if prior_run_id is None or origin_hash is None:

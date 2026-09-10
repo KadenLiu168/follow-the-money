@@ -5,88 +5,215 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version", "run_id", "window", "collection_started_at",
-    "evidence_cutoff_at", "collection_completed_at", "generated_at",
-    "provider_outcomes", "producer", "feed_config", "feed_schema",
-    "provider_contracts", "content_digest", "pipeline", "bundle_schemas", "artifacts"
+    "schema_version",
+    "run_id",
+    "window",
+    "collection_started_at",
+    "evidence_cutoff_at",
+    "collection_completed_at",
+    "generated_at",
+    "provider_outcomes",
+    "producer",
+    "feed_config",
+    "feed_schema",
+    "provider_contracts",
+    "content_digest",
+    "pipeline",
+    "bundle_schemas",
+    "artifacts"
   ],
   "properties": {
     "schema_version": {
-      "description": "Manifest major; v2 is read-compatible and v3 is Provider-availability-capable production.",
-      "enum": [2, 3]
+      "description": "Manifest major; v3 is the previous eight-domain contract and v4 is the five-domain production contract.",
+      "enum": [
+        3,
+        4
+      ]
     },
     "run_id": {
-      "type": "string", "minLength": 1, "maxLength": 128
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
     },
-    "window": { "$ref": "#/$defs/window" },
-    "collection_started_at": { "type": "string", "format": "date-time" },
-    "evidence_cutoff_at": { "type": "string", "format": "date-time" },
-    "collection_completed_at": { "type": "string", "format": "date-time" },
-    "generated_at": { "type": "string", "format": "date-time" },
+    "window": {
+      "$ref": "#/$defs/window"
+    },
+    "collection_started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "evidence_cutoff_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "collection_completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
     "provider_outcomes": {
       "type": "array",
-      "items": { "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/provider_outcome" }
+      "items": {
+        "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/provider_outcome"
+      }
     },
-    "producer": { "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/application_build" },
-    "feed_config": { "$ref": "#/$defs/feed_config" },
-    "feed_schema": { "$ref": "#/$defs/schema_descriptor" },
+    "producer": {
+      "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/application_build"
+    },
+    "feed_config": {
+      "$ref": "#/$defs/feed_config"
+    },
+    "feed_schema": {
+      "$ref": "#/$defs/schema_descriptor"
+    },
     "provider_contracts": {
       "type": "array",
-      "items": { "$ref": "#/$defs/provider_contract" }
+      "items": {
+        "$ref": "#/$defs/provider_contract"
+      }
     },
     "git": {
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
-      "required": ["sha", "dirty"],
-      "properties": { "sha": { "type": "string" }, "dirty": { "type": "boolean" } }
+      "required": [
+        "sha",
+        "dirty"
+      ],
+      "properties": {
+        "sha": {
+          "type": "string"
+        },
+        "dirty": {
+          "type": "boolean"
+        }
+      }
     },
-    "content_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "calendar_horizon_end": { "type": ["string", "null"], "format": "date-time" },
-    "pipeline": { "$ref": "#/$defs/pipeline" },
+    "content_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "calendar_horizon_end": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "pipeline": {
+      "$ref": "#/$defs/pipeline"
+    },
     "bundle_schemas": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["manifest", "artifact"],
+      "required": [
+        "manifest",
+        "artifact"
+      ],
       "properties": {
-        "manifest": { "$ref": "#/$defs/schema_descriptor" },
-        "artifact": { "$ref": "#/$defs/schema_descriptor" }
+        "manifest": {
+          "$ref": "#/$defs/schema_descriptor"
+        },
+        "artifact": {
+          "$ref": "#/$defs/schema_descriptor"
+        }
       }
     },
     "artifacts": {
       "type": "array",
-      "minItems": 8,
-      "maxItems": 8,
-      "items": { "$ref": "#/$defs/artifact_inventory" }
+      "items": {
+        "$ref": "#/$defs/artifact_inventory"
+      }
     }
   },
   "allOf": [
     {
-      "if": { "properties": { "schema_version": { "const": 3 } } },
+      "if": {
+        "properties": {
+          "schema_version": {
+            "const": 4
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "calendar_horizon_end"
+          ]
+        },
+        "properties": {
+          "provider_outcomes": {
+            "items": {
+              "required": [
+                "freshness",
+                "availability",
+                "availability_reason",
+                "upstream_http_status",
+                "affected_coverage_groups"
+              ]
+            }
+          },
+          "artifacts": {
+            "minItems": 5,
+            "maxItems": 5,
+            "items": {
+              "properties": {
+                "domain": {
+                  "enum": [
+                    "news",
+                    "macro_release",
+                    "policy",
+                    "positioning",
+                    "filing"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "schema_version": {
+            "const": 3
+          }
+        }
+      },
       "then": {
         "properties": {
           "provider_outcomes": {
             "items": {
               "required": [
-                "freshness", "availability", "availability_reason",
-                "upstream_http_status", "affected_coverage_groups"
+                "freshness",
+                "availability",
+                "availability_reason",
+                "upstream_http_status",
+                "affected_coverage_groups"
               ]
             }
-          }
-        }
-      },
-      "else": {
-        "if": { "properties": { "schema_version": { "const": 2 } } },
-        "then": {
-          "properties": {
-            "provider_outcomes": {
-              "items": {
-                "required": ["freshness"],
-                "not": {
-                  "anyOf": [
-                    { "required": ["availability"] },
-                    { "required": ["availability_reason"] },
-                    { "required": ["upstream_http_status"] },
-                    { "required": ["affected_coverage_groups"] }
+          },
+          "artifacts": {
+            "minItems": 8,
+            "maxItems": 8,
+            "items": {
+              "properties": {
+                "domain": {
+                  "enum": [
+                    "news",
+                    "macro_release",
+                    "policy",
+                    "market_data",
+                    "flow",
+                    "positioning",
+                    "filing",
+                    "calendar"
                   ]
                 }
               }
@@ -98,48 +225,162 @@
   ],
   "$defs": {
     "window": {
-      "type": "object", "additionalProperties": false, "required": ["start", "end"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ],
       "properties": {
-        "start": { "type": "string", "format": "date-time" },
-        "end": { "type": "string", "format": "date-time" }
+        "start": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "end": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "feed_config": {
-      "type": "object", "additionalProperties": false, "required": ["snapshot", "hash"],
-      "properties": { "snapshot": { "type": "object" }, "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "snapshot",
+        "hash"
+      ],
+      "properties": {
+        "snapshot": {
+          "type": "object"
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
     },
     "schema_descriptor": {
-      "type": "object", "additionalProperties": false, "required": ["path", "sha256"],
-      "properties": { "path": { "type": "string", "minLength": 1 }, "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
     },
     "provider_contract": {
-      "type": "object", "additionalProperties": false, "required": ["provider_id", "snapshot", "hash"],
-      "properties": { "provider_id": { "type": "string" }, "snapshot": { "type": "object" }, "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider_id",
+        "snapshot",
+        "hash"
+      ],
+      "properties": {
+        "provider_id": {
+          "type": "string"
+        },
+        "snapshot": {
+          "type": "object"
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
     },
     "pipeline": {
-      "type": "object", "additionalProperties": false, "required": ["status", "warnings"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "warnings"
+      ],
       "properties": {
-        "status": { "enum": ["healthy", "degraded", "failure"] },
-        "warnings": { "type": "array", "items": { "type": "string" } },
+        "status": {
+          "enum": [
+            "healthy",
+            "degraded",
+            "failure"
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "coverage_gap": {
-          "type": ["object", "null"], "additionalProperties": false,
-          "required": ["uncovered_start", "uncovered_end"],
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "uncovered_start",
+            "uncovered_end"
+          ],
           "properties": {
-            "uncovered_start": { "type": "string", "format": "date-time" },
-            "uncovered_end": { "type": "string", "format": "date-time" }
+            "uncovered_start": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "uncovered_end": {
+              "type": "string",
+              "format": "date-time"
+            }
           }
         }
       }
     },
     "artifact_inventory": {
-      "type": "object", "additionalProperties": false,
-      "required": ["domain", "path", "item_count", "size_bytes", "sha256"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "domain",
+        "path",
+        "item_count",
+        "size_bytes",
+        "sha256"
+      ],
       "properties": {
-        "domain": { "enum": ["news", "macro_release", "policy", "market_data", "flow", "positioning", "filing", "calendar"] },
-        "path": { "type": "string", "minLength": 1 },
-        "item_count": { "type": "integer", "minimum": 0 },
-        "size_bytes": { "type": "integer", "minimum": 0 },
-        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        "domain": {
+          "enum": [
+            "news",
+            "macro_release",
+            "policy",
+            "market_data",
+            "flow",
+            "positioning",
+            "filing",
+            "calendar"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "item_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
       }
     }
   }

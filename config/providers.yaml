@@ -1,25 +1,21 @@
-# Provider activation policy and the complete v1 coverage matrix.
-#
-# Provider-specific facts are authoritative in providers/<id>/manifest.yaml.
-# This registry owns only shipped enablement and coverage membership.
+# Provider activation and Feed coverage. Provider contract facts live in
+# providers/<id>/manifest.yaml; every shipped Provider is required.
 
 schema_version: 1
 
 providers:
   - { id: federal_reserve, enabled: true }
   - { id: bls, enabled: true }
-  - { id: sec_edgar, enabled: true }
-  - { id: cftc, enabled: true, optional: true }
   - { id: pboc, enabled: true }
   - { id: nbs, enabled: true }
   - { id: sse, enabled: true }
   - { id: szse, enabled: true }
-  - { id: yahoo_market, enabled: true }
+  - { id: sec_edgar, enabled: true }
+  - { id: cftc, enabled: true }
 
 coverage:
-  - { group: us_official_macro_policy, members: [federal_reserve, bls], minimum: 2, capability: release_and_calendar, optional: false }
+  - { group: us_official_macro_policy, members: [federal_reserve, bls], minimum: 2, capability: policy_and_news, optional: false }
   - { group: us_company_filings, members: [sec_edgar], minimum: 1, capability: watched_company_filings, optional: false }
-  - { group: china_official_macro_policy, members: [pboc, nbs], minimum: 2, capability: official_evidence_and_calendar, optional: false }
-  - { group: china_exchange_evidence, members: [sse, szse], minimum: 2, capability: notice_and_market, optional: false }
-  - { group: verified_market_data, members: [yahoo_market], minimum: 1, capability: verified_market_data, optional: false }
-  - { group: future_calendar, members: [federal_reserve, bls, nbs], minimum: 3, capability: future_release_calendar, optional: false }
+  - { group: china_official_macro_policy, members: [pboc, nbs], minimum: 2, capability: policy_and_macro_release, optional: false }
+  - { group: china_exchange_evidence, members: [sse, szse], minimum: 2, capability: news, optional: false }
+  - { group: cftc_positioning, members: [cftc], minimum: 1, capability: positioning, optional: false }

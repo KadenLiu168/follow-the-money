@@ -28,11 +28,7 @@ from typing import Any
 from follow_the_money.canonical import canonical_digest
 from follow_the_money.feed.bundle import MANIFEST_FILENAME, artifact_relative_path, validate_bundle
 from follow_the_money.feed.cli import run_feed as _run_feed
-from follow_the_money.providers.adapters import (
-    CftcAdapter,
-    YahooMarketAdapter,
-    build_registry,
-)
+from follow_the_money.providers.adapters import CftcAdapter, build_registry
 from follow_the_money.providers.http import FetchError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -40,10 +36,9 @@ CFTC_FIXTURE = REPO_ROOT / "providers" / "cftc" / "fixtures" / "cot.json"
 
 # The CFTC fixture publishes 2026-08-07T19:30:00.000Z (report date plus the
 # documented Friday release boundary). The first cutoff keeps that report
-# inside the 72h bootstrap window while staying within one market-session day
-# of the Yahoo fixture's last observation; the second cutoff is a complete
-# next check that finds no new CFTC report while the prior weekly slice is
-# still inside its seven-day validity window.
+# inside the 72h bootstrap window; the second cutoff is a complete next check
+# that finds no new CFTC report while the prior weekly slice remains inside its
+# seven-day validity window.
 CUTOFF_1 = datetime(2026, 8, 10, 17, 0, 0, tzinfo=UTC)
 CUTOFF_2 = CUTOFF_1 + timedelta(hours=6)
 
@@ -102,7 +97,6 @@ FIXTURE_BY_PROVIDER = {
     "nbs": "providers/nbs/fixtures/releases.json",
     "sse": "providers/sse/fixtures/notices.json",
     "szse": "providers/szse/fixtures/notices.json",
-    "yahoo_market": "providers/yahoo_market/fixtures/chart.json",
 }
 
 
@@ -111,11 +105,7 @@ def _fixture_registry(error: Exception | None = None) -> dict[str, Any]:
     registry = build_registry()
     wrapped: dict[str, Any] = {}
     for pid in registry.ids():
-        inner = (
-            YahooMarketAdapter(instrument="^GSPC", role_id="sp500")
-            if pid == "yahoo_market"
-            else registry.get(pid)
-        )
+        inner = registry.get(pid)
 
         if pid == "cftc":
             wrapped[pid] = _CftcFixtureAdapter(inner, error=error)

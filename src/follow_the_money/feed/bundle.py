@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -16,17 +18,26 @@ DOMAINS = (
     "news",
     "macro_release",
     "policy",
+    "positioning",
+    "filing",
+)
+PREVIOUS_DOMAINS = (
+    "news",
+    "macro_release",
+    "policy",
     "market_data",
     "flow",
     "positioning",
     "filing",
     "calendar",
 )
-SUPPORTED_BUNDLE_MAJOR = 3
-SUPPORTED_BUNDLE_MAJORS = (2, 3)
-SUPPORTED_ARTIFACT_MAJOR = 1
+SUPPORTED_BUNDLE_MAJOR = 4
+SUPPORTED_BUNDLE_MAJORS = (4,)
+PREVIOUS_BUNDLE_MAJOR = 3
+MIGRATABLE_BUNDLE_MAJORS = (PREVIOUS_BUNDLE_MAJOR,)
+SUPPORTED_ARTIFACT_MAJOR = 2
+PREVIOUS_ARTIFACT_MAJOR = 1
 MANIFEST_FILENAME = "feed-manifest.json"
-LEGACY_FILENAME = "latest.json"
 ARTIFACT_SCHEMA_FILENAME = "feed-artifact.schema.json"
 MANIFEST_SCHEMA_FILENAME = "feed-manifest.schema.json"
 
@@ -65,6 +76,13 @@ def generation_key(run_id: str) -> str:
 
 def artifact_relative_path(domain: str, run_id: str) -> str:
     if domain not in DOMAINS:
+        raise BundleError(f"unsupported Feed domain: {domain!r}")
+    return f"feed-{domain}-{generation_key(run_id)}.json"
+
+
+def _artifact_relative_path_for_version(domain: str, run_id: str, version: int) -> str:
+    allowed = DOMAINS if version == SUPPORTED_BUNDLE_MAJOR else PREVIOUS_DOMAINS
+    if domain not in allowed:
         raise BundleError(f"unsupported Feed domain: {domain!r}")
     return f"feed-{domain}-{generation_key(run_id)}.json"
 
@@ -124,7 +142,7 @@ def split_feed(feed: dict[str, Any]) -> tuple[dict[str, Any], dict[str, dict[str
 def build_bundle(feed: dict[str, Any]) -> FeedBundle:
     """Build and canonically serialize a complete manifest-led candidate."""
     if feed.get("schema_version") != SUPPORTED_BUNDLE_MAJOR:
-        raise BundleError("new production Feed bundles must use schema version 3")
+        raise BundleError("new production Feed bundles must use schema version 4")
     _unused, artifacts = split_feed(feed)
     artifact_bytes = {domain: canonical_bytes(artifact) for domain, artifact in artifacts.items()}
     inventory = [
@@ -192,13 +210,24 @@ def _safe_artifact_path(root: Path, relative: object, expected: str) -> Path:
     return candidate
 
 
-def _validated_inventory_paths(manifest: dict[str, Any]) -> tuple[str, ...]:
+def _validated_inventory_paths(
+    manifest: dict[str, Any], *, allow_previous: bool = False
+) -> tuple[str, ...]:
+    version = manifest.get("schema_version")
+    if version == PREVIOUS_BUNDLE_MAJOR:
+        if not allow_previous:
+            raise BundleError("previous eight-domain Feed bundle requires bounded migration")
+        domains: tuple[str, ...] = PREVIOUS_DOMAINS
+    elif version == SUPPORTED_BUNDLE_MAJOR:
+        domains = DOMAINS
+    else:
+        raise BundleError("unsupported Feed manifest schema version")
     inventory = manifest.get("artifacts")
-    if not isinstance(inventory, list) or len(inventory) != len(DOMAINS):
+    if not isinstance(inventory, list) or len(inventory) != len(domains):
         raise BundleError("Feed manifest inventory must contain the exact fixed domain order")
     if any(not isinstance(entry, dict) for entry in inventory):
         raise BundleError("Feed manifest artifact inventory entry is invalid")
-    if [entry.get("domain") for entry in inventory] != list(DOMAINS):
+    if [entry.get("domain") for entry in inventory] != list(domains):
         raise BundleError("Feed manifest inventory must contain the exact fixed domain order")
     paths: list[str] = []
     seen: set[str] = set()
@@ -207,15 +236,18 @@ def _validated_inventory_paths(manifest: dict[str, Any]) -> tuple[str, ...]:
         if domain in seen:
             raise BundleError(f"duplicate Feed artifact domain: {domain}")
         seen.add(domain)
-        expected = artifact_relative_path(domain, manifest["run_id"])
+        expected = _artifact_relative_path_for_version(domain, manifest["run_id"], int(version))
         paths.append(_validated_artifact_relative_path(entry["path"], expected))
-    if seen != set(DOMAINS):
+    if seen != set(domains):
         raise BundleError("Feed manifest inventory is incomplete")
     return tuple(paths)
 
 
 def validate_manifest_and_inventory(
-    manifest_bytes: bytes, *, manifest: dict[str, Any] | None = None
+    manifest_bytes: bytes,
+    *,
+    manifest: dict[str, Any] | None = None,
+    allow_previous: bool = False,
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
     """Validate manifest bytes before any manifest-declared artifact is opened."""
     decoded = _canonical_object(manifest_bytes, where="Feed manifest")
@@ -226,11 +258,13 @@ def validate_manifest_and_inventory(
         validate_against(MANIFEST_SCHEMA_FILENAME, manifest)
     except SchemaError as exc:
         raise BundleError(str(exc)) from exc
-    if manifest.get("schema_version") not in SUPPORTED_BUNDLE_MAJORS:
+    if manifest.get("schema_version") not in (*SUPPORTED_BUNDLE_MAJORS, *MIGRATABLE_BUNDLE_MAJORS):
         raise BundleError("unsupported Feed manifest schema version")
+    if manifest.get("schema_version") == PREVIOUS_BUNDLE_MAJOR and not allow_previous:
+        raise BundleError("previous eight-domain Feed bundle requires bounded migration")
     if manifest["window"]["end"] != manifest["evidence_cutoff_at"]:
         raise BundleError("manifest window.end must equal evidence_cutoff_at")
-    return manifest, _validated_inventory_paths(manifest)
+    return manifest, _validated_inventory_paths(manifest, allow_previous=allow_previous)
 
 
 def _validate_inventory(
@@ -239,7 +273,9 @@ def _validate_inventory(
     result: list[tuple[str, Path, dict[str, Any]]] = []
     for entry, relative in zip(manifest["artifacts"], paths, strict=True):
         domain = entry["domain"]
-        expected = artifact_relative_path(domain, manifest["run_id"])
+        expected = _artifact_relative_path_for_version(
+            domain, manifest["run_id"], int(manifest["schema_version"])
+        )
         path = _safe_artifact_path(root, relative, expected)
         result.append((domain, path, entry))
     return result
@@ -250,6 +286,7 @@ def validate_bundle(
     *,
     manifest: dict[str, Any] | None = None,
     manifest_bytes: bytes | None = None,
+    allow_previous: bool = False,
 ) -> dict[str, Any]:
     """Validate a complete bundle and return its reconstructed logical Feed."""
     root = Path(product_root)
@@ -259,7 +296,9 @@ def validate_bundle(
             manifest_bytes = path.read_bytes()
         except OSError as exc:
             raise BundleError(f"cannot read Feed manifest: {path}") from exc
-    manifest, paths = validate_manifest_and_inventory(manifest_bytes, manifest=manifest)
+    manifest, paths = validate_manifest_and_inventory(
+        manifest_bytes, manifest=manifest, allow_previous=allow_previous
+    )
     entries = _validate_inventory(manifest, root, paths)
     all_items: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
@@ -277,8 +316,13 @@ def validate_bundle(
             validate_against(ARTIFACT_SCHEMA_FILENAME, artifact)
         except SchemaError as exc:
             raise BundleError(str(exc)) from exc
+        expected_artifact_major = (
+            PREVIOUS_ARTIFACT_MAJOR
+            if manifest["schema_version"] == PREVIOUS_BUNDLE_MAJOR
+            else SUPPORTED_ARTIFACT_MAJOR
+        )
         if (
-            artifact.get("schema_version") != SUPPORTED_ARTIFACT_MAJOR
+            artifact.get("schema_version") != expected_artifact_major
             or artifact.get("run_id") != manifest["run_id"]
             or artifact.get("domain") != domain
         ):
@@ -298,7 +342,7 @@ def validate_bundle(
     all_items = sorted(all_items, key=item_total_order_key)
     feed = reconstruct_feed(manifest, all_items)
     try:
-        validate_feed(feed)
+        validate_feed(feed, allow_previous=allow_previous)
         assert_feed_identity(feed)
     except (SchemaError, TypeError, ValueError) as exc:
         raise BundleError(f"reconstructed Feed is invalid: {exc}") from exc
@@ -306,19 +350,12 @@ def validate_bundle(
 
 
 def load_feed(product_root: Path, *, domain: str | None = None) -> dict[str, Any]:
-    """Load manifest-first, with legacy fallback only when no manifest exists."""
+    """Load the manifest-led current five-domain Feed."""
     root = Path(product_root)
     manifest_path = root / MANIFEST_FILENAME
-    if manifest_path.exists():
-        feed = validate_bundle(root)
-    else:
-        legacy_path = root / LEGACY_FILENAME
-        try:
-            feed = _canonical_object(legacy_path.read_bytes(), where="legacy latest.json")
-            validate_feed(feed)
-            assert_feed_identity(feed)
-        except Exception as exc:
-            raise BundleError(f"invalid legacy Feed: {exc}") from exc
+    if not manifest_path.is_file():
+        raise BundleError("current Feed manifest is missing")
+    feed = validate_bundle(root)
     if feed.get("pipeline", {}).get("status") == "failure":
         raise BundleError("pipeline.status=failure: Feed is not consumable")
     if domain is not None:
@@ -329,9 +366,234 @@ def load_feed(product_root: Path, *, domain: str | None = None) -> dict[str, Any
     return feed
 
 
-# Compatibility spellings for callers that treat this as a parser operation.
+def migrate_feed(
+    feed: Mapping[str, Any],
+    *,
+    target_feed_config: Mapping[str, Any],
+    target_provider_contracts: Sequence[Mapping[str, Any]],
+    target_feed_schema: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Convert one fully validated v3 eight-domain Feed into a v4 candidate.
+
+    Migration is deliberately bounded: the caller supplies the current
+    Feed-owned configuration, Provider contracts, and schema descriptor. The
+    old candidate is validated before any projection, removed-domain items
+    and providers are discarded, and the new identity is recomputed by the
+    caller/build path rather than copied from the old generation.
+    """
+    if feed.get("schema_version") != PREVIOUS_BUNDLE_MAJOR:
+        raise BundleError("only the previous eight-domain Feed major is migratable")
+    try:
+        validate_feed(feed, allow_previous=True)
+        assert_feed_identity(feed)
+    except (SchemaError, TypeError, ValueError) as exc:
+        raise BundleError(f"previous Feed is invalid: {exc}") from exc
+
+    required_provider_ids = {
+        "federal_reserve",
+        "bls",
+        "pboc",
+        "nbs",
+        "sse",
+        "szse",
+        "sec_edgar",
+        "cftc",
+    }
+    contracts = [deepcopy(dict(entry)) for entry in target_provider_contracts]
+    provider_ids = [entry.get("provider_id") for entry in contracts]
+    if any(not isinstance(provider_id, str) for provider_id in provider_ids):
+        raise BundleError("target Provider contract identity is invalid")
+    typed_provider_ids = [
+        provider_id for provider_id in provider_ids if isinstance(provider_id, str)
+    ]
+    if typed_provider_ids != sorted(typed_provider_ids):
+        raise BundleError("target Provider contracts must be ordered by provider_id")
+    if set(typed_provider_ids) != required_provider_ids:
+        raise BundleError(
+            "target Provider contracts must contain exactly the eight required Providers"
+        )
+    for entry in contracts:
+        provider_id = entry.get("provider_id")
+        snapshot = entry.get("snapshot")
+        if not isinstance(provider_id, str) or not isinstance(snapshot, Mapping):
+            raise BundleError("target Provider contract is invalid")
+        if snapshot.get("provider_id") != provider_id:
+            raise BundleError("target Provider contract identity is invalid")
+        payload_types = snapshot.get("payload_types")
+        if (
+            not isinstance(payload_types, list)
+            or not payload_types
+            or any(payload not in DOMAINS for payload in payload_types)
+        ):
+            raise BundleError("target Provider contract payload types are invalid")
+        if entry.get("hash") != canonical_sha256(canonical_bytes(snapshot)):
+            raise BundleError("target Provider contract hash is invalid")
+
+    config = deepcopy(dict(target_feed_config))
+    snapshot = config.get("snapshot")
+    if not isinstance(snapshot, Mapping) or not isinstance(snapshot.get("coverage"), list):
+        raise BundleError("target Feed configuration must contain a coverage snapshot")
+    coverage_groups: dict[str, tuple[str, ...]] = {}
+    for row in snapshot["coverage"]:
+        if not isinstance(row, Mapping) or not isinstance(row.get("group"), str):
+            raise BundleError("target Feed coverage snapshot is invalid")
+        members = row.get("members")
+        if not isinstance(members, list) or any(not isinstance(member, str) for member in members):
+            raise BundleError("target Feed coverage members are invalid")
+        for provider_id in members:
+            coverage_groups.setdefault(provider_id, ())
+            coverage_groups[provider_id] = tuple(
+                sorted((*coverage_groups[provider_id], row["group"]))
+            )
+    if set(coverage_groups) != required_provider_ids:
+        raise BundleError("target Feed coverage must include exactly the eight required Providers")
+
+    target_hashes = {entry["provider_id"]: entry["hash"] for entry in contracts}
+    target_contracts = {entry["provider_id"]: entry["snapshot"] for entry in contracts}
+    retained_items: list[Mapping[str, Any]] = []
+    for raw_item in feed.get("items", []):
+        item = deepcopy(dict(raw_item))
+        payload = item.get("payload")
+        provider_id = item.get("provider_id")
+        if not isinstance(payload, Mapping) or payload.get("type") not in DOMAINS:
+            continue
+        if provider_id not in required_provider_ids:
+            raise BundleError("retained Feed evidence belongs to a removed Provider")
+        if payload.get("type") not in target_contracts[provider_id].get("payload_types", ()):
+            raise BundleError("retained Feed evidence is outside its target Provider contract")
+        lineage = item.get("source_lineage")
+        if isinstance(lineage, list):
+            item["source_lineage"] = [
+                record
+                for record in lineage
+                if isinstance(record, Mapping)
+                and record.get("provider_id") in required_provider_ids
+            ]
+            if not item["source_lineage"]:
+                item.pop("source_lineage", None)
+        retained_items.append(item)
+    retained_items = deterministic_item_order(retained_items)
+
+    old_outcomes = {
+        outcome.get("provider_id"): deepcopy(dict(outcome))
+        for outcome in feed.get("provider_outcomes", [])
+        if isinstance(outcome, Mapping)
+    }
+    old_provider_ids = set(old_outcomes)
+    if not required_provider_ids.issubset(old_provider_ids) or not old_provider_ids.issubset(
+        required_provider_ids | {"yahoo_market"}
+    ):
+        raise BundleError("previous Feed outcomes contain an unsupported Provider generation")
+    outcomes: list[dict[str, Any]] = []
+    complete_ids: set[str] = set()
+    blocked_ids: set[str] = set()
+    incomplete_ids: set[str] = set()
+    for provider_id in sorted(required_provider_ids):
+        outcome = old_outcomes[provider_id]
+        outcome["affected_coverage_groups"] = list(coverage_groups.get(provider_id, ()))
+        freshness = outcome.get("freshness")
+        if isinstance(freshness, Mapping):
+            freshness = dict(freshness)
+            if freshness.get("status") in {"fresh", "valid_unchanged", "stale"}:
+                freshness["origin_contract_hash"] = target_hashes[provider_id]
+            outcome["freshness"] = freshness
+        if (
+            outcome.get("availability") == "blocked"
+            and outcome.get("upstream_http_status") in {401, 403}
+            and outcome.get("state") == "failed"
+            and outcome.get("accepted") == 0
+            and outcome.get("rejected") == 0
+        ):
+            blocked_ids.add(provider_id)
+        elif outcome.get("state") == "healthy" or (
+            outcome.get("state") == "empty"
+            and target_contracts[provider_id].get("empty_valid_for_window") is True
+        ):
+            complete_ids.add(provider_id)
+        else:
+            incomplete_ids.add(provider_id)
+        outcomes.append(outcome)
+
+    coverage_rows = snapshot["coverage"]
+    deficient_groups: set[str] = set()
+    for row in coverage_rows:
+        if not isinstance(row, Mapping):
+            raise BundleError("target Feed coverage snapshot is invalid")
+        members = row.get("members")
+        minimum = row.get("minimum")
+        optional = row.get("optional")
+        if (
+            not isinstance(members, list)
+            or any(not isinstance(member, str) for member in members)
+            or isinstance(minimum, bool)
+            or not isinstance(minimum, int)
+            or not isinstance(optional, bool)
+        ):
+            raise BundleError("target Feed coverage snapshot is invalid")
+        effective_minimum = max(0, minimum - sum(member in blocked_ids for member in members))
+        complete_count = sum(member in complete_ids for member in members)
+        if not optional and complete_count < effective_minimum:
+            deficient_groups.add(str(row.get("group")))
+
+    migrated = deepcopy(dict(feed))
+    migrated["schema_version"] = SUPPORTED_BUNDLE_MAJOR
+    migrated["feed_config"] = config
+    migrated["feed_schema"] = deepcopy(
+        dict(target_feed_schema)
+        if target_feed_schema is not None
+        else _schema_descriptor("feed.schema.json")
+    )
+    migrated["provider_contracts"] = contracts
+    migrated["provider_outcomes"] = outcomes
+    migrated["items"] = retained_items
+    migrated.pop("calendar_horizon_end", None)
+    # Warnings are execution reporting, not evidence. Do not carry messages
+    # that describe discarded providers or domains into the new product.
+    migrated["pipeline"] = {
+        "status": (
+            "failure"
+            if incomplete_ids or deficient_groups
+            else "degraded"
+            if blocked_ids
+            else "healthy"
+        ),
+        "warnings": [],
+        "coverage_gap": feed["pipeline"].get("coverage_gap"),
+    }
+    migrated["content_digest"] = "0" * 64
+    migrated["run_id"] = ""
+    digest, run_id = recompute_feed_identity(migrated)
+    migrated["content_digest"] = digest
+    migrated["run_id"] = run_id
+    try:
+        validate_feed(migrated)
+        assert_feed_identity(migrated)
+    except (SchemaError, TypeError, ValueError) as exc:
+        raise BundleError(f"migrated five-domain Feed is invalid: {exc}") from exc
+    return migrated
+
+
+def migrate_previous_bundle(
+    product_root: Path,
+    *,
+    target_feed_config: Mapping[str, Any],
+    target_provider_contracts: Sequence[Mapping[str, Any]],
+    target_feed_schema: Mapping[str, Any] | None = None,
+) -> FeedBundle:
+    """Read one previous bundle and return a validated five-domain candidate."""
+    root = Path(product_root)
+    previous = validate_bundle(root, allow_previous=True)
+    migrated = migrate_feed(
+        previous,
+        target_feed_config=target_feed_config,
+        target_provider_contracts=target_provider_contracts,
+        target_feed_schema=target_feed_schema,
+    )
+    return build_bundle(migrated)
+
+
+# Compatibility spelling for callers that treat this as a parser operation.
 validate_feed_bundle = validate_bundle
-load_latest_or_bundle = load_feed
 
 
 def bundle_inventory(bundle: FeedBundle) -> tuple[Path, ...]:

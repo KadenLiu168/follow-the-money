@@ -12,9 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _run(label: str, command: list[str]) -> None:
     print(f"[{label}] {' '.join(command)}")
-    env = os.environ.copy()
-    env.setdefault("UV_CACHE_DIR", "/tmp/follow-the-money-uv-cache")
-    subprocess.run(command, cwd=ROOT, check=True, env=env)
+    subprocess.run(command, cwd=ROOT, check=True)
 
 
 def main() -> int:
