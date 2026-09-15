@@ -484,7 +484,13 @@ def run_feed(
         if (
             "sec_edgar" in complete_state_provider_ids
             and "sec_edgar" in outcomes
-            and outcomes["sec_edgar"].state == "healthy"
+            and (
+                outcomes["sec_edgar"].state == "healthy"
+                or (
+                    outcomes["sec_edgar"].state == "empty"
+                    and empty_validity.get("sec_edgar", False)
+                )
+            )
         ):
             expected_sec_ciks = {company.cik for company in cfg.watched_companies}
             sec_items = [item for item in items if item.get("provider_id") == "sec_edgar"]

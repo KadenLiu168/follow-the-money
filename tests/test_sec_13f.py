@@ -14,7 +14,7 @@ from follow_the_money.schema import SchemaError
 
 
 def submissions(rows):
-    fields = {
+    fields: dict[str, list[object | None]] = {
         key: []
         for key in (
             "form",
@@ -121,7 +121,112 @@ def test_selection_uses_acceptance_cutoff_exact_form_and_distinct_report_period(
     )
     current, previous = select_filings(raw, "2023-07-01T10:00:00Z")
     assert current.accession_number == "0000000001-23-000003"  # at cutoff is excluded
+    assert previous is not None
     assert previous.accession_number == "0000000001-23-000001"
+
+
+def test_selection_ignores_newer_amendment_after_exact_filing():
+    raw = submissions(
+        [
+            {
+                "form": "13F-HR",
+                "filingDate": "2023-01-03",
+                "reportDate": "2022-12-31",
+                "accessionNumber": "0000000001-23-000001",
+                "acceptanceDateTime": "2023-01-03T10:00:00Z",
+                "primaryDocument": "exact.txt",
+                "cik": "0000000001",
+            },
+            {
+                "form": "13F-HR/A",
+                "filingDate": "2023-01-04",
+                "reportDate": "2022-12-31",
+                "accessionNumber": "0000000001-23-000002",
+                "acceptanceDateTime": "2023-01-04T10:00:00Z",
+                "primaryDocument": "amendment.txt",
+                "cik": "0000000001",
+            },
+        ]
+    )
+
+    current, previous = select_filings(raw, "2023-02-01T00:00:00Z")
+
+    assert current.accession_number == "0000000001-23-000001"
+    assert current.form == "13F-HR"
+    assert previous is None
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [
+            {
+                "form": "13F-HR",
+                "filingDate": "2023-01-03",
+                "reportDate": "2022-12-31",
+                "accessionNumber": "0000000001-23-000001",
+                "acceptanceDateTime": "2023-01-03T10:00:00Z",
+                "primaryDocument": "exact.txt",
+                "cik": "0000000001",
+            },
+            {
+                "form": "13F-HR/A",
+                "filingDate": "2023-01-04",
+                "reportDate": "2022-12-31",
+                "accessionNumber": "0000000001-23-000002",
+                "acceptanceDateTime": "2023-01-04T10:00:00Z",
+                "primaryDocument": "amendment.txt",
+                "cik": "0000000001",
+            },
+        ],
+        [
+            {
+                "form": "13F-HR/A",
+                "filingDate": "2023-01-04",
+                "reportDate": "2022-12-31",
+                "accessionNumber": "0000000001-23-000002",
+                "acceptanceDateTime": "2023-01-04T10:00:00Z",
+                "primaryDocument": "amendment.txt",
+                "cik": "0000000001",
+            },
+            {
+                "form": "13F-HR",
+                "filingDate": "2023-01-03",
+                "reportDate": "2022-12-31",
+                "accessionNumber": "0000000001-23-000001",
+                "acceptanceDateTime": "2023-01-03T10:00:00Z",
+                "primaryDocument": "exact.txt",
+                "cik": "0000000001",
+            },
+        ],
+    ],
+)
+def test_selection_exact_candidate_is_stable_for_input_permutations(rows):
+    current, previous = select_filings(submissions(rows), "2023-02-01T00:00:00Z")
+
+    assert current.accession_number == "0000000001-23-000001"
+    assert current.form == "13F-HR"
+    assert previous is None
+
+
+def test_selection_amendment_only_fails_closed():
+    with pytest.raises(SchemaError, match="no eligible exact SEC 13F-HR"):
+        select_filings(
+            submissions(
+                [
+                    {
+                        "form": "13F-HR/A",
+                        "filingDate": "2023-01-04",
+                        "reportDate": "2022-12-31",
+                        "accessionNumber": "0000000001-23-000002",
+                        "acceptanceDateTime": "2023-01-04T10:00:00Z",
+                        "primaryDocument": "amendment.txt",
+                        "cik": "0000000001",
+                    }
+                ]
+            ),
+            "2023-02-01T00:00:00Z",
+        )
 
 
 def test_selection_can_have_no_previous_comparable_filing():

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from follow_the_money.canonical import canonical_bytes
 from follow_the_money.providers.cftc_cot import (
     compare_reports,
     normalize_report_rows,
@@ -128,6 +129,30 @@ def test_input_row_order_does_not_change_output():
         previous_date="2026-07-28",
     )
     assert first == second
+
+
+def test_150_market_complete_universe_is_order_independent():
+    current = [row("2026-08-04", f"{index:03d}", f"Market {index}") for index in range(150)]
+    previous = [row("2026-07-28", f"{index:03d}", f"Market {index}") for index in range(150)]
+
+    normalized = normalize_report_rows(current, "2026-08-04")
+    first = compare_reports(
+        current, previous, current_date="2026-08-04", previous_date="2026-07-28"
+    )
+    second = compare_reports(
+        list(reversed(current)),
+        list(reversed(previous)),
+        current_date="2026-08-04",
+        previous_date="2026-07-28",
+    )
+
+    expected_codes = {f"{index:03d}" for index in range(150)}
+    assert set(normalized) == expected_codes
+    assert len(first) == 150
+    assert {
+        item["payload"]["market_identity"]["cftc_contract_market_code"] for item in first
+    } == expected_codes
+    assert canonical_bytes(first) == canonical_bytes(second)
 
 
 def test_numeric_arithmetic_and_every_delta_are_typed_contracts():

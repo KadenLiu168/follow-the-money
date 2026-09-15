@@ -7,11 +7,14 @@ URL provider-bound validation, and empty-window behavior.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
+from follow_the_money.canonical import canonical_digest
 from follow_the_money.config.model import FetchRule
 from follow_the_money.providers.adapters import (
     BlsAdapter,
@@ -49,8 +52,6 @@ class FakeResponse:
         return self._headers
 
     def json(self):
-        import json
-
         return json.loads(self.body_bytes.decode("utf-8"))
 
 
@@ -580,3 +581,119 @@ def test_cftc_v2_rejects_pinned_page_with_wrong_report_date():
 
     with pytest.raises(FetchError, match="pinned query"):
         CftcAdapter().fetch(WINDOW, WrongPage())
+
+
+def _generated_cftc_rows(report_date: str, prefix: str) -> list[dict[str, str]]:
+    return [
+        {
+            "id": f"{prefix}-{index:03d}",
+            "report_date_as_yyyy_mm_dd": report_date,
+            "cftc_contract_market_code": f"{index:03d}",
+            "contract_market_name": f"Market {index:03d}",
+            "noncomm_positions_long_all": str(index + 10),
+            "noncomm_positions_short_all": str(index + 4),
+            "noncomm_positions_spread_all": str(index + 2),
+            "open_interest_all": str(index + 100),
+        }
+        for index in range(150)
+    ]
+
+
+class _GeneratedCftcPages:
+    def __init__(
+        self,
+        rows_by_date: dict[str, list[dict[str, str]]],
+        *,
+        reverse_fields: bool = False,
+        reverse_discovery: bool = False,
+        failure: tuple[str, int] | None = None,
+        mode: str | None = None,
+    ):
+        self.rows_by_date = rows_by_date
+        self.reverse_fields = reverse_fields
+        self.reverse_discovery = reverse_discovery
+        self.failure = failure
+        self.mode = mode
+        self.page_requests: list[tuple[str, int]] = []
+
+    def get(self, url: str, **_kwargs):
+        query = parse_qs(urlsplit(url).query)
+        if "$select" in query:
+            dates = list(self.rows_by_date)
+            if self.reverse_discovery:
+                dates.reverse()
+            body = [{"report_date_as_yyyy_mm_dd": date} for date in dates]
+            return FakeResponse(json.dumps(body).encode(), url=url)
+
+        report_date = query["$where"][0].split("'")[1]
+        offset = int(query["$offset"][0])
+        self.page_requests.append((report_date, offset))
+        if self.failure == (report_date, offset):
+            return FakeResponse(b"", status=500, url=url)
+
+        rows = self.rows_by_date[report_date][offset : offset + CftcAdapter.PAGE_SIZE]
+        if self.mode == "repeated" and offset == CftcAdapter.PAGE_SIZE:
+            rows = self.rows_by_date[report_date][: CftcAdapter.PAGE_SIZE]
+        elif self.mode == "swapped" and offset == CftcAdapter.PAGE_SIZE:
+            rows = self.rows_by_date[report_date][50:150]
+        if self.reverse_fields:
+            rows = [dict(reversed(tuple(row.items()))) for row in rows]
+        return FakeResponse(json.dumps(rows).encode(), url=url)
+
+
+def test_cftc_v2_retains_complete_current_and_previous_universes_across_pages():
+    rows_by_date = {
+        "2026-08-04": _generated_cftc_rows("2026-08-04", "current"),
+        "2026-07-28": _generated_cftc_rows("2026-07-28", "previous"),
+    }
+    expected_requests = [
+        ("2026-08-04", 0),
+        ("2026-08-04", 100),
+        ("2026-07-28", 0),
+        ("2026-07-28", 100),
+    ]
+
+    client = _GeneratedCftcPages(rows_by_date)
+    adapter = CftcAdapter()
+    raw = adapter.fetch(WINDOW, client)
+    items = adapter.normalize(raw, CFTC_WINDOW)
+
+    assert client.page_requests == expected_requests
+    assert len(raw["current_rows"]) == 150
+    assert len(raw["previous_rows"]) == 150
+    assert len(items) == 150
+    assert {item["payload"]["market_identity"]["cftc_contract_market_code"] for item in items} == {
+        f"{index:03d}" for index in range(150)
+    }
+
+    variant_client = _GeneratedCftcPages(rows_by_date, reverse_fields=True, reverse_discovery=True)
+    variant_items = adapter.normalize(adapter.fetch(WINDOW, variant_client), CFTC_WINDOW)
+    assert variant_client.page_requests == expected_requests
+    assert canonical_digest(items) == canonical_digest(variant_items)
+
+
+@pytest.mark.parametrize("mode", ["missing", "swapped", "repeated"])
+def test_cftc_v2_rejects_incomplete_or_invalid_continuation_page(mode, monkeypatch):
+    rows_by_date = {
+        "2026-08-04": _generated_cftc_rows("2026-08-04", "current"),
+        "2026-07-28": _generated_cftc_rows("2026-07-28", "previous"),
+    }
+    client = _GeneratedCftcPages(
+        rows_by_date,
+        failure=("2026-08-04", 100) if mode == "missing" else None,
+        mode=None if mode == "missing" else mode,
+    )
+    adapter = CftcAdapter()
+    normalize_calls = 0
+
+    def record_normalize(*_args, **_kwargs):
+        nonlocal normalize_calls
+        normalize_calls += 1
+        raise AssertionError("incomplete acquisition must not be normalized")
+
+    monkeypatch.setattr(adapter, "normalize", record_normalize)
+    with pytest.raises(FetchError):
+        adapter.fetch(WINDOW, client)
+
+    assert normalize_calls == 0
+    assert client.page_requests[:2] == [("2026-08-04", 0), ("2026-08-04", 100)]
