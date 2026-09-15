@@ -141,8 +141,9 @@ def normalize_report_rows(
             _field(
                 row,
                 # The official Socrata column is misspelled upstream; see
-                # source-verification.md. The corrected spelling is retained
-                # only as a bounded alias in case CFTC renames it.
+                # references/provider-source-verification.md. The corrected
+                # spelling is retained only as a bounded alias in case CFTC
+                # renames it.
                 "noncomm_postions_spread_all",
                 "noncomm_positions_spread_all",
                 "noncommercial_spreading",

@@ -16,8 +16,9 @@ from follow_the_money.providers.cftc_cot import (
 from follow_the_money.schema import SchemaError
 
 # Columns the Provider reads, as observed on the live Legacy Futures-Only
-# dataset (see source-verification.md). The spreading column is misspelled
-# upstream, so the checked-in fixtures must reproduce that exact spelling.
+# dataset (see references/provider-source-verification.md). The spreading column
+# is misspelled upstream, so the checked-in fixtures must reproduce that exact
+# spelling.
 OFFICIAL_COLUMNS = frozenset(
     {
         "id",

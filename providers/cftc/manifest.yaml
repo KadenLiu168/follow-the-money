@@ -70,7 +70,7 @@ pagination: page_number
 default_enabled: true
 
 fixture_provenance:
-  source: "Official CFTC Legacy Futures-Only dataset row shape verified 2026-09-15 (see source-verification.md); checked-in current and previous complete-report fixtures reproduce that shape with synthetic values."
+  source: "Official CFTC Legacy Futures-Only dataset row shape verified 2026-09-15 (see references/provider-source-verification.md); checked-in current and previous complete-report fixtures reproduce that shape with synthetic values."
   files:
     - fixtures/cot-current.json
     - fixtures/cot-previous.json

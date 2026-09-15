@@ -76,7 +76,7 @@ pagination: page_number
 default_enabled: true
 
 fixture_provenance:
-  source: "Official SEC 13F rule is verified in source-verification.md; arithmetic fixtures are explicitly synthetic production-shaped fixtures."
+  source: "Official SEC 13F rule is verified in references/provider-source-verification.md; arithmetic fixtures are explicitly synthetic production-shaped fixtures."
   files:
     - fixtures/browse-13f.json
     - fixtures/semantic-submissions.json
