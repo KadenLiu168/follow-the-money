@@ -1,0 +1,17 @@
+{
+  "cik": "0000000001",
+  "name": "Synthetic Official Manager",
+  "tickers": ["SYN"],
+  "filings": {
+    "recent": {
+      "form": ["13F-HR"],
+      "filingDate": ["2026-08-01"],
+      "reportDate": ["2026-06-30"],
+      "acceptanceDateTime": ["2026-08-01T12:00:00Z"],
+      "accessionNumber": ["0000000001-26-000001"],
+      "primaryDocument": ["synthetic.xml"],
+      "cik": ["0000000001"],
+      "companyName": ["Synthetic Official Manager"]
+    }
+  }
+}

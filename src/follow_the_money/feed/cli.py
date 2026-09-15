@@ -49,7 +49,8 @@ from ..feed.validate import assert_feed_identity, recompute_feed_identity, valid
 from ..providers.http import FetchError, validate_provider_url
 from ..providers.lock import LOCK_FILENAME, CollectionLock, CollectionLockError
 from ..providers.manifest import ManifestError
-from ..providers.rate import RateRegistry, RateStateError, eligibility_delay, refill_tokens
+from ..providers.rate import RateRegistry, RateStateError
+from ..providers.session import ManagedProviderClient
 from ..schema import SchemaError
 from .bundle import SUPPORTED_BUNDLE_MAJOR, BundleError, FeedBundle, build_bundle
 from .checkpoint import (
@@ -309,6 +310,19 @@ def run_feed(
             for pid in enabled_ids
         }
         items: list[dict[str, Any]] = []
+        sec_provider = next(
+            (provider for provider in cfg.providers if provider.id == "sec_edgar"), None
+        )
+        sec_outcome = outcomes.get("sec_edgar")
+        if (
+            sec_provider is not None
+            and sec_provider.contract_version == 2
+            and not adapters_by_id.get("sec_edgar")
+            and not cfg.watched_companies
+            and sec_outcome is not None
+        ):
+            sec_outcome.state = "empty"
+            sec_outcome.availability = "success"
 
         global_sem = _Semaphore(cfg.feed.global_concurrency)
         host_sems: dict[str, _Semaphore] = {}
@@ -329,62 +343,49 @@ def run_feed(
         for pid in enabled_ids:
             for p in cfg.providers:
                 if p.id == pid:
-                    for rule in p.fetch_hosts:
+                    for rule in (*p.fetch_hosts, *p.redirect_hosts):
                         host_sems.setdefault(rule.host, _Semaphore(cfg.feed.per_host_concurrency))
 
         def execute_adapter(pid: str, adapter: Any, outcome: ProviderOutcome) -> None:
-            host = _adapter_fetch_host(pid, cfg)
             request_window = {"start": plan.window_start, "end": plan.evidence_cutoff_at}
+            scope_id = _provider_scope(pid, cfg)
+            managed_client: Any
+            if providers_fn is None:
+                contract = cfg.provider(pid)
+                import httpx
+
+                transport = httpx.Client(
+                    timeout=float(contract.attempt_timeout_seconds), follow_redirects=False
+                )
+                managed_client = ManagedProviderClient(
+                    contract,
+                    rate=rate,
+                    scope_lock=scope_locks.get(scope_id) if scope_id is not None else None,
+                    global_semaphore=global_sem,
+                    host_semaphores=host_sems,
+                    cancel_event=cancel_event,
+                    deadline_at=deadline_at,
+                    monotonic_now=monotonic,
+                    now_fn=now_fn,
+                    sleep_fn=sleep,
+                    transport=transport,
+                )
+            else:
+                managed_client = _client_for(adapter)
 
             def request() -> Any:
                 if cancel_event.is_set() or monotonic() >= deadline_at:
                     raise FetchError("pre_commit_deadline_exceeded: provider request cancelled")
-                global_sem.acquire(
-                    cancel_event=cancel_event,
-                    deadline_at=deadline_at,
-                    monotonic_now=monotonic,
-                )
-                host_sem = host_sems.get(host) if host is not None else None
-                host_acquired = False
+                with active_clients_lock:
+                    active_clients[id(managed_client)] = managed_client
                 try:
-                    if host_sem is not None:
-                        host_sem.acquire(
-                            cancel_event=cancel_event,
-                            deadline_at=deadline_at,
-                            monotonic_now=monotonic,
-                        )
-                        host_acquired = True
-                    try:
-                        if cancel_event.is_set() or monotonic() >= deadline_at:
-                            raise FetchError(
-                                "pre_commit_deadline_exceeded: provider request cancelled"
-                            )
-                        client = _client_for(adapter)
-                        with active_clients_lock:
-                            if cancel_event.is_set() or monotonic() >= deadline_at:
-                                close = getattr(client, "close", None)
-                                if close is not None:
-                                    close()
-                                raise FetchError(
-                                    "pre_commit_deadline_exceeded: provider request cancelled"
-                                )
-                            active_clients[id(client)] = client
-                        try:
-                            return adapter.fetch(request_window, client)
-                        finally:
-                            with active_clients_lock:
-                                active_clients.pop(id(client), None)
-                            close = getattr(client, "close", None)
-                            if close is not None:
-                                close()
-                    finally:
-                        if host_acquired and host_sem is not None:
-                            host_sem.release()
+                    return adapter.fetch(request_window, managed_client)
                 finally:
-                    global_sem.release()
+                    with active_clients_lock:
+                        active_clients.pop(id(managed_client), None)
 
-            scope_lock = scope_locks.get(_provider_scope(pid, cfg))
-            if scope_lock is None:
+            request.client = managed_client  # type: ignore[attr-defined]
+            try:
                 _run_adapter(
                     outcome,
                     adapter,
@@ -400,36 +401,10 @@ def run_feed(
                     request,
                     cancel_event,
                 )
-            else:
-                acquired = False
-                while not acquired:
-                    if cancel_event.is_set() or monotonic() >= deadline_at:
-                        outcome.state = "partial" if outcome.accepted else "failed"
-                        outcome.error = "pre_commit_deadline_exceeded: scope lock wait cancelled"
-                        outcome.availability = "failed"
-                        outcome.availability_reason = outcome.error
-                        outcome.execution_failure = True
-                        return
-                    remaining = max(0.0, deadline_at - monotonic())
-                    acquired = scope_lock.acquire(timeout=min(0.1, remaining))
-                try:
-                    _run_adapter(
-                        outcome,
-                        adapter,
-                        plan,
-                        cutoff,
-                        cfg,
-                        rate,
-                        now_fn,
-                        items,
-                        monotonic,
-                        deadline_at,
-                        sleep,
-                        request,
-                        cancel_event,
-                    )
-                finally:
-                    scope_lock.release()
+            finally:
+                close = getattr(managed_client, "close", None)
+                if close is not None:
+                    close()
 
         def execute_one(pid: str) -> None:
             outcome = outcomes[pid]
@@ -442,8 +417,8 @@ def run_feed(
                 return
             for adapter in adapters_by_id[pid]:
                 execute_adapter(pid, adapter, outcome)
-                if outcome.state == "failed":
-                    break  # provider-level failure: no further attempts
+                if outcome.state in {"failed", "partial"} and outcome.terminal_incomplete:
+                    break  # terminal acquisition unit failure: stop later units
 
         pool = ThreadPoolExecutor(max_workers=cfg.feed.global_concurrency)
         futures = [pool.submit(execute_one, pid) for pid in enabled_ids]
@@ -500,6 +475,33 @@ def run_feed(
         empty_validity = {
             pid: provider.empty_valid_for_window for pid, provider in providers_by_id.items()
         }
+        complete_state_provider_ids = tuple(
+            entry["provider_id"]
+            for entry in contract_snapshots
+            if entry["provider_id"] in {"sec_edgar", "cftc"}
+            and entry["snapshot"].get("contract_version") == 2
+        )
+        if (
+            "sec_edgar" in complete_state_provider_ids
+            and "sec_edgar" in outcomes
+            and outcomes["sec_edgar"].state == "healthy"
+        ):
+            expected_sec_ciks = {company.cik for company in cfg.watched_companies}
+            sec_items = [item for item in items if item.get("provider_id") == "sec_edgar"]
+            actual_sec_cik_values = [
+                item.get("payload", {}).get("company_identity", {}).get("cik") for item in sec_items
+            ]
+            actual_sec_ciks = {value for value in actual_sec_cik_values if isinstance(value, str)}
+            if (
+                any(not isinstance(value, str) for value in actual_sec_cik_values)
+                or actual_sec_ciks != expected_sec_ciks
+                or len(actual_sec_cik_values) != len(actual_sec_ciks)
+            ):
+                outcomes["sec_edgar"].state = "partial"
+                outcomes["sec_edgar"].error = "SEC v2 complete slice does not equal watched CIK set"
+                outcomes["sec_edgar"].availability = "failed"
+                outcomes["sec_edgar"].availability_reason = outcomes["sec_edgar"].error
+                outcomes["sec_edgar"].terminal_incomplete = True
         try:
             selection = select_provider_slices(
                 outcomes=outcomes,
@@ -510,6 +512,7 @@ def run_feed(
                 empty_valid_for_window=empty_validity,
                 evidence_cutoff_at=plan.evidence_cutoff_at,
                 strict_identity_provider_ids=tuple(providers_by_id),
+                complete_state_provider_ids=complete_state_provider_ids,
             )
         except SnapshotError as exc:
             raise FeedExecutionError(str(exc)) from exc
@@ -636,9 +639,8 @@ def _production_adapters(cfg: AppConfig, registry: Any) -> dict[str, list[Any]]:
             continue
         if p.id == "sec_edgar":
             adapters[p.id] = [
-                SecEdgarAdapter(
-                    p, watched_ciks=tuple(company.cik for company in cfg.watched_companies)
-                )
+                SecEdgarAdapter(p, watched_company=company)
+                for company in sorted(cfg.watched_companies, key=lambda company: company.cik)
             ]
         else:
             try:
@@ -685,26 +687,41 @@ def _run_adapter(
     request_fn: Callable[[], Any],
     cancel_event: Event | None = None,
 ) -> None:
-    """One bounded fetch + normalize with durable rate debit/reconcile."""
+    """Run Provider-level attempts; actual sends are managed by the client."""
 
     window = {"start": plan.window_start, "end": plan.evidence_cutoff_at}
-    scope = _provider_scope(outcome.provider_id, cfg)
     max_attempts = max(1, int(cfg.feed.max_attempts))
     empty_valid_for_window = _provider_empty_valid_for_window(outcome.provider_id, cfg)
+    provider_contract = next(
+        (provider for provider in cfg.providers if provider.id == outcome.provider_id), None
+    )
+    managed_client = getattr(request_fn, "client", None)
+    prior_terminal = outcome.terminal_incomplete
 
-    def mark_incomplete(message: str) -> None:
+    def observe_client() -> None:
+        observed = getattr(managed_client, "last_response_at", None)
+        if observed is not None:
+            observed_iso = fmt_utc(observed)
+            if outcome.retrieved_at is None or observed_iso > outcome.retrieved_at:
+                outcome.retrieved_at = observed_iso
+        if bool(getattr(managed_client, "successful_resource_observed", False)):
+            outcome.partial_resource_observed = True
+
+    def mark_incomplete(message: str, *, terminal: bool = True) -> None:
         outcome.state = (
-            "partial" if (outcome.accepted or outcome.non_permitted_empty_observed) else "failed"
+            "partial"
+            if (
+                outcome.accepted
+                or outcome.non_permitted_empty_observed
+                or outcome.partial_resource_observed
+            )
+            else "failed"
         )
         outcome.error = message
         outcome.availability = "failed"
         outcome.availability_reason = bounded_availability_reason(message)
-
-    def reject_late_result(state) -> None:
-        mark_incomplete("pre_commit_deadline_exceeded: late provider result ignored")
-        outcome.execution_failure = True
-        if rate is not None and scope is not None and state is not None:
-            rate.reconcile(state, now=now_fn)
+        if terminal:
+            outcome.terminal_incomplete = True
 
     def deadline_expired() -> bool:
         return (
@@ -716,36 +733,18 @@ def _run_adapter(
             mark_incomplete("pre_commit_deadline_exceeded: provider work cancelled")
             outcome.execution_failure = True
             return
-        state = None
-        if rate is not None and scope is not None:
-            state = _ensure_scope_state(rate, scope, cfg, now_fn)
-            state = refill_tokens(state, now=now_fn)
-            delay = eligibility_delay(state, now=now_fn)
-            if delay > 0:
-                if delay >= deadline_at - monotonic_now():
-                    mark_incomplete("rate_not_eligible_before_deadline")
-                    outcome.execution_failure = True
-                    return
-                sleep_fn(delay)
-                state = _ensure_scope_state(rate, scope, cfg, now_fn)
-                state = refill_tokens(state, now=now_fn)
-            state = rate.debit_and_cooldown(state, now=now_fn)
-
         outcome.attempted += 1
-        request_started = False
         try:
-            request_started = True
             raw = request_fn()
             outcome.fetched += 1
-            outcome.retrieved_at = fmt_utc(now_fn())
+            observe_client()
+            if outcome.retrieved_at is None:
+                outcome.retrieved_at = fmt_utc(now_fn())
             if deadline_expired():
-                reject_late_result(state)
+                mark_incomplete("pre_commit_deadline_exceeded: late provider result ignored")
+                outcome.execution_failure = True
                 return
             normalized = list(adapter.normalize(raw, window))
-            provider_contract = next(
-                (provider for provider in cfg.providers if provider.id == outcome.provider_id),
-                None,
-            )
             allowed_payload_types = (
                 set(provider_contract.payload_types) if provider_contract is not None else set()
             )
@@ -783,8 +782,7 @@ def _run_adapter(
                     break
                 try:
                     canonical_url = validate_provider_url(
-                        url,
-                        rules=provider_contract.source_link_hosts,
+                        url, rules=provider_contract.source_link_hosts
                     )
                 except (TypeError, ValueError):
                     invalid_reason = "normalized item source URL is outside Provider contract"
@@ -798,38 +796,36 @@ def _run_adapter(
             if invalid_reason is not None:
                 outcome.rejected += 1
                 mark_incomplete(invalid_reason)
-                if rate is not None and scope is not None and state is not None:
-                    rate.reconcile(state, now=now_fn)
                 return
             if deadline_expired():
-                reject_late_result(state)
+                mark_incomplete("pre_commit_deadline_exceeded: late provider result ignored")
+                outcome.execution_failure = True
                 return
+
             accepted_items = validated_items
+            outcome.error = None
             items.extend(accepted_items)
             accepted = len(accepted_items)
             outcome.accepted += accepted
             if not accepted and not empty_valid_for_window:
                 outcome.non_permitted_empty_observed = True
             if accepted:
-                if outcome.state == "partial" or outcome.non_permitted_empty_observed:
+                # A successful retry resolves transient attempt failures. A
+                # terminal failure from another acquisition unit is retained.
+                if prior_terminal or outcome.terminal_incomplete:
                     outcome.state = "partial"
                     outcome.availability = "failed"
                 else:
                     outcome.state = "healthy"
-                    if outcome.availability != "blocked":
-                        outcome.availability = "success"
-                        outcome.availability_reason = None
-                        outcome.upstream_http_status = None
+                    outcome.availability = "success"
+                    outcome.availability_reason = None
+                    outcome.upstream_http_status = None
             elif outcome.accepted:
-                if empty_valid_for_window and outcome.state != "partial":
-                    outcome.state = "healthy"
-                    if outcome.availability != "blocked":
-                        outcome.availability = "success"
-                else:
-                    outcome.state = "partial"
-                    outcome.error = "non-permitted empty result after accepted evidence"
-                    outcome.availability = "failed"
-                    outcome.availability_reason = outcome.error
+                outcome.state = "partial"
+                outcome.error = "non-permitted empty result after accepted evidence"
+                outcome.availability = "failed"
+                outcome.availability_reason = outcome.error
+                outcome.terminal_incomplete = True
             else:
                 outcome.state = "empty"
                 if empty_valid_for_window:
@@ -839,51 +835,49 @@ def _run_adapter(
                 else:
                     outcome.availability = "failed"
                     outcome.availability_reason = "empty result is not permitted for window"
-            if rate is not None and scope is not None and state is not None:
-                rate.reconcile(state, now=now_fn)
+                    outcome.terminal_incomplete = True
             return
         except FetchError as exc:
-            if exc.response_observed:
+            observe_client()
+            if exc.observed_at is not None:
+                observed_iso = fmt_utc(exc.observed_at)
+                if outcome.retrieved_at is None or observed_iso > outcome.retrieved_at:
+                    outcome.retrieved_at = observed_iso
+            elif exc.response_observed and outcome.retrieved_at is None:
                 outcome.retrieved_at = fmt_utc(now_fn())
+            outcome.partial_resource_observed |= bool(exc.acquisition_progress)
             outcome.upstream_http_status = exc.status_code
-            mark_incomplete(str(exc))
+            can_retry = exc.retryable and attempt + 1 < max_attempts
+            mark_incomplete(str(exc), terminal=not can_retry)
             outcome.availability = "blocked" if exc.status_code in {401, 403} else "failed"
             outcome.availability_reason = bounded_availability_reason(str(exc))
             if deadline_expired():
                 outcome.execution_failure = True
-            if rate is not None and scope is not None and state is not None:
-                rate.reconcile(state, now=now_fn, retry_after_seconds=exc.retry_after_seconds)
-            if deadline_expired():
                 outcome.error = f"pre_commit_deadline_exceeded: {exc}"
                 return
-            if exc.retryable and attempt + 1 < max_attempts:
-                delay = max(
-                    float(exc.retry_after_seconds or 0),
-                    float(state.minimum_interval_seconds) if state is not None else 0.0,
-                )
+            if can_retry:
+                delay = float(exc.retry_after_seconds or 0)
                 remaining = deadline_at - monotonic_now()
                 if delay > remaining:
                     outcome.error = f"{exc}; retry_not_admitted_before_deadline"
                     outcome.execution_failure = True
+                    outcome.terminal_incomplete = True
                     return
                 if delay > 0:
                     sleep_fn(delay)
                 if monotonic_now() >= deadline_at:
                     outcome.error = f"{exc}; retry_not_admitted_before_deadline"
                     outcome.execution_failure = True
+                    outcome.terminal_incomplete = True
                     return
                 continue
             return
         except RateStateError:
             raise
-        except Exception as exc:  # noqa: BLE001 - orchestration boundary
+        except Exception as exc:  # noqa: BLE001 - Provider orchestration boundary
+            observe_client()
             mark_incomplete(str(exc))
             outcome.upstream_http_status = None
-            if rate is not None and scope is not None and state is not None:
-                if request_started:
-                    rate.reconcile(state, now=now_fn)
-                else:
-                    rate.refund(state, now=now_fn)
             return
 
 
@@ -948,7 +942,7 @@ def _client_for(adapter: Any) -> Any:
     import httpx
 
     timeout = getattr(getattr(adapter, "_contract", None), "attempt_timeout_seconds", 20)
-    return httpx.Client(timeout=float(timeout), follow_redirects=True)
+    return httpx.Client(timeout=float(timeout), follow_redirects=False)
 
 
 class _Semaphore:
@@ -981,7 +975,7 @@ class _Semaphore:
     def __enter__(self) -> None:
         self.acquire()
 
-    def __exit__(self, *exc: object) -> None:
+    def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None:
         self.release()
 
     def release(self) -> None:
@@ -1112,6 +1106,14 @@ def _feed_config_snapshot(cfg: AppConfig) -> dict[str, Any]:
                 "optional": r.optional,
             }
             for r in cfg.coverage.rows
+        ],
+        "watched_companies": [
+            {
+                "cik": company.cik,
+                "name": company.name,
+                "tickers": sorted(company.tickers),
+            }
+            for company in sorted(cfg.watched_companies, key=lambda company: company.cik)
         ],
     }
     return {"snapshot": payload, "hash": canonical_digest(payload)}

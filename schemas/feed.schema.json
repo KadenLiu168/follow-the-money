@@ -952,6 +952,38 @@
         },
         "raw_metadata": {
           "type": "object"
+        },
+        "market_identity": {
+          "$ref": "#/$defs/cftc_market_identity"
+        },
+        "current_metrics": {
+          "$ref": "#/$defs/cftc_metrics"
+        },
+        "previous_metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/cftc_metrics"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "delta_metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/cftc_metrics"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "comparison": {
+          "$ref": "#/$defs/cftc_comparison"
+        },
+        "derivations": {
+          "$ref": "#/$defs/cftc_derivations"
         }
       }
     },
@@ -985,6 +1017,56 @@
         },
         "raw_metadata": {
           "type": "object"
+        },
+        "company_identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cik",
+            "name",
+            "tickers"
+          ],
+          "properties": {
+            "cik": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 10
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "tickers": {
+              "type": "array",
+              "maxItems": 32,
+              "items": {
+                "type": "string",
+                "maxLength": 32
+              }
+            }
+          }
+        },
+        "report_period": {
+          "type": "string",
+          "format": "date"
+        },
+        "accepted_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "value_normalization": {
+          "$ref": "#/$defs/sec_value_normalization"
+        },
+        "comparison": {
+          "$ref": "#/$defs/sec_comparison"
+        },
+        "holdings": {
+          "type": "array",
+          "maxItems": 5000,
+          "items": {
+            "$ref": "#/$defs/sec_holding"
+          }
         }
       }
     },
@@ -1030,6 +1112,320 @@
         },
         "raw_metadata": {
           "type": "object"
+        }
+      }
+    },
+    "sec_value_normalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_unit",
+        "formula_id"
+      ],
+      "properties": {
+        "source_unit": {
+          "enum": [
+            "usd",
+            "usd_thousands"
+          ]
+        },
+        "formula_id": {
+          "enum": [
+            "usd_divided_by_1000",
+            "identity"
+          ]
+        }
+      }
+    },
+    "sec_security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cusip",
+        "figi",
+        "issuer_name",
+        "title_of_class",
+        "put_call",
+        "amount_type"
+      ],
+      "properties": {
+        "cusip": {
+          "type": "string",
+          "minLength": 9,
+          "maxLength": 9
+        },
+        "figi": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 32
+        },
+        "issuer_name": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "title_of_class": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "put_call": {
+          "enum": [
+            "PUT",
+            "CALL",
+            null
+          ]
+        },
+        "amount_type": {
+          "enum": [
+            "SH",
+            "PRN"
+          ]
+        }
+      }
+    },
+    "sec_holding_values": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reported_amount",
+        "reported_value_usd_thousands"
+      ],
+      "properties": {
+        "reported_amount": {
+          "$ref": "#/$defs/numeric_value"
+        },
+        "reported_value_usd_thousands": {
+          "$ref": "#/$defs/numeric_value"
+        }
+      }
+    },
+    "sec_holding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "security",
+        "current",
+        "previous",
+        "delta",
+        "change_type"
+      ],
+      "properties": {
+        "security": {
+          "$ref": "#/$defs/sec_security"
+        },
+        "current": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sec_holding_values"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "previous": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sec_holding_values"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "delta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sec_holding_values"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "change_type": {
+          "enum": [
+            "new",
+            "increased",
+            "decreased",
+            "unchanged",
+            "no_longer_reported",
+            null
+          ]
+        }
+      }
+    },
+    "sec_comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "previous_accession_number",
+        "previous_report_period",
+        "previous_accepted_at",
+        "previous_filed_at",
+        "previous_source_url",
+        "previous_value_normalization",
+        "reason"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        },
+        "previous_accession_number": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "previous_report_period": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "previous_accepted_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "previous_filed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "previous_source_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "previous_value_normalization": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sec_value_normalization"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "enum": [
+            "no_previous_comparable_filing",
+            null
+          ]
+        }
+      }
+    },
+    "cftc_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "noncommercial_long",
+        "noncommercial_short",
+        "noncommercial_spreading",
+        "open_interest",
+        "net_noncommercial"
+      ],
+      "properties": {
+        "noncommercial_long": {
+          "$ref": "#/$defs/numeric_value"
+        },
+        "noncommercial_short": {
+          "$ref": "#/$defs/numeric_value"
+        },
+        "noncommercial_spreading": {
+          "$ref": "#/$defs/numeric_value"
+        },
+        "open_interest": {
+          "$ref": "#/$defs/numeric_value"
+        },
+        "net_noncommercial": {
+          "$ref": "#/$defs/numeric_value"
+        }
+      }
+    },
+    "cftc_market_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cftc_contract_market_code",
+        "contract_market_name"
+      ],
+      "properties": {
+        "cftc_contract_market_code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "contract_market_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        }
+      }
+    },
+    "cftc_comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "previous_as_of",
+        "reason"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        },
+        "previous_as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "reason": {
+          "enum": [
+            "market_absent_from_previous_report",
+            "no_previous_comparable_report",
+            null
+          ]
+        }
+      }
+    },
+    "cftc_derivations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "net_noncommercial"
+      ],
+      "properties": {
+        "net_noncommercial": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "formula_id"
+          ],
+          "properties": {
+            "formula_id": {
+              "const": "noncommercial_long_minus_short"
+            }
+          }
         }
       }
     }

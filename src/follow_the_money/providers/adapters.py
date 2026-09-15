@@ -29,6 +29,7 @@ from zoneinfo import ZoneInfo
 
 from ..config.model import ProviderEntry
 from .base import Provider, ProviderRegistry
+from .cftc_cot import compare_reports, publication_boundary, select_report_dates
 from .http import (
     FetchError,
     bounded_fetch,
@@ -37,6 +38,7 @@ from .http import (
     validate_provider_url,
 )
 from .manifest import load_manifest, manifest_to_provider_entry
+from .sec_13f import compare_holdings, parse_complete_submission, select_filings
 from .urls import UrlValidationError
 
 
@@ -87,12 +89,13 @@ class BaseAdapter(Provider):
         url: str,
         published_at: str | None,
         knowledge: str,
+        kind: str = "news",
     ) -> dict[str, Any]:
         return {
             "id": source_id,
             "name": name,
             "tier": tier,
-            "kind": "news",
+            "kind": kind,
             "url": self._validate_url(url),
             "published_at": _normalize_timestamp(published_at) if published_at else None,
             "knowledge_available_at": _normalize_timestamp(knowledge),
@@ -207,12 +210,12 @@ class BlsAdapter(BaseAdapter):
 
 
 class SecEdgarAdapter(BaseAdapter):
-    """SEC EDGAR watched-company filing contract.
+    """SEC EDGAR acquisition unit for one watched company.
 
-    ``fetch`` requests the EDGAR browse index for the watched-company CIKs;
-    ``normalize`` decodes the EDGAR JSON index (``filings.recent`` arrays),
-    keeps only filings whose CIK is configured as watched, and emits
-    ``filing`` payloads with stable accession-number identity.
+    The v1 compatibility path retains the historical submissions-only reader
+    for fixture consumers. A v2 unit acquires submissions, the selected
+    current complete submission, and an optional previous comparable complete
+    submission, then delegates all semantic work to :mod:`sec_13f`.
     """
 
     provider_id: str = "sec_edgar"
@@ -221,16 +224,146 @@ class SecEdgarAdapter(BaseAdapter):
         self,
         manifest: Mapping[str, Any] | ProviderEntry | None = None,
         watched_ciks: Sequence[str] = (),
+        watched_company: Any | None = None,
     ) -> None:
         super().__init__(manifest)
         self._watched_ciks = tuple(str(c) for c in watched_ciks)
+        self._watched_company = watched_company
+        self._semantic_v2 = watched_company is not None and self._contract.contract_version == 2
+        if self._contract.contract_version == 2 and self._contract.units != {
+            "13f_value_before_2023_01_03": "usd_thousands",
+            "13f_value_from_2023_01_03": "usd",
+            "reported_value_usd_thousands": "usd_thousands",
+        }:
+            raise ValueError("SEC v2 units are not the closed contract")
+
+    def _complete_url(self, candidate: Any) -> str:
+        cik = str(candidate.cik).zfill(10)
+        accession = candidate.accession_number
+        return self._validate_url(
+            f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession.replace('-', '')}/{accession}.txt"
+        )
 
     def fetch(self, window: Mapping[str, str], client: Any) -> Any:
-        cik = self._watched_ciks[0] if self._watched_ciks else "0001067983"
-        url = f"https://data.sec.gov/submissions/CIK{cik}.json"
-        return self._fetch(client, url)
+        if self._semantic_v2:
+            assert self._watched_company is not None
+            cik = str(self._watched_company.cik).zfill(10)
+        else:
+            cik = self._watched_ciks[0] if self._watched_ciks else "0001067983"
+        submissions_url = f"https://data.sec.gov/submissions/CIK{cik}.json"
+        if not self._semantic_v2:
+            return self._fetch(client, submissions_url)
+        assert self._watched_company is not None
+        submissions_raw = self._fetch(client, submissions_url)
+        submissions = self._json_body(submissions_raw)
+        if not isinstance(submissions, Mapping):
+            raise FetchError("SEC submissions response is not an object")
+        current, previous = select_filings(submissions, window["end"])
+        current_url = self._complete_url(current)
+        current_raw = self._fetch(client, current_url)
+        previous_raw = None
+        previous_url = None
+        if previous is not None:
+            previous_url = self._complete_url(previous)
+            previous_raw = self._fetch(client, previous_url)
+        return {
+            "submissions": submissions,
+            "current": current,
+            "current_url": current_url,
+            "current_body": current_raw.body_bytes,
+            "previous": previous,
+            "previous_url": previous_url,
+            "previous_body": previous_raw.body_bytes if previous_raw is not None else None,
+        }
 
     def normalize(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
+        if not self._semantic_v2:
+            return self._normalize_v1(raw, window)
+        if not isinstance(raw, Mapping):
+            raise FetchError("SEC acquisition result is invalid")
+        assert self._watched_company is not None
+        submissions = raw.get("submissions")
+        if not isinstance(submissions, Mapping):
+            raise FetchError("SEC submissions response is invalid")
+        configured_cik = str(self._watched_company.cik).zfill(10)
+        official_cik = str(submissions.get("cik") or "").zfill(10)
+        official_name = submissions.get("name")
+        if (
+            official_cik != configured_cik
+            or not isinstance(official_name, str)
+            or not official_name.strip()
+        ):
+            raise FetchError("SEC official company identity is missing or mismatched")
+        current = parse_complete_submission(
+            raw["current_body"],
+            raw["current"],
+            source_url=str(raw["current_url"]),
+            require_submission_header=True,
+        )
+        previous = None
+        if raw.get("previous") is not None:
+            previous = parse_complete_submission(
+                raw["previous_body"],
+                raw["previous"],
+                source_url=str(raw["previous_url"]),
+                require_submission_header=True,
+            )
+        comparison_rows = compare_holdings(current, previous)
+        accepted_at = current.candidate.accepted_at
+        item_id = stable_item_id(self.provider_id, current.candidate.accession_number)
+        source = self._source(
+            source_id=f"sec-{item_id}",
+            name="SEC EDGAR",
+            tier="Tier 1",
+            kind="filing",
+            url=current.source_url,
+            published_at=accepted_at,
+            knowledge=accepted_at,
+        )
+        comparison = {
+            "status": "available" if previous is not None else "unavailable",
+            "previous_accession_number": previous.candidate.accession_number if previous else None,
+            "previous_report_period": previous.candidate.report_period if previous else None,
+            "previous_accepted_at": previous.candidate.accepted_at if previous else None,
+            "previous_filed_at": previous.candidate.filed_at if previous else None,
+            "previous_source_url": previous.source_url if previous else None,
+            "previous_value_normalization": previous.value_normalization if previous else None,
+            "reason": None if previous else "no_previous_comparable_filing",
+        }
+        tickers = submissions.get("tickers")
+        official_tickers = (
+            sorted(str(ticker).strip() for ticker in tickers if str(ticker).strip())
+            if isinstance(tickers, list)
+            else []
+        )
+        payload = {
+            "type": "filing",
+            "form": current.candidate.form,
+            "company": configured_cik,
+            "accession_number": current.candidate.accession_number,
+            "filed_at": current.candidate.filed_at,
+            "raw_metadata": {},
+            "company_identity": {
+                "cik": official_cik,
+                "name": official_name.strip(),
+                "tickers": official_tickers,
+            },
+            "report_period": current.candidate.report_period,
+            "accepted_at": accepted_at,
+            "value_normalization": current.value_normalization,
+            "comparison": comparison,
+            "holdings": comparison_rows,
+        }
+        return [
+            {
+                "id": item_id,
+                "provider_id": self.provider_id,
+                "source": source,
+                "payload": payload,
+            }
+        ]
+
+    def _normalize_v1(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
         data = self._json_body(raw)
         if not isinstance(data, dict):
             return []
@@ -259,9 +392,7 @@ class SecEdgarAdapter(BaseAdapter):
             url = (
                 f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession.replace('-', '')}/{doc}"
                 if doc
-                else (
-                    f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type=13F"
-                )
+                else f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type=13F"
             )
             try:
                 validated = self._validate_url(url)
@@ -294,23 +425,164 @@ class SecEdgarAdapter(BaseAdapter):
 
 
 class CftcAdapter(BaseAdapter):
-    """CFTC Legacy Futures-Only COT positioning records.
-
-    The public reporting API exposes Tuesday report dates. CFTC's documented
-    publication cadence is Friday, so the adapter uses the report date plus
-    three days as the conservative publication boundary and retains the
-    source-provided long/short/open-interest fields as raw metadata.
-    """
+    """CFTC Legacy Futures-Only COT positioning adapter."""
 
     provider_id: str = "cftc"
+    PAGE_SIZE = 100
+    MAX_PAGES = 100
+    MAX_ROWS = PAGE_SIZE * MAX_PAGES
 
-    def fetch(self, window: Mapping[str, str], client: Any) -> Any:
-        return self._fetch(
-            client,
-            "https://publicreporting.cftc.gov/resource/6dca-aqww.json?$limit=100",
+    def __init__(self, manifest: Mapping[str, Any] | ProviderEntry | None = None) -> None:
+        super().__init__(manifest)
+        self._semantic_v2 = self._contract.contract_version == 2
+        if self._semantic_v2 and self._contract.units != {"contracts": "contracts"}:
+            raise ValueError("CFTC v2 units are not the closed contract")
+        if self._semantic_v2 and (
+            self._contract.pagination != "page_number"
+            or self._contract.empty_valid_for_window is not False
+        ):
+            raise ValueError("CFTC v2 requires page-number complete-report acquisition")
+
+    def _url(self, query: str) -> str:
+        # Fetch URLs are governed by fetch_hosts, not source_link_hosts;
+        # SoQL query parameters are intentionally not published as evidence.
+        return f"https://publicreporting.cftc.gov/resource/6dca-aqww.json?{query}"
+
+    @staticmethod
+    def _query(params: Mapping[str, Any]) -> str:
+        from urllib.parse import urlencode
+
+        # Keep SoQL's dollar-prefixed names and commas readable while encoding
+        # values (including spaces) deterministically.
+        return urlencode(params, doseq=True, safe="$,")
+
+    def _page_url(self, report_date: str, offset: int) -> str:
+        # ``id`` is the Socrata stable row identifier used as the final
+        # deterministic tie-breaker after market code.
+        return self._url(
+            self._query(
+                {
+                    "$where": f"report_date_as_yyyy_mm_dd='{report_date}'",
+                    "$order": "cftc_contract_market_code ASC, id ASC",
+                    "$limit": self.PAGE_SIZE,
+                    "$offset": offset,
+                }
+            )
         )
 
+    def fetch(self, window: Mapping[str, str], client: Any) -> Any:
+        if not self._semantic_v2:
+            return self._fetch(
+                client,
+                "https://publicreporting.cftc.gov/resource/6dca-aqww.json?$limit=100",
+            )
+        # Date discovery is separately managed, then each selected date is
+        # retrieved through a bounded sequential page plan.
+        discovery = self._fetch(
+            client,
+            self._url(
+                self._query(
+                    {
+                        "$select": "report_date_as_yyyy_mm_dd",
+                        "$group": "report_date_as_yyyy_mm_dd",
+                        "$order": "report_date_as_yyyy_mm_dd DESC",
+                        "$limit": 3,
+                    }
+                )
+            ),
+        )
+        discovery_rows = self._json_body(discovery)
+        if not isinstance(discovery_rows, list):
+            raise FetchError("CFTC date discovery response is not a list")
+        current_date, previous_date = select_report_dates(discovery_rows, window["end"])
+        reports: dict[str, list[dict[str, Any]]] = {}
+        for report_date in (current_date, previous_date):
+            if report_date is None:
+                continue
+            rows: list[dict[str, Any]] = []
+            offset = 0
+            previous_key: tuple[str, str] | None = None
+            seen_stable_ids: set[str] = set()
+            for page_number in range(self.MAX_PAGES):
+                page_raw = self._fetch(client, self._page_url(report_date, offset))
+                page = self._json_body(page_raw)
+                if not isinstance(page, list) or len(page) > self.PAGE_SIZE:
+                    raise FetchError("CFTC pagination page is invalid")
+                for row in page:
+                    if not isinstance(row, dict):
+                        raise FetchError("CFTC pagination row is invalid")
+                    actual_date = str(row.get("report_date_as_yyyy_mm_dd", ""))[:10]
+                    code = str(row.get("cftc_contract_market_code") or "").strip()
+                    stable_id = str(row.get("id") or row.get("_id") or "")
+                    if actual_date != report_date or not code or not stable_id:
+                        raise FetchError("CFTC pagination row does not match pinned query")
+                    if stable_id in seen_stable_ids:
+                        raise FetchError("CFTC pagination repeats a stable row identity")
+                    seen_stable_ids.add(stable_id)
+                    key = (code, stable_id)
+                    if previous_key is not None and key <= previous_key:
+                        raise FetchError("CFTC pagination ordering is invalid or repeated")
+                    previous_key = key
+                    rows.append(row)
+                if len(rows) > self.MAX_ROWS:
+                    raise FetchError("CFTC pagination row bound exceeded")
+                if len(page) < self.PAGE_SIZE:
+                    break
+                offset += self.PAGE_SIZE
+            else:
+                raise FetchError("CFTC pagination page bound exceeded")
+            if not rows:
+                raise FetchError("CFTC report is empty and not valid for window")
+            reports[report_date] = rows
+        return {
+            "current_date": current_date,
+            "previous_date": previous_date,
+            "current_rows": reports[current_date],
+            "previous_rows": reports.get(previous_date) if previous_date else None,
+        }
+
     def normalize(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
+        if not self._semantic_v2:
+            return self._normalize_v1(raw, window)
+        if not isinstance(raw, Mapping):
+            raise FetchError("CFTC acquisition result is invalid")
+        current_date = str(raw.get("current_date") or "")
+        previous_date = raw.get("previous_date")
+        semantic = compare_reports(
+            raw.get("current_rows") or [],
+            raw.get("previous_rows"),
+            current_date=current_date,
+            previous_date=str(previous_date) if previous_date else None,
+        )
+        # Every market points at its own official Socrata row. A single shared
+        # dataset landing page would make Feed deduplication collapse all
+        # same-URL positioning items into one survivor.
+        dataset_url = "https://publicreporting.cftc.gov/resource/6dca-aqww"
+        published = publication_boundary(current_date)
+        items: list[dict[str, Any]] = []
+        for record in semantic:
+            item_id = stable_item_id(self.provider_id, record["stable_id"])
+            payload = record["payload"]
+            source = self._source(
+                source_id=f"cftc-{item_id}",
+                name="CFTC Commitments of Traders",
+                tier="Tier 1",
+                kind="positioning",
+                url=self._validate_url(f"{dataset_url}/{record['stable_id']}.json"),
+                published_at=published,
+                knowledge=published,
+            )
+            items.append(
+                {
+                    "id": item_id,
+                    "provider_id": self.provider_id,
+                    "source": source,
+                    "payload": payload,
+                }
+            )
+        return items
+
+    def _normalize_v1(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
         data = self._json_body(raw)
         if not isinstance(data, list):
             return []
@@ -357,10 +629,7 @@ class CftcAdapter(BaseAdapter):
                         "type": "positioning",
                         "instrument_id": str(instrument),
                         "as_of": as_of,
-                        "position": {
-                            "value": _canonical_number(value),
-                            "unit": "contracts",
-                        },
+                        "position": {"value": _canonical_number(value), "unit": "contracts"},
                         "raw_metadata": {
                             "report_date": as_of,
                             "publication_date": published,

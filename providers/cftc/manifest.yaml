@@ -3,7 +3,7 @@
 # Shipped production activation and minimum-one coverage are owned by
 # config/providers.yaml.
 
-contract_version: 1
+contract_version: 2
 provider_id: cftc
 name: CFTC COT
 source_family_id: cftc
@@ -58,7 +58,6 @@ identity:
   stable_record_id: report_date_plus_instrument
 
 units:
-  percent: percent
   contracts: contracts
 
 freshness:
@@ -66,11 +65,12 @@ freshness:
   reference_time: data_as_of
   valid_for_seconds: 604800
 
-empty_valid_for_window: true
-pagination: none
+empty_valid_for_window: false
+pagination: page_number
 default_enabled: true
 
 fixture_provenance:
-  source: "Official CFTC Public Reporting Environment Legacy Futures-Only API, verified 2026-08-11."
+  source: "Official CFTC Legacy Futures-Only dataset row shape verified 2026-09-15 (see source-verification.md); checked-in current and previous complete-report fixtures reproduce that shape with synthetic values."
   files:
-    - fixtures/cot.json
+    - fixtures/cot-current.json
+    - fixtures/cot-previous.json

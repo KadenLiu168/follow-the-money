@@ -39,7 +39,12 @@ filing
 
 Every artifact is required, including when empty. The required credential-free
 Providers are Federal Reserve, BLS, PBOC, NBS, SSE, SZSE, SEC EDGAR, and CFTC.
-CFTC is a required minimum-one weekly positioning coverage member.
+CFTC is a required minimum-one weekly positioning coverage member. SEC EDGAR
+v2 filing items expose typed company identity, filing-date unit normalization,
+current/previous holdings, and deterministic deltas. CFTC v2 positioning items
+expose market-code identity, typed current/previous metrics, deltas, and the
+explicit net-position derivation. These are evidence fields only; consumers do
+not infer market impact or direction.
 
 A validated previous eight-domain bundle may enter only the explicit bounded
 migration path. Normal loading and remote consumption reject the previous

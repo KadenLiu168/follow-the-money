@@ -207,6 +207,52 @@ def _write_bundle(root: Path, bundle) -> None:
         (root / artifact_relative_path(domain, bundle.run_id)).write_bytes(data)
 
 
+def test_v4_legacy_sec_and_cftc_items_remain_readable():
+    sec = {
+        "id": "legacy-sec",
+        "provider_id": "sec_edgar",
+        "source": {
+            "id": "legacy-sec-source",
+            "name": "SEC",
+            "tier": "Tier 1",
+            "kind": "filing",
+            "url": "https://www.sec.gov/Archives/edgar/data/0001067983/legacy.txt",
+            "published_at": _ts(T0 - timedelta(hours=1)),
+            "knowledge_available_at": _ts(T0 - timedelta(hours=1)),
+        },
+        "payload": {
+            "type": "filing",
+            "form": "13F-HR",
+            "company": "0001067983",
+            "accession_number": "legacy",
+            "filed_at": _ts(T0 - timedelta(hours=1)),
+            "raw_metadata": {},
+        },
+    }
+    cftc = {
+        "id": "legacy-cftc",
+        "provider_id": "cftc",
+        "source": {
+            "id": "legacy-cftc-source",
+            "name": "CFTC",
+            "tier": "Tier 1",
+            "kind": "positioning",
+            "url": "https://www.cftc.gov/legacy",
+            "published_at": _ts(T0 - timedelta(hours=1)),
+            "knowledge_available_at": _ts(T0 - timedelta(hours=1)),
+        },
+        "payload": {
+            "type": "positioning",
+            "instrument_id": "GOLD",
+            "as_of": _ts(T0 - timedelta(hours=1)),
+            "position": {"value": "1", "unit": "contracts"},
+            "raw_metadata": {},
+        },
+    }
+    feed = _feed([cftc, sec])
+    validate_feed(feed)
+
+
 def test_artifact_schema_is_closed_to_five_domains():
     artifact = {"schema_version": 2, "run_id": "run", "domain": "news", "items": [_news()]}
     validate_against("feed-artifact.schema.json", artifact)

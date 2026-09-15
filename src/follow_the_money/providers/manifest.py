@@ -19,7 +19,17 @@ from ..config.model import (
 )
 
 MANIFEST_ROOT = Path(__file__).resolve().parents[3] / "providers"
-SUPPORTED_CONTRACT_VERSION = 1
+# Provider contracts evolve independently while the logical Feed remains v4.
+SUPPORTED_CONTRACT_VERSIONS: dict[str, frozenset[int]] = {
+    "sec_edgar": frozenset({1, 2}),
+    "cftc": frozenset({1, 2}),
+    "federal_reserve": frozenset({1}),
+    "bls": frozenset({1}),
+    "pboc": frozenset({1}),
+    "nbs": frozenset({1}),
+    "sse": frozenset({1}),
+    "szse": frozenset({1}),
+}
 SUPPORTED_PAYLOAD_TYPES = frozenset({"news", "macro_release", "policy", "positioning", "filing"})
 IMPLEMENTED_PAYLOAD_TYPES = {
     "federal_reserve": frozenset({"policy"}),
@@ -217,8 +227,14 @@ def _validate_manifest(data: Mapping[str, Any], path: Path, provider_id: str) ->
     )
     if data["provider_id"] != provider_id:
         raise ManifestError(f"manifest {path}: provider_id mismatch")
-    if data["contract_version"] != SUPPORTED_CONTRACT_VERSION:
-        raise ManifestError(f"manifest {path}: unsupported contract_version")
+    version = data["contract_version"]
+    if isinstance(version, bool) or not isinstance(version, int):
+        raise ManifestError(f"manifest {path}: contract_version must be an integer")
+    supported = SUPPORTED_CONTRACT_VERSIONS.get(provider_id, frozenset())
+    if version not in supported:
+        raise ManifestError(
+            f"manifest {path}: unsupported contract_version {version} for {provider_id}"
+        )
     if data["protocol"] != "https":
         raise ManifestError(f"manifest {path}: protocol must be https")
     if not isinstance(data["authentication"], str) or data["authentication"].lower() not in {
@@ -323,6 +339,21 @@ def _validate_manifest(data: Mapping[str, Any], path: Path, provider_id: str) ->
         raise ManifestError(f"manifest {path}.fixture_provenance.files must be a list")
     if not isinstance(data["units"], dict):
         raise ManifestError(f"manifest {path}.units must be a mapping")
+    if version == 2 and provider_id == "sec_edgar":
+        expected_units = {
+            "13f_value_before_2023_01_03": "usd_thousands",
+            "13f_value_from_2023_01_03": "usd",
+            "reported_value_usd_thousands": "usd_thousands",
+        }
+        if data["units"] != expected_units:
+            raise ManifestError(f"manifest {path}: SEC v2 units are not the closed contract")
+    if version == 2 and provider_id == "cftc":
+        if data["units"] != {"contracts": "contracts"}:
+            raise ManifestError(f"manifest {path}: CFTC v2 units are not the closed contract")
+        if data["empty_valid_for_window"] is not False or data["pagination"] != "page_number":
+            raise ManifestError(
+                f"manifest {path}: CFTC v2 requires non-empty complete reports and page-number pagination"
+            )
     if not isinstance(data["empty_valid_for_window"], bool) or not isinstance(
         data["default_enabled"], bool
     ):

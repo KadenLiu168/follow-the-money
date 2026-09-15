@@ -2,7 +2,7 @@
 # Contract status: verified on 2026-08-11 against the public submissions JSON
 # contract and the checked-in fixture.
 
-contract_version: 1
+contract_version: 2
 provider_id: sec_edgar
 name: SEC EDGAR
 source_family_id: sec
@@ -12,8 +12,8 @@ verification:
   verification_date: "2026-08-11"
   contract_url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=13F"
   usage_note: >
-    Company filings (13F/13D/G, Form 4, etc.) for watched companies. Public
-    data; EDGAR requires a descriptive user agent with a contact identifier.
+    Exact 13F-HR company filings for watched companies. Public data; EDGAR
+    requires a descriptive user agent with a contact identifier.
     The submissions endpoint and archive source-link rules are verified.
 
 authentication: none
@@ -62,7 +62,10 @@ time:
 identity:
   stable_record_id: accession_number
 
-units: {}
+units:
+  13f_value_before_2023_01_03: usd_thousands
+  13f_value_from_2023_01_03: usd
+  reported_value_usd_thousands: usd_thousands
 
 freshness:
   cadence: event_driven
@@ -73,6 +76,9 @@ pagination: page_number
 default_enabled: true
 
 fixture_provenance:
-  source: "Recorded from live responses on 2026-08-11; fixture-backed adapter contract."
+  source: "Official SEC 13F rule is verified in source-verification.md; arithmetic fixtures are explicitly synthetic production-shaped fixtures."
   files:
     - fixtures/browse-13f.json
+    - fixtures/semantic-submissions.json
+    - fixtures/semantic-current.xml
+    - fixtures/semantic-previous.xml

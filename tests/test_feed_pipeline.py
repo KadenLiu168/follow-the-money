@@ -86,7 +86,7 @@ def test_all_eight_required_providers_can_satisfy_feed_coverage():
     assert warnings == []
 
 
-def test_permitted_empty_still_satisfies_required_coverage():
+def test_cftc_empty_does_not_satisfy_required_coverage():
     cfg = _cfg()
     outcomes = _outcomes("empty")
     status, warnings = assess_pipeline(
@@ -94,8 +94,8 @@ def test_permitted_empty_still_satisfies_required_coverage():
         planned_provider_ids=PROVIDERS,
         outcomes=outcomes,
     )
-    assert status == "healthy"
-    assert warnings == []
+    assert status == "failure"
+    assert any("cftc" in warning for warning in warnings)
 
 
 def test_cftc_is_required_and_blocked_exemption_is_degraded():

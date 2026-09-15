@@ -188,8 +188,13 @@ def _source_complete_cfg():
         manifest_root=REPO_ROOT / "providers",
         require_verified_enabled=False,
     )
+    # These tests exercise publication mechanics with stub Providers that
+    # retain no items. A complete SEC v2 outcome requires exactly one item per
+    # configured watched company, so the resolved selection is empty here: an
+    # empty watched set is the contract-permitted complete-empty SEC outcome.
     return replace(
         cfg,
+        watched_companies=(),
         providers=tuple(
             replace(provider, empty_valid_for_window=True) for provider in cfg.providers
         ),
@@ -543,18 +548,32 @@ def _accepted_item(provider_id: str, item_id: str) -> dict:
             "published_at": "2026-08-11T00:10:00Z",
             "knowledge_available_at": "2026-08-11T00:10:00Z",
         },
-        "payload": {
-            "type": "filing" if provider_id == "sec_edgar" else "policy",
-            "title": item_id,
-            "announced_at": "2026-08-11T00:10:00Z",
-            "raw_metadata": {},
-        },
+        "payload": (
+            {
+                "type": "filing",
+                "form": "13F-HR",
+                "company": "0001067983",
+                "accession_number": f"0001067983-26-{item_id}",
+                "filed_at": "2026-08-10T00:10:00Z",
+                "raw_metadata": {},
+            }
+            if provider_id == "sec_edgar"
+            else {
+                "type": "policy",
+                "title": item_id,
+                "announced_at": "2026-08-11T00:10:00Z",
+                "raw_metadata": {},
+            }
+        ),
     }
 
 
-def test_failed_provider_and_successful_provider_fail_with_both_causes(tmp_path):
+def test_failed_provider_and_successful_provider_fail_with_both_causes(tmp_path, monkeypatch):
+    from follow_the_money.feed import cli as feed_cli
+
     cfg = _source_complete_cfg()
     planned = _planned_provider_ids(cfg)
+    monkeypatch.setattr(feed_cli, "_load_app_config", lambda _path: cfg)
     registry = {
         provider_id: _OutcomeAdapter(
             items=[_accepted_item("federal_reserve", "accepted")]
@@ -579,6 +598,54 @@ def test_failed_provider_and_successful_provider_fail_with_both_causes(tmp_path)
         for warning in result.warnings
     )
     assert any("us_official_macro_policy" in warning for warning in result.warnings)
+
+
+def test_denial_after_partial_resource_progress_is_blocked_without_exemption(tmp_path, monkeypatch):
+    # A terminal 401/403 after a successful resource in the same unresolved
+    # acquisition unit is partial and non-exempt even with zero accepted and
+    # rejected items, and it must not fabricate counters.
+    from follow_the_money.feed import cli as feed_cli
+
+    cfg = _source_complete_cfg()
+    planned = _planned_provider_ids(cfg)
+    monkeypatch.setattr(feed_cli, "_load_app_config", lambda _path: cfg)
+    registry = {
+        provider_id: _OutcomeAdapter(
+            items=[]
+            if provider_id == "sec_edgar"
+            else [_accepted_item("federal_reserve", "accepted")]
+            if provider_id == "federal_reserve"
+            else [],
+            error=FetchError(
+                "HTTP 403 from data.sec.gov",
+                status_code=403,
+                retryable=False,
+                acquisition_progress=True,
+            )
+            if provider_id == "sec_edgar"
+            else None,
+        )
+        for provider_id in planned
+    }
+    out = tmp_path / "out"
+
+    result = run_feed(
+        output_root=str(out),
+        cutoff=_cutoff(),
+        dry_run=True,
+        providers_fn=lambda: registry,
+        enabled_provider_ids=planned,
+    )
+
+    outcome = next(o for o in result.feed["provider_outcomes"] if o["provider_id"] == "sec_edgar")
+    assert outcome["state"] == "partial"
+    assert outcome["availability"] == "blocked"
+    assert outcome["accepted"] == 0
+    assert outcome["rejected"] == 0
+    assert outcome["freshness"]["status"] == "not_evaluated"
+    assert result.status == "failure"
+    assert result.exit_code == 1
+    assert not (out / "feed-manifest.json").exists()
 
 
 def test_dry_run_late_result_after_retained_evidence_is_execution_failure(tmp_path):
@@ -653,19 +720,10 @@ def test_dry_run_provider_start_after_global_deadline_is_execution_failure(tmp_p
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
-def test_rate_state_failure_remains_execution_error_with_other_accepted_evidence(
-    tmp_path, monkeypatch
-):
-    from follow_the_money.feed import cli as feed_cli
-
-    original = feed_cli._ensure_scope_state
-
-    def fail_market_rate_state(rate, scope_id, cfg, now_fn):
-        if scope_id == "sec_edgar":
-            raise RateStateError("config invalid provider")
-        return original(rate, scope_id, cfg, now_fn)
-
-    monkeypatch.setattr(feed_cli, "_ensure_scope_state", fail_market_rate_state)
+def test_rate_state_failure_remains_execution_error_with_other_accepted_evidence(tmp_path):
+    # A durable rate-state failure surfaces out of the managed send boundary as
+    # ``RateStateError``. It must abort the run as an execution failure instead
+    # of degrading the Provider, even when another Provider accepted evidence.
     out = tmp_path / "out"
 
     with pytest.raises(FeedExecutionError, match="config invalid provider"):
@@ -676,7 +734,7 @@ def test_rate_state_failure_remains_execution_error_with_other_accepted_evidence
                 "federal_reserve": _OutcomeAdapter(
                     items=[_accepted_item("federal_reserve", "accepted")]
                 ),
-                "sec_edgar": _OutcomeAdapter(items=[_accepted_item("sec_edgar", "market")]),
+                "sec_edgar": _OutcomeAdapter(error=RateStateError("config invalid provider")),
             },
             enabled_provider_ids=["federal_reserve", "sec_edgar"],
         )
@@ -685,18 +743,15 @@ def test_rate_state_failure_remains_execution_error_with_other_accepted_evidence
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
-def test_rate_wait_beyond_deadline_is_execution_failure_with_other_accepted_evidence(
-    tmp_path, monkeypatch
-):
-    from follow_the_money.feed import cli as feed_cli
-
-    def delay_beyond_deadline(state, *, now):
-        return 10_000.0 if state.scope_id == "sec_edgar" else 0.0
-
-    monkeypatch.setattr(feed_cli, "eligibility_delay", delay_beyond_deadline)
+def test_rate_wait_beyond_deadline_leaves_provider_incomplete_without_publication(tmp_path):
+    # A rate wait that cannot fit before the pre-commit deadline is a typed
+    # non-retryable Provider failure: no send occurs and nothing publishes.
     out = tmp_path / "out"
+    adapter = _OutcomeAdapter(
+        error=FetchError("rate_not_eligible_before_deadline", retryable=False)
+    )
 
-    with pytest.raises(FeedExecutionError, match="rate_not_eligible_before_deadline"):
+    with pytest.raises(FeedExecutionError):
         run_feed(
             output_root=str(out),
             cutoff=_cutoff(),
@@ -704,11 +759,12 @@ def test_rate_wait_beyond_deadline_is_execution_failure_with_other_accepted_evid
                 "federal_reserve": _OutcomeAdapter(
                     items=[_accepted_item("federal_reserve", "accepted")]
                 ),
-                "sec_edgar": _OutcomeAdapter(items=[_accepted_item("sec_edgar", "market")]),
+                "sec_edgar": adapter,
             },
             enabled_provider_ids=["federal_reserve", "sec_edgar"],
         )
 
+    assert len(adapter.windows) == 1
     assert not (out / "feed-manifest.json").exists()
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
@@ -736,21 +792,11 @@ def test_retry_wait_beyond_deadline_is_execution_failure_with_other_accepted_evi
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 
 
-def test_rate_reconcile_failure_is_not_retried_as_provider_degradation(tmp_path, monkeypatch):
-    from follow_the_money.feed import cli as feed_cli
-
-    original = feed_cli.RateRegistry.reconcile
-    failed = False
-
-    def fail_market_reconcile_once(registry, state, **kwargs):
-        nonlocal failed
-        if state.scope_id == "sec_edgar" and not failed:
-            failed = True
-            raise RateStateError("provider unavailable during reconcile")
-        return original(registry, state, **kwargs)
-
-    monkeypatch.setattr(feed_cli.RateRegistry, "reconcile", fail_market_reconcile_once)
+def test_rate_reconcile_failure_is_not_retried_as_provider_degradation(tmp_path):
+    # A durable reconciliation failure must not become an ordinary retryable
+    # Provider failure: the attempt is not repeated and nothing publishes.
     out = tmp_path / "out"
+    adapter = _OutcomeAdapter(error=RateStateError("provider unavailable during reconcile"))
 
     with pytest.raises(FeedExecutionError, match="provider unavailable during reconcile"):
         run_feed(
@@ -760,12 +806,12 @@ def test_rate_reconcile_failure_is_not_retried_as_provider_degradation(tmp_path,
                 "federal_reserve": _OutcomeAdapter(
                     items=[_accepted_item("federal_reserve", "accepted")]
                 ),
-                "sec_edgar": _OutcomeAdapter(items=[_accepted_item("sec_edgar", "market")]),
+                "sec_edgar": adapter,
             },
             enabled_provider_ids=["federal_reserve", "sec_edgar"],
         )
 
-    assert failed
+    assert len(adapter.windows) == 1
     assert not (out / "feed-manifest.json").exists()
     assert not list((out / "daily").rglob("*.json")) if (out / "daily").exists() else True
 

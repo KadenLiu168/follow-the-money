@@ -23,12 +23,13 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from follow_the_money.canonical import canonical_digest
+from follow_the_money.config import load_config
 from follow_the_money.feed.bundle import MANIFEST_FILENAME, artifact_relative_path, validate_bundle
 from follow_the_money.feed.cli import run_feed as _run_feed
-from follow_the_money.providers.adapters import CftcAdapter, build_registry
+from follow_the_money.providers.adapters import CftcAdapter, SecEdgarAdapter, build_registry
 from follow_the_money.providers.http import FetchError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -71,19 +72,59 @@ class _FixtureClientBody:
         )
 
 
+class _SecFixtureClient:
+    def __init__(self, cik: str, name: str) -> None:
+        self.cik = cik
+        self.name = name
+        self.accession = f"{cik}-26-000001"
+
+    def get(self, url, headers=None, timeout=None, follow_redirects=True):
+        if "data.sec.gov" in url:
+            body = json.dumps(
+                {
+                    "cik": self.cik,
+                    "name": self.name,
+                    "tickers": [],
+                    "filings": {
+                        "recent": {
+                            "form": ["13F-HR"],
+                            "filingDate": ["2026-08-01"],
+                            "reportDate": ["2026-06-30"],
+                            "accessionNumber": [self.accession],
+                            "acceptanceDateTime": ["2026-08-01T12:00:00Z"],
+                            "primaryDocument": ["synthetic.xml"],
+                            "cik": [self.cik],
+                            "companyName": [self.name],
+                        }
+                    },
+                }
+            ).encode("utf-8")
+        else:
+            body = f"""<SEC-DOCUMENT><HEADER>CENTRAL INDEX KEY: {self.cik}\nACCESSION NUMBER: {self.accession}\nCONFORMED SUBMISSION TYPE: 13F-HR\nFILED AS OF DATE: 20260801</HEADER><XML><informationTable xmlns=\"http://www.sec.gov/edgar/document/thirteenf\"><infoTable><nameOfIssuer>Synthetic Issuer</nameOfIssuer><titleOfClass>Common Stock</titleOfClass><cusip>037833100</cusip><value>1234567</value><shrsOrPrnAmt><sshPrnamt>100</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt></infoTable></informationTable></XML></SEC-DOCUMENT>""".encode()
+        return SimpleNamespace(body_bytes=body, content=body, status_code=200, headers={}, url=url)
+
+
 class _CftcFixtureAdapter:
     """Production CftcAdapter served from the checked-in fixture."""
 
     provider_id = "cftc"
 
-    def __init__(self, inner: CftcAdapter, *, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        inner: CftcAdapter,
+        *,
+        error: Exception | None = None,
+        body: bytes | None = None,
+    ) -> None:
         self.inner = inner
         self.error = error
+        self.body = body
 
     def fetch(self, window, client=None):
         if self.error is not None:
             raise self.error
-        return self.inner.fetch(window, _FixtureClientBody(CFTC_FIXTURE.read_bytes()))
+        body = self.body if self.body is not None else CFTC_FIXTURE.read_bytes()
+        return self.inner.fetch(window, _FixtureClientBody(body))
 
     def normalize(self, raw, window):
         return self.inner.normalize(raw, window)
@@ -100,7 +141,9 @@ FIXTURE_BY_PROVIDER = {
 }
 
 
-def _fixture_registry(error: Exception | None = None) -> dict[str, Any]:
+def _fixture_registry(
+    error: Exception | None = None, *, cftc_body: bytes | None = None
+) -> dict[str, Any]:
     """Every enabled production provider, each served its checked-in fixture."""
     registry = build_registry()
     wrapped: dict[str, Any] = {}
@@ -108,7 +151,40 @@ def _fixture_registry(error: Exception | None = None) -> dict[str, Any]:
         inner = registry.get(pid)
 
         if pid == "cftc":
-            wrapped[pid] = _CftcFixtureAdapter(inner, error=error)
+            wrapped[pid] = _CftcFixtureAdapter(
+                cast(CftcAdapter, inner), error=error, body=cftc_body
+            )
+            continue
+        if pid == "sec_edgar":
+
+            class _SecFixtureServed:
+                provider_id = "sec_edgar"
+
+                def __init__(self, adapter) -> None:
+                    self.adapter = adapter
+
+                def fetch(self, window, client=None):
+                    company = self.adapter._watched_company
+                    return self.adapter.fetch(
+                        window,
+                        _SecFixtureClient(company.cik, f"Synthetic {company.cik}"),
+                    )
+
+                def normalize(self, raw, window):
+                    return self.adapter.normalize(raw, window)
+
+            cfg = load_config(
+                REPO_ROOT / "config" / "config.yaml",
+                REPO_ROOT / "config" / "providers.yaml",
+                manifest_root=REPO_ROOT / "providers",
+                require_verified_enabled=True,
+            )
+            wrapped[pid] = [
+                _SecFixtureServed(
+                    SecEdgarAdapter(cast(SecEdgarAdapter, inner)._contract, watched_company=company)
+                )
+                for company in cfg.watched_companies
+            ]
             continue
 
         class _FixtureServed:
@@ -164,7 +240,11 @@ def _assert_weekly_cadence_provenance(manifest: dict[str, Any]) -> None:
     assert snapshot["tier"] == "Tier 1"
     assert snapshot["source_family_id"] == "cftc"
     assert snapshot["authentication"] == "none"
+    assert snapshot["contract_version"] == 2
     assert snapshot["payload_types"] == ["positioning"]
+    assert snapshot["pagination"] == "page_number"
+    assert snapshot["empty_valid_for_window"] is False
+    assert snapshot["units"] == {"contracts": "contracts"}
     assert snapshot["freshness"] == {
         "cadence": "weekly",
         "reference_time": "data_as_of",
@@ -184,6 +264,19 @@ def test_new_cftc_report_publishes_only_in_positioning_artifact(tmp_path):
     assert result.exit_code == 0
     assert result.status == "healthy"
     manifest = _manifest(output)
+    feed = _feed(output)
+    sec_contract = next(
+        c for c in manifest["provider_contracts"] if c["provider_id"] == "sec_edgar"
+    )
+    assert sec_contract["snapshot"]["contract_version"] == 2
+    assert sec_contract["snapshot"]["units"] == {
+        "13f_value_before_2023_01_03": "usd_thousands",
+        "13f_value_from_2023_01_03": "usd",
+        "reported_value_usd_thousands": "usd_thousands",
+    }
+    sec_items = [item for item in feed["items"] if item["provider_id"] == "sec_edgar"]
+    assert len(sec_items) == 8
+    assert all("holdings" in item["payload"] for item in sec_items)
 
     # The CFTC item is inventoried only in the typed positioning artifact.
     inventory = {entry["domain"]: entry for entry in manifest["artifacts"]}
@@ -193,7 +286,7 @@ def test_new_cftc_report_publishes_only_in_positioning_artifact(tmp_path):
             encoding="utf-8"
         )
     )
-    assert [item["id"] for item in artifact["items"]] == [_cftc_item(_feed(output))["id"]]
+    assert [item["id"] for item in artifact["items"]] == [_cftc_item(feed)["id"]]
     for domain, entry in inventory.items():
         if domain == "positioning":
             continue
@@ -214,8 +307,17 @@ def test_new_cftc_report_publishes_only_in_positioning_artifact(tmp_path):
     _assert_weekly_cadence_provenance(manifest)
 
     # Original source-semantic timestamps are preserved verbatim.
-    item = _cftc_item(_feed(output))
+    item = _cftc_item(feed)
     assert item["payload"]["type"] == "positioning"
+    assert item["payload"]["market_identity"] == {
+        "cftc_contract_market_code": "088691",
+        "contract_market_name": "GOLD",
+    }
+    assert item["payload"]["current_metrics"]["net_noncommercial"] == {
+        "value": "46913",
+        "unit": "contracts",
+    }
+    assert item["payload"]["comparison"]["status"] == "unavailable"
     assert item["payload"]["as_of"] == EXPECTED_AS_OF
     assert item["source"]["published_at"] == EXPECTED_PUBLISHED
     assert item["source"]["knowledge_available_at"] == EXPECTED_PUBLISHED
@@ -262,6 +364,46 @@ def test_no_new_cftc_report_carries_prior_slice_unchanged(tmp_path):
     assert second_manifest["generated_at"] != first_manifest["generated_at"]
 
 
+def test_corrected_same_date_cftc_report_removes_market_without_carry(tmp_path):
+    # Both SEC/CFTC v2 slices are complete current-state slices, so carry
+    # forward requires equal identity sets. A corrected same-date report that
+    # drops a market while leaving the remaining item byte-identical must
+    # replace the whole slice instead of carrying the removed market back.
+    output = tmp_path / "out"
+    fixture_dir = REPO_ROOT / "providers" / "cftc" / "fixtures"
+    rows = json.loads((fixture_dir / "cot-current.json").read_text(encoding="utf-8"))
+    silver = [row for row in rows if row["cftc_contract_market_code"] == "084691"]
+    assert len(silver) == 1 and len(rows) == 2
+
+    first = run_feed(
+        output_root=str(output),
+        cutoff=CUTOFF_1,
+        providers_fn=lambda: _fixture_registry(cftc_body=json.dumps(rows).encode()),
+    )
+    assert first.exit_code == 0
+    first_cftc = {
+        item["id"]: item for item in _feed(output)["items"] if item["provider_id"] == "cftc"
+    }
+    assert len(first_cftc) == 2
+
+    second = run_feed(
+        output_root=str(output),
+        cutoff=CUTOFF_2,
+        providers_fn=lambda: _fixture_registry(cftc_body=json.dumps(silver).encode()),
+    )
+    assert second.exit_code == 0
+    second_items = _feed(output)["items"]
+    second_cftc = {item["id"]: item for item in second_items if item["provider_id"] == "cftc"}
+
+    assert len(second_cftc) == 1
+    (survivor_id, survivor) = next(iter(second_cftc.items()))
+    assert survivor == first_cftc[survivor_id]
+    assert second_cftc.keys() < first_cftc.keys()
+    outcome = _cftc_outcome(_manifest(output))
+    assert outcome["freshness"]["status"] != "valid_unchanged"
+    assert outcome["freshness"]["carried_forward_from_run_id"] is None
+
+
 # ---------------------------------------------------------------------------
 # Acquisition failure with a prior valid snapshot
 # ---------------------------------------------------------------------------
@@ -283,6 +425,7 @@ def test_cftc_failure_keeps_incomplete_outcome_and_active_bundle(tmp_path):
     # command fails; the prior slice does not substitute for success.
     assert second.status == "failure"
     assert second.exit_code == 1
+    assert second.feed is not None
     outcome = _cftc_outcome(second.feed)
     assert outcome["state"] == "failed"
     assert outcome["freshness"]["status"] == "not_evaluated"

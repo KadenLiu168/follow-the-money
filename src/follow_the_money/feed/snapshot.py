@@ -61,8 +61,11 @@ def load_active_feed(product_root: Path) -> dict[str, Any] | None:
         snapshot = contracts.get(provider_id)
         if not isinstance(snapshot, Mapping):
             return None
+        empty_valid_for_window = snapshot.get("empty_valid_for_window")
         complete = outcome.get("state") == "healthy" or (
-            outcome.get("state") == "empty" and snapshot.get("empty_valid_for_window") is True
+            outcome.get("state") == "empty"
+            and isinstance(empty_valid_for_window, bool)
+            and empty_valid_for_window
         )
         blocked_exempt = (
             outcome.get("availability") == "blocked"
@@ -129,6 +132,7 @@ def select_provider_slices(
     empty_valid_for_window: Mapping[str, bool],
     evidence_cutoff_at: str,
     strict_identity_provider_ids: Sequence[str] | None = None,
+    complete_state_provider_ids: Sequence[str] | None = None,
 ) -> SnapshotSelection:
     """Select one bounded current/prior slice per Provider deterministically."""
     current_by_provider: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -176,6 +180,7 @@ def select_provider_slices(
         if strict_identity_provider_ids is not None
         else set(outcomes)
     )
+    complete_state_ids = set(complete_state_provider_ids or ())
     selected: list[dict[str, Any]] = []
     for provider_id in sorted(outcomes):
         outcome = outcomes[provider_id]
@@ -218,6 +223,19 @@ def select_provider_slices(
             item.get("id") not in prior_by_id or not _same_item(item, prior_by_id[item.get("id")])
             for item in current
         )
+        if provider_id in complete_state_ids:
+            # SEC/CFTC v2 are complete current-state slices. A removed or
+            # added identity must replace the whole slice; subset matching is
+            # valid only for legacy event-list Providers.
+            changed = changed or current_ids != set(prior_by_id)
+            if not current:
+                outcome.freshness = _freshness_record(
+                    contract=contract,
+                    status="no_snapshot",
+                    origin_contract_hash=None,
+                    carried_forward_from_run_id=None,
+                )
+                continue
         current_hash = current_contract_hashes.get(provider_id)
         if changed or (current and not prior):
             selected.extend(current)

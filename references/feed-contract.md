@@ -27,9 +27,12 @@ identity-invalid state is not consumable.
 The Feed's fixed half-open window, `evidence_cutoff_at`, `run_id`, and
 `content_digest` are authoritative. Payload observation/effective time, source
 publication/update time, Provider retrieval/check time, and Feed generation time
-remain distinct. Every item retains traceable source provenance. The Feed is
-deterministic, credential-free, and evidence-only; it contains no financial
-interpretation or Agent runtime.
+remain distinct. Every item retains traceable source provenance. SEC filing
+items may carry typed company identity, filing-date unit normalization, and
+current/previous holdings; CFTC positioning items may carry typed market
+identity, metrics, deltas, and an explicit arithmetic derivation. These remain
+evidence-only and do not express direction, impact, ranking, or recommendations.
+The Feed is deterministic, credential-free, and contains no Agent runtime.
 
 ## Freshness and degradation
 

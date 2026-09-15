@@ -128,6 +128,10 @@ class ProviderOutcome:
     affected_coverage_groups: tuple[str, ...] = ()
     execution_failure: bool = False
     non_permitted_empty_observed: bool = False
+    # Internal acquisition lifecycle facts; they are deliberately not
+    # serialized as new public outcome fields.
+    partial_resource_observed: bool = False
+    terminal_incomplete: bool = False
 
     @property
     def resolved_availability(self) -> str:

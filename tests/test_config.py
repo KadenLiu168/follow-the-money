@@ -159,10 +159,42 @@ def test_provider_coverage_must_name_known_members(tmp_path: Path):
         _load(config, providers, manifests)
 
 
+def test_v2_manifest_units_and_pagination_are_closed(tmp_path: Path):
+    config, providers, manifests = _copy_contracts(tmp_path)
+    sec_path = manifests / "sec_edgar" / "manifest.yaml"
+    sec = _yaml(sec_path)
+    sec["units"]["unexpected"] = "usd"
+    _write(sec_path, sec)
+    with pytest.raises(ConfigError, match="SEC v2 units"):
+        _load(config, providers, manifests)
+
+    cftc_root = tmp_path / "cftc"
+    cftc_root.mkdir()
+    config, providers, manifests = _copy_contracts(cftc_root)
+    cftc_path = manifests / "cftc" / "manifest.yaml"
+    cftc = _yaml(cftc_path)
+    cftc["pagination"] = "none"
+    _write(cftc_path, cftc)
+    with pytest.raises(ConfigError, match="page-number"):
+        _load(config, providers, manifests)
+
+
+def test_supported_contract_versions_are_explicit_and_bounded():
+    from follow_the_money.providers.manifest import SUPPORTED_CONTRACT_VERSIONS
+
+    assert SUPPORTED_CONTRACT_VERSIONS["sec_edgar"] == frozenset({1, 2})
+    assert SUPPORTED_CONTRACT_VERSIONS["cftc"] == frozenset({1, 2})
+    assert all(
+        versions == frozenset({1})
+        for provider_id, versions in SUPPORTED_CONTRACT_VERSIONS.items()
+        if provider_id not in {"sec_edgar", "cftc"}
+    )
+
+
 def test_config_snapshot_has_no_runtime_root_or_removed_surface():
     cfg = _load()
     from follow_the_money.feed.cli import _feed_config_snapshot
 
     snapshot = _feed_config_snapshot(cfg)["snapshot"]
     assert "runtime_state_root" not in snapshot
-    assert set(snapshot) == {"name", "feed", "coverage"}
+    assert set(snapshot) == {"name", "feed", "coverage", "watched_companies"}

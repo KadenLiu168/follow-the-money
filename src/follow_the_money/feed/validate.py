@@ -30,6 +30,7 @@ import itertools
 import re
 from collections.abc import Mapping
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from ..canonical import canonical_digest
@@ -93,6 +94,10 @@ _FORBIDDEN_INTELLIGENCE_KEYS = {
     "signal",
     "recommendation",
 }
+
+
+def _is_true(value: Any) -> bool:
+    return isinstance(value, bool) and value
 
 
 def _parse_ts(value: str, where: str) -> datetime:
@@ -160,6 +165,7 @@ def validate_feed(feed: Mapping[str, Any], *, allow_previous: bool = False) -> N
         _validate_availability_outcomes(feed)
     if schema_version == SUPPORTED_FEED_MAJOR:
         _validate_five_domain_surface(feed)
+        _validate_versioned_semantics(feed)
     _validate_freshness_outcomes(feed)
 
     window = feed["window"]
@@ -245,6 +251,15 @@ def _validate_five_domain_surface(feed: Mapping[str, Any]) -> None:
         provider_id = entry.get("provider_id") if isinstance(entry, Mapping) else None
         if not isinstance(provider_id, str) or not isinstance(snapshot, Mapping):
             raise SchemaError(f"provider_contracts[{index}] is invalid")
+        version = snapshot.get("contract_version", 1)
+        if isinstance(version, bool) or not isinstance(version, int):
+            raise SchemaError(f"provider_contracts[{index}] contract_version is invalid")
+        from ..providers.manifest import SUPPORTED_CONTRACT_VERSIONS
+
+        if version not in SUPPORTED_CONTRACT_VERSIONS.get(provider_id, frozenset()):
+            raise SchemaError(
+                f"provider_contracts[{index}] unsupported contract version for {provider_id!r}"
+            )
         payload_types = snapshot.get("payload_types")
         if (
             not isinstance(payload_types, list)
@@ -323,6 +338,446 @@ def _validate_five_domain_surface(feed: Mapping[str, Any]) -> None:
             raise SchemaError(f"items[{index}] is outside its Provider payload contract")
 
 
+def _decimal(value: Any, *, where: str, unit: str | None = None) -> Decimal:
+    if not isinstance(value, Mapping) or not isinstance(value.get("value"), str):
+        raise SchemaError(f"{where}: typed canonical numeric value is required")
+    if unit is not None and value.get("unit") != unit:
+        raise SchemaError(f"{where}: unit must be {unit!r}")
+    validate_canonical_numeric(value["value"], where=f"{where}.value")
+    try:
+        number = Decimal(value["value"])
+    except InvalidOperation as exc:
+        raise SchemaError(f"{where}: numeric value is invalid") from exc
+    if not number.is_finite():
+        raise SchemaError(f"{where}: numeric value is not finite")
+    return number
+
+
+def _semantic_key(value: Mapping[str, Any]) -> tuple[str, str, str]:
+    security = value["security"]
+    return (
+        security["cusip"],
+        security["put_call"] or "",
+        security["amount_type"],
+    )
+
+
+def _validate_value_normalization(
+    descriptor: Any, filing_date: Any, units: Mapping[str, Any], where: str
+) -> None:
+    if not isinstance(descriptor, Mapping):
+        raise SchemaError(f"{where}: value_normalization is required")
+    source_unit = descriptor.get("source_unit")
+    formula_id = descriptor.get("formula_id")
+    expected = (
+        ("usd_thousands", "identity")
+        if filing_date < "2023-01-03"
+        else ("usd", "usd_divided_by_1000")
+    )
+    if (source_unit, formula_id) != expected:
+        raise SchemaError(f"{where}: value normalization does not match official filing date")
+    expected_unit = "usd_thousands" if source_unit == "usd_thousands" else "usd"
+    if (
+        units.get(
+            "13f_value_before_2023_01_03"
+            if filing_date < "2023-01-03"
+            else "13f_value_from_2023_01_03"
+        )
+        != expected_unit
+        or units.get("reported_value_usd_thousands") != "usd_thousands"
+    ):
+        raise SchemaError(f"{where}: SEC v2 unit contract is inconsistent")
+
+
+def _validate_sec_values(value: Any, *, where: str, nonnegative: bool) -> None:
+    if not isinstance(value, Mapping):
+        raise SchemaError(f"{where}: holding values must be an object")
+    for field, expected_unit in (
+        ("reported_amount", "shares"),
+        ("reported_value_usd_thousands", "usd_thousands"),
+    ):
+        number = _decimal(value.get(field), where=f"{where}.{field}", unit=expected_unit)
+        if nonnegative and number < 0:
+            raise SchemaError(f"{where}.{field}: source value must be nonnegative")
+
+
+def _validate_sec_v2_item(
+    item: Mapping[str, Any], *, cutoff: datetime, units: Mapping[str, Any], where: str
+) -> None:
+    payload = item.get("payload")
+    if not isinstance(payload, Mapping):
+        raise SchemaError(f"{where}: filing payload is invalid")
+    identity = payload.get("company_identity")
+    if (
+        not isinstance(identity, Mapping)
+        or not isinstance(identity.get("cik"), str)
+        or not re.fullmatch(r"\d{10}", identity["cik"])
+        or not identity.get("name")
+    ):
+        raise SchemaError(f"{where}: official company identity is required")
+    if payload.get("company") != identity["cik"] or payload.get("form") != "13F-HR":
+        raise SchemaError(f"{where}: SEC company/form identity is invalid")
+    report_period = payload.get("report_period")
+    filed_at = payload.get("filed_at")
+    accepted_at = payload.get("accepted_at")
+    if not isinstance(report_period, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", report_period):
+        raise SchemaError(f"{where}: report_period is invalid")
+    if not isinstance(filed_at, str) or not isinstance(accepted_at, str):
+        raise SchemaError(f"{where}: filing dates are required")
+    filed_dt = _parse_ts(filed_at, f"{where}.filed_at")
+    accepted_dt = _parse_ts(accepted_at, f"{where}.accepted_at")
+    if accepted_dt >= cutoff:
+        raise SchemaError(f"{where}: accepted_at must precede evidence cutoff")
+    _validate_value_normalization(
+        payload.get("value_normalization"),
+        filed_dt.date().isoformat(),
+        units,
+        f"{where}.value_normalization",
+    )
+    comparison = payload.get("comparison")
+    holdings = payload.get("holdings")
+    if not isinstance(comparison, Mapping) or not isinstance(holdings, list):
+        raise SchemaError(f"{where}: SEC v2 comparison and holdings are required")
+    if comparison.get("status") not in {"available", "unavailable"}:
+        raise SchemaError(f"{where}.comparison.status is invalid")
+    has_previous = comparison["status"] == "available"
+    previous_fields = (
+        "previous_accession_number",
+        "previous_report_period",
+        "previous_accepted_at",
+        "previous_filed_at",
+        "previous_source_url",
+        "previous_value_normalization",
+    )
+    for field_name in previous_fields:
+        value = comparison.get(field_name)
+        if has_previous and value is None:
+            raise SchemaError(f"{where}.comparison.{field_name} is required when available")
+        if not has_previous and value is not None:
+            raise SchemaError(f"{where}.comparison.{field_name} must be null when unavailable")
+    if has_previous:
+        if comparison.get("reason") is not None:
+            raise SchemaError(f"{where}.comparison.reason must be null when available")
+        if comparison["previous_report_period"] == report_period:
+            raise SchemaError(f"{where}: previous report period must differ")
+        previous_filed = _parse_ts(
+            comparison["previous_filed_at"], f"{where}.comparison.previous_filed_at"
+        )
+        _validate_value_normalization(
+            comparison["previous_value_normalization"],
+            previous_filed.date().isoformat(),
+            units,
+            f"{where}.comparison.previous_value_normalization",
+        )
+    elif comparison.get("reason") != "no_previous_comparable_filing":
+        raise SchemaError(f"{where}.comparison.reason is invalid")
+
+    current_keys: set[tuple[str, str, str]] = set()
+    ordered_keys: list[tuple[str, str, str]] = []
+    for index, row in enumerate(holdings):
+        if not isinstance(row, Mapping) or not isinstance(row.get("security"), Mapping):
+            raise SchemaError(f"{where}.holdings[{index}] is invalid")
+        key = _semantic_key(row)
+        if not re.fullmatch(r"[0-9A-Z*@#]{9}", key[0]):
+            raise SchemaError(f"{where}.holdings[{index}].security.cusip is invalid")
+        if ordered_keys and key <= ordered_keys[-1]:
+            raise SchemaError(f"{where}.holdings are not ordered by canonical security key")
+        ordered_keys.append(key)
+        current = row.get("current")
+        previous = row.get("previous")
+        delta = row.get("delta")
+        change = row.get("change_type")
+        if current is not None:
+            _validate_sec_values(
+                current, where=f"{where}.holdings[{index}].current", nonnegative=True
+            )
+            current_keys.add(key)
+        if previous is not None:
+            _validate_sec_values(
+                previous, where=f"{where}.holdings[{index}].previous", nonnegative=True
+            )
+        if delta is not None:
+            _validate_sec_values(delta, where=f"{where}.holdings[{index}].delta", nonnegative=False)
+        if not has_previous:
+            if previous is not None or delta is not None or change is not None:
+                raise SchemaError(
+                    f"{where}.holdings[{index}] has comparison data without a previous filing"
+                )
+            continue
+        if current is None and previous is None:
+            raise SchemaError(f"{where}.holdings[{index}] has no current or previous side")
+        if current is None:
+            if delta is not None or change != "no_longer_reported":
+                raise SchemaError(f"{where}.holdings[{index}] previous-only semantics are invalid")
+        elif previous is None:
+            if delta is not None or change != "new":
+                raise SchemaError(f"{where}.holdings[{index}] current-only semantics are invalid")
+        else:
+            if not isinstance(delta, Mapping):
+                raise SchemaError(f"{where}.holdings[{index}] matched delta is required")
+            amount_delta = _decimal(
+                delta["reported_amount"], where=f"{where}.holdings[{index}].delta.reported_amount"
+            )
+            value_delta = _decimal(
+                delta["reported_value_usd_thousands"],
+                where=f"{where}.holdings[{index}].delta.reported_value_usd_thousands",
+                unit="usd_thousands",
+            )
+            current_amount = _decimal(
+                current["reported_amount"],
+                where=f"{where}.holdings[{index}].current.reported_amount",
+            )
+            previous_amount = _decimal(
+                previous["reported_amount"],
+                where=f"{where}.holdings[{index}].previous.reported_amount",
+            )
+            current_value = _decimal(
+                current["reported_value_usd_thousands"],
+                where=f"{where}.holdings[{index}].current.reported_value_usd_thousands",
+                unit="usd_thousands",
+            )
+            previous_value = _decimal(
+                previous["reported_value_usd_thousands"],
+                where=f"{where}.holdings[{index}].previous.reported_value_usd_thousands",
+                unit="usd_thousands",
+            )
+            if (
+                amount_delta != current_amount - previous_amount
+                or value_delta != current_value - previous_value
+            ):
+                raise SchemaError(f"{where}.holdings[{index}] delta is not current minus previous")
+            if amount_delta > 0:
+                expected_change = "increased"
+            elif amount_delta < 0:
+                expected_change = "decreased"
+            else:
+                expected_change = "unchanged"
+            if change != expected_change:
+                raise SchemaError(f"{where}.holdings[{index}] change_type must use reported amount")
+    if not has_previous and current_keys != set(ordered_keys):
+        raise SchemaError(f"{where}: unavailable comparison has invalid current holdings")
+
+
+def _validate_cftc_metrics(
+    value: Any, *, where: str, nonnegative_components: bool
+) -> dict[str, Decimal]:
+    if not isinstance(value, Mapping):
+        raise SchemaError(f"{where}: CFTC metrics are required")
+    fields = (
+        "noncommercial_long",
+        "noncommercial_short",
+        "noncommercial_spreading",
+        "open_interest",
+        "net_noncommercial",
+    )
+    values: dict[str, Decimal] = {}
+    for field in fields:
+        number = _decimal(value.get(field), where=f"{where}.{field}", unit="contracts")
+        if nonnegative_components and field != "net_noncommercial" and number < 0:
+            raise SchemaError(f"{where}.{field}: source metric must be nonnegative")
+        values[field] = number
+    if values["net_noncommercial"] != values["noncommercial_long"] - values["noncommercial_short"]:
+        raise SchemaError(f"{where}.net_noncommercial derivation is invalid")
+    return values
+
+
+def _validate_cftc_v2_item(item: Mapping[str, Any], *, where: str) -> str:
+    payload = item.get("payload")
+    if not isinstance(payload, Mapping):
+        raise SchemaError(f"{where}: positioning payload is invalid")
+    identity = payload.get("market_identity")
+    if (
+        not isinstance(identity, Mapping)
+        or not isinstance(identity.get("cftc_contract_market_code"), str)
+        or not identity["cftc_contract_market_code"].strip()
+    ):
+        raise SchemaError(f"{where}: market identity is required")
+    code = identity["cftc_contract_market_code"]
+    name = identity.get("contract_market_name")
+    if not isinstance(name, str) or not name.strip():
+        raise SchemaError(f"{where}: contract market name is required")
+    current = _validate_cftc_metrics(
+        payload.get("current_metrics"),
+        where=f"{where}.current_metrics",
+        nonnegative_components=True,
+    )
+    position = _decimal(payload.get("position"), where=f"{where}.position", unit="contracts")
+    if position != current["noncommercial_long"]:
+        raise SchemaError(f"{where}.position must equal current noncommercial long")
+    raw_as_of = payload.get("as_of")
+    if not isinstance(raw_as_of, str):
+        raise SchemaError(f"{where}.as_of is invalid")
+    as_of = _parse_ts(raw_as_of, f"{where}.as_of")
+    previous = payload.get("previous_metrics")
+    delta = payload.get("delta_metrics")
+    comparison = payload.get("comparison")
+    if not isinstance(comparison, Mapping) or comparison.get("status") not in {
+        "available",
+        "unavailable",
+    }:
+        raise SchemaError(f"{where}.comparison is invalid")
+    if (
+        payload.get("derivations", {}).get("net_noncommercial", {}).get("formula_id")
+        != "noncommercial_long_minus_short"
+    ):
+        raise SchemaError(f"{where}: net derivation descriptor is invalid")
+    if comparison["status"] == "unavailable":
+        expected_reason = (
+            "market_absent_from_previous_report"
+            if comparison.get("previous_as_of") is not None
+            else "no_previous_comparable_report"
+        )
+        if previous is not None or delta is not None or comparison.get("reason") != expected_reason:
+            raise SchemaError(f"{where}: unavailable CFTC comparison is invalid")
+    else:
+        previous_values = _validate_cftc_metrics(
+            previous, where=f"{where}.previous_metrics", nonnegative_components=True
+        )
+        delta_values = _validate_cftc_metrics(
+            delta, where=f"{where}.delta_metrics", nonnegative_components=False
+        )
+        for field in current:
+            if delta_values[field] != current[field] - previous_values[field]:
+                raise SchemaError(f"{where}.delta_metrics.{field} is not current minus previous")
+        if comparison.get("reason") is not None or comparison.get("previous_as_of") is None:
+            raise SchemaError(f"{where}.comparison available fields are invalid")
+        if _parse_ts(comparison["previous_as_of"], f"{where}.comparison.previous_as_of") >= as_of:
+            raise SchemaError(f"{where}.comparison.previous_as_of must precede current as_of")
+    return code
+
+
+def _validate_versioned_semantics(feed: Mapping[str, Any]) -> None:
+    contracts: dict[str, Mapping[str, Any]] = {}
+    for entry in feed.get("provider_contracts", []):
+        if not isinstance(entry, Mapping):
+            continue
+        provider_id = entry.get("provider_id")
+        snapshot = entry.get("snapshot")
+        if not isinstance(provider_id, str) or not isinstance(snapshot, Mapping):
+            continue
+        contracts[provider_id] = snapshot
+    semantic_fields = {
+        "sec_edgar": {
+            "company_identity",
+            "report_period",
+            "accepted_at",
+            "value_normalization",
+            "comparison",
+            "holdings",
+        },
+        "cftc": {
+            "market_identity",
+            "current_metrics",
+            "previous_metrics",
+            "delta_metrics",
+            "comparison",
+            "derivations",
+        },
+    }
+    cutoff = _parse_ts(feed["evidence_cutoff_at"], "evidence_cutoff_at")
+    items_by_provider: dict[str, list[Mapping[str, Any]]] = {}
+    for item in feed.get("items", []):
+        if isinstance(item, Mapping) and isinstance(item.get("provider_id"), str):
+            items_by_provider.setdefault(item["provider_id"], []).append(item)
+    # A Provider embedding a v2 contract must satisfy its contract-level
+    # requirements even when the run retained no items for it; otherwise a
+    # blocked-exempt or empty SEC/CFTC outcome would skip them entirely.
+    v2_provider_ids = {
+        provider_id
+        for provider_id, contract in contracts.items()
+        if contract.get("contract_version") == 2
+    }
+    for provider_id in sorted(set(items_by_provider) | v2_provider_ids):
+        items = items_by_provider.get(provider_id, [])
+        contract = contracts[provider_id]
+        version = contract.get("contract_version", 1)
+        if version == 1 and provider_id in semantic_fields:
+            for item in items:
+                payload = item.get("payload", {})
+                if isinstance(payload, Mapping) and semantic_fields[provider_id].intersection(
+                    payload
+                ):
+                    raise SchemaError(f"{provider_id} v1 item contains v2 semantic fields")
+        if version != 2:
+            continue
+        if provider_id == "sec_edgar":
+            units = contract.get("units")
+            if not isinstance(units, Mapping) or set(units) != {
+                "13f_value_before_2023_01_03",
+                "13f_value_from_2023_01_03",
+                "reported_value_usd_thousands",
+            }:
+                raise SchemaError("SEC v2 unit contract is missing or not closed")
+            ciks: list[str] = []
+            for item in items:
+                _validate_sec_v2_item(
+                    item, cutoff=cutoff, units=units, where=f"items[{item.get('id')!r}]"
+                )
+                ciks.append(item["payload"]["company_identity"]["cik"])
+            if len(ciks) != len(set(ciks)):
+                raise SchemaError("SEC v2 company CIKs are not unique")
+            config = feed.get("feed_config", {}).get("snapshot", {})
+            watched = config.get("watched_companies") if isinstance(config, Mapping) else None
+            if not isinstance(watched, list) or any(
+                not isinstance(row, Mapping) for row in watched
+            ):
+                raise SchemaError(
+                    "SEC v2 requires watched_companies in feed configuration snapshot"
+                )
+            watched_ciks = [row.get("cik") for row in watched]
+            if any(not isinstance(cik, str) or not cik for cik in watched_ciks):
+                raise SchemaError("SEC v2 watched company CIK is invalid")
+            outcome: Mapping[str, Any] = next(
+                (
+                    o
+                    for o in feed.get("provider_outcomes", [])
+                    if o.get("provider_id") == "sec_edgar"
+                ),
+                {},
+            )
+            watched_cik_set = set(watched_ciks)
+            if not set(ciks).issubset(watched_cik_set):
+                raise SchemaError("SEC v2 item CIK is outside watched companies")
+            complete = outcome.get("state") == "healthy" or (
+                outcome.get("state") == "empty" and _is_true(contract.get("empty_valid_for_window"))
+            )
+            if complete and set(ciks) != watched_cik_set:
+                raise SchemaError("SEC v2 complete slice does not equal watched CIK set")
+        elif provider_id == "cftc":
+            if not isinstance(contract.get("units"), Mapping) or contract.get("units") != {
+                "contracts": "contracts"
+            }:
+                raise SchemaError("CFTC v2 unit contract is missing or not closed")
+            keys: list[str] = []
+            for item in items:
+                keys.append(_validate_cftc_v2_item(item, where=f"items[{item.get('id')!r}]"))
+            if len(keys) != len(set(keys)):
+                raise SchemaError("CFTC v2 market codes are not unique")
+    # ``status`` is valid inside typed comparison objects; the top-level
+    # check above still rejects it as an item payload field.
+    forbidden = (_FORBIDDEN_INTELLIGENCE_KEYS - {"status"}) | {
+        "bullish",
+        "bearish",
+        "crowded",
+        "risk_on",
+        "risk_off",
+        "prediction",
+    }
+
+    def scan(value: Any) -> None:
+        if isinstance(value, Mapping):
+            for key, child in value.items():
+                if key in forbidden:
+                    raise SchemaError(f"intelligence field {key!r} rejected in semantic payload")
+                scan(child)
+        elif isinstance(value, list):
+            for child in value:
+                scan(child)
+
+    for item in feed.get("items", []):
+        scan(item.get("payload", {}))
+
+
 def _is_blocked_exempt(outcome: Mapping[str, Any]) -> bool:
     return (
         outcome.get("availability") == "blocked"
@@ -399,8 +854,8 @@ def _validate_availability_outcomes(feed: Mapping[str, Any]) -> None:
                 f"provider_outcomes[{index}].upstream_http_status requires retrieved_at"
             )
         snapshot = contracts.get(provider_id)
-        empty_permitted = (
-            isinstance(snapshot, Mapping) and snapshot.get("empty_valid_for_window") is True
+        empty_permitted = isinstance(snapshot, Mapping) and _is_true(
+            snapshot.get("empty_valid_for_window")
         )
         complete = state == "healthy" or (state == "empty" and empty_permitted)
 
@@ -479,7 +934,7 @@ def _validate_availability_outcomes(feed: Mapping[str, Any]) -> None:
         complete_count = sum(1 for member in members if member in complete_ids)
         if (
             pipeline_status != "failure"
-            and row.get("optional") is not True
+            and not _is_true(row.get("optional"))
             and complete_count < effective_minimum
         ):
             raise SchemaError(f"coverage group {row.get('group')!r} is below its effective minimum")
@@ -601,7 +1056,7 @@ def _validate_freshness_outcomes(feed: Mapping[str, Any]) -> None:
             raise SchemaError("Provider outcome has no matching embedded Provider contract")
         snapshot = contract["snapshot"]
         complete = outcome.get("state") == "healthy" or (
-            outcome.get("state") == "empty" and snapshot.get("empty_valid_for_window") is True
+            outcome.get("state") == "empty" and _is_true(snapshot.get("empty_valid_for_window"))
         )
         if not complete and status != "not_evaluated":
             raise SchemaError("incomplete Provider outcomes must be not_evaluated")

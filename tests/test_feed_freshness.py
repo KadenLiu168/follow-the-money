@@ -21,11 +21,14 @@ def ts(value: datetime) -> str:
 
 
 def policy_item(
-    item_id: str = "item", at: datetime = T0 - timedelta(hours=1), title: str | None = None
+    item_id: str = "item",
+    at: datetime = T0 - timedelta(hours=1),
+    title: str | None = None,
+    provider_id: str = "provider",
 ) -> dict:
     return {
         "id": item_id,
-        "provider_id": "provider",
+        "provider_id": provider_id,
         "source": {
             "id": item_id,
             "name": "Source",
@@ -176,6 +179,87 @@ def test_new_or_revised_identity_replaces_prior_slice_without_merge():
     assert [item["id"] for item in result.items] == ["new", "old"]
     assert outcome.freshness["status"] == "fresh"
     assert outcome.freshness["origin_contract_hash"] == "b" * 64
+    assert outcome.freshness["carried_forward_from_run_id"] is None
+
+
+def test_v2_complete_state_replaces_removed_identity_instead_of_carrying_subset():
+    prior = [
+        policy_item("a", provider_id="sec_edgar"),
+        policy_item("b", provider_id="sec_edgar"),
+    ]
+    current = [policy_item("a", provider_id="sec_edgar")]
+    outcome = ProviderOutcome(
+        "sec_edgar", state="healthy", retrieved_at=ts(T0 + timedelta(minutes=1))
+    )
+    result = select_provider_slices(
+        outcomes={"sec_edgar": outcome},
+        current_items=current,
+        active_feed={
+            "run_id": "prior-run",
+            "items": prior,
+            "provider_contracts": [
+                {"provider_id": "sec_edgar", "snapshot": {"contract_version": 2}, "hash": "a" * 64}
+            ],
+        },
+        contracts={"sec_edgar": FreshnessContract("event_driven", "checked_at")},
+        current_contract_hashes={"sec_edgar": "b" * 64},
+        empty_valid_for_window={"sec_edgar": True},
+        evidence_cutoff_at=ts(T0),
+        strict_identity_provider_ids=("sec_edgar",),
+        complete_state_provider_ids=("sec_edgar",),
+    )
+    assert [item["id"] for item in result.items] == ["a"]
+    assert outcome.freshness["status"] == "fresh"
+
+
+def test_v2_cftc_correction_replaces_removed_market_from_complete_slice():
+    prior = [policy_item("x", provider_id="cftc"), policy_item("y", provider_id="cftc")]
+    current = [policy_item("x", provider_id="cftc")]
+    outcome = ProviderOutcome("cftc", state="healthy", retrieved_at=ts(T0 + timedelta(minutes=1)))
+    result = select_provider_slices(
+        outcomes={"cftc": outcome},
+        current_items=current,
+        active_feed={
+            "run_id": "prior-run",
+            "items": prior,
+            "provider_contracts": [
+                {"provider_id": "cftc", "snapshot": {"contract_version": 2}, "hash": "a" * 64}
+            ],
+        },
+        contracts={"cftc": FreshnessContract("event_driven", "checked_at")},
+        current_contract_hashes={"cftc": "b" * 64},
+        empty_valid_for_window={"cftc": False},
+        evidence_cutoff_at=ts(T0),
+        strict_identity_provider_ids=("cftc",),
+        complete_state_provider_ids=("cftc",),
+    )
+    assert [item["id"] for item in result.items] == ["x"]
+    assert outcome.freshness["status"] == "fresh"
+
+
+def test_v2_complete_empty_selection_does_not_carry_prior_companies():
+    outcome = ProviderOutcome(
+        "sec_edgar", state="empty", retrieved_at=ts(T0 + timedelta(minutes=1))
+    )
+    result = select_provider_slices(
+        outcomes={"sec_edgar": outcome},
+        current_items=[],
+        active_feed={
+            "run_id": "prior-run",
+            "items": [policy_item("a", provider_id="sec_edgar")],
+            "provider_contracts": [
+                {"provider_id": "sec_edgar", "snapshot": {"contract_version": 2}, "hash": "a" * 64}
+            ],
+        },
+        contracts={"sec_edgar": FreshnessContract("event_driven", "checked_at")},
+        current_contract_hashes={"sec_edgar": "b" * 64},
+        empty_valid_for_window={"sec_edgar": True},
+        evidence_cutoff_at=ts(T0),
+        strict_identity_provider_ids=("sec_edgar",),
+        complete_state_provider_ids=("sec_edgar",),
+    )
+    assert result.items == ()
+    assert outcome.freshness["status"] == "no_snapshot"
     assert outcome.freshness["carried_forward_from_run_id"] is None
 
 

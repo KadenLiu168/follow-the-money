@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 
 import feedparser
 
+from .rate import RateStateError
 from .urls import canonicalize_url
 
 DEFAULT_MAX_BYTES = 10 * 1024 * 1024  # 10 MiB
@@ -33,6 +34,9 @@ class FetchError(ValueError):
         status_code: int | None = None,
         retry_after_seconds: int | None = None,
         retryable: bool = False,
+        response_observed: bool | None = None,
+        acquisition_progress: bool = False,
+        observed_at: datetime | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
@@ -40,7 +44,11 @@ class FetchError(ValueError):
         self.retryable = retryable
         # A concrete HTTP status proves the request returned a response even
         # when the provider rejects that response as an error.
-        self.response_observed = status_code is not None
+        self.response_observed = (
+            status_code is not None if response_observed is None else response_observed
+        )
+        self.acquisition_progress = acquisition_progress
+        self.observed_at = observed_at
 
 
 @dataclass(frozen=True)
@@ -60,6 +68,7 @@ def bounded_fetch(
     max_bytes: int = DEFAULT_MAX_BYTES,
     fetch_rules: Sequence[Any] = (),
     redirect_rules: Sequence[Any] = (),
+    now_fn: Callable[[], datetime] | None = None,
 ) -> FetchResult:
     """Fetch ``url`` with response and decompression limits.
 
@@ -70,6 +79,11 @@ def bounded_fetch(
     _validate_fetch_url(url, fetch_rules, where="fetch_url")
     try:
         resp = client.get(url, headers=headers, timeout=timeout, follow_redirects=True)
+    except FetchError as exc:
+        _observe_fetch_error(exc, client)
+        raise
+    except RateStateError:
+        raise
     except Exception as exc:  # httpx.TransportError etc.
         import httpx
 
@@ -93,7 +107,10 @@ def bounded_fetch(
         _validate_fetch_url(final_url, final_rules, where="redirect_url")
         status = int(resp.status_code)
         if status < 200 or status >= 300:
-            retry_after = _parse_retry_after(resp.headers.get("retry-after"))
+            retry_after = _parse_retry_after(
+                _header_value(resp.headers, "retry-after"),
+                now_fn=now_fn or getattr(client, "now_fn", None),
+            )
             retryable = status in (408, 409, 429) or status >= 500
             detail = f"HTTP {status} from {urlsplit(final_url).hostname}"
             if retry_after is not None:
@@ -111,13 +128,37 @@ def bounded_fetch(
         # From this point onward ``client.get`` returned a concrete response;
         # preserve that lifecycle fact even if admission later fails.
         exc.response_observed = True
+        _observe_fetch_error(exc, client)
         raise
     return FetchResult(
         url=str(resp.url),
         status=status,
         body_bytes=body,
-        content_type=resp.headers.get("content-type"),
+        content_type=_header_value(resp.headers, "content-type"),
     )
+
+
+def _observe_fetch_error(error: FetchError, client: Any) -> None:
+    if error.observed_at is None:
+        error.observed_at = getattr(client, "last_response_at", None)
+    error.acquisition_progress = bool(
+        error.acquisition_progress
+        or getattr(client, "successful_resource_observed", False)
+        or getattr(client, "acquisition_progress", False)
+    )
+
+
+def _header_value(headers: Any, name: str) -> Any:
+    try:
+        value = headers.get(name)
+        if value is not None:
+            return value
+        return next(
+            (candidate for key, candidate in headers.items() if str(key).lower() == name.lower()),
+            None,
+        )
+    except AttributeError:
+        return None
 
 
 def _validate_fetch_url(url: str, rules: Sequence[Any], *, where: str) -> None:
@@ -152,7 +193,7 @@ def _validate_fetch_url(url: str, rules: Sequence[Any], *, where: str) -> None:
     raise FetchError(f"{where} outside manifest host allowlist")
 
 
-def _parse_retry_after(value: Any) -> int | None:
+def _parse_retry_after(value: Any, *, now_fn: Callable[[], datetime] | None = None) -> int | None:
     if value is None:
         return None
     text = str(value).strip()
@@ -164,7 +205,8 @@ def _parse_retry_after(value: Any) -> int | None:
         return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
-    return max(0, int((parsed.astimezone(UTC) - datetime.now(UTC)).total_seconds()))
+    clock = now_fn or (lambda: datetime.now(UTC))
+    return max(0, int((parsed.astimezone(UTC) - clock().astimezone(UTC)).total_seconds()))
 
 
 def safe_parse_rss(body: bytes, *, charset: str = "utf-8") -> Any:

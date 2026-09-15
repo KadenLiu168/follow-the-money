@@ -380,18 +380,19 @@ def test_cftc_fetch_and_normalize_positioning_fixture():
         b"["
         b'{"id":"cot-1","market_and_exchange_names":"GOLD - COMMODITY EXCHANGE, INC.",'
         b'"report_date_as_yyyy_mm_dd":"2026-08-04T00:00:00.000",'
+        b'"cftc_contract_market_code":"088691",'
         b'"contract_market_name":"GOLD","open_interest_all":"455123",'
         b'"noncomm_positions_long_all":"245,678",'
-        b'"noncomm_positions_short_all":"198765"}'
+        b'"noncomm_positions_short_all":"198765",'
+        b'"noncomm_positions_spread_all":"1234"}'
         b"]"
     )
     client = FakeClient(body)
     adapter = CftcAdapter()
-    adapter.fetch(WINDOW, client)
-    assert client.requests == [
-        "https://publicreporting.cftc.gov/resource/6dca-aqww.json?$limit=100"
-    ]
-    items = adapter.normalize(FakeResponse(body), CFTC_WINDOW)
+    raw = adapter.fetch(WINDOW, client)
+    assert len(client.requests) == 2
+    assert "$select=report_date_as_yyyy_mm_dd" in client.requests[0]
+    items = adapter.normalize(raw, CFTC_WINDOW)
     assert len(items) == 1
     payload = items[0]["payload"]
     assert payload["type"] == "positioning"
@@ -402,18 +403,51 @@ def test_cftc_fetch_and_normalize_positioning_fixture():
 
 
 def test_cftc_invalid_numeric_value_fails_closed():
-    body = (
-        b'[{"id":"cot-1","contract_market_name":"GOLD",'
-        b'"report_date_as_yyyy_mm_dd":"2026-08-04T00:00:00.000",'
-        b'"noncomm_positions_long_all":"not-a-number"}]'
-    )
-    with pytest.raises(FetchError, match="numeric value is invalid"):
-        CftcAdapter().normalize(FakeResponse(body), CFTC_WINDOW)
+    raw = {
+        "current_date": "2026-08-04",
+        "previous_date": None,
+        "current_rows": [
+            {
+                "id": "cot-1",
+                "cftc_contract_market_code": "088691",
+                "contract_market_name": "GOLD",
+                "report_date_as_yyyy_mm_dd": "2026-08-04",
+                "open_interest_all": "455123",
+                "noncomm_positions_long_all": "not-a-number",
+                "noncomm_positions_short_all": "198765",
+                "noncomm_positions_spread_all": "1234",
+            }
+        ],
+        "previous_rows": None,
+    }
+    from follow_the_money.providers.cftc_cot import CotError
+
+    with pytest.raises(CotError, match="numeric field is invalid"):
+        CftcAdapter().normalize(raw, CFTC_WINDOW)
 
 
 # ---------------------------------------------------------------------------
 # Manifest/registry invariants
 # ---------------------------------------------------------------------------
+
+
+def test_production_sec_uses_one_acquisition_unit_per_watched_company():
+    from follow_the_money.config import load_config
+    from follow_the_money.feed.cli import _production_adapters
+    from follow_the_money.providers.adapters import build_registry
+
+    cfg = load_config(
+        Path(__file__).parents[1] / "config" / "config.yaml",
+        Path(__file__).parents[1] / "config" / "providers.yaml",
+        manifest_root=Path(__file__).parents[1] / "providers",
+        require_verified_enabled=True,
+    )
+    adapters = _production_adapters(cfg, build_registry({p.id: p for p in cfg.providers}))
+    assert len(adapters["sec_edgar"]) == len(cfg.watched_companies)
+    assert {adapter.provider_id for adapter in adapters["sec_edgar"]} == {"sec_edgar"}
+    assert [adapter._watched_company.cik for adapter in adapters["sec_edgar"]] == sorted(
+        company.cik for company in cfg.watched_companies
+    )
 
 
 def test_all_manifests_load_and_provider_id_matches():
@@ -432,7 +466,7 @@ def test_all_manifests_load_and_provider_id_matches():
     }
     for pid, m in manifests.items():
         assert m["provider_id"] == pid
-        assert m["contract_version"] == 1
+        assert m["contract_version"] == (2 if pid in {"sec_edgar", "cftc"} else 1)
 
 
 def test_no_manifest_claims_verified_without_date():
@@ -457,3 +491,92 @@ def test_manifest_entries_are_credential_free_and_closed():
             "positioning",
             "filing",
         }
+
+
+def test_cftc_v2_paginates_pinned_current_and_previous_dates_in_order():
+    discovery = (
+        b'[{"report_date_as_yyyy_mm_dd":"2026-08-04"},{"report_date_as_yyyy_mm_dd":"2026-07-28"}]'
+    )
+    current = (
+        b'[{"id":"current-1","report_date_as_yyyy_mm_dd":"2026-08-04",'
+        b'"cftc_contract_market_code":"001","contract_market_name":"X",'
+        b'"noncomm_positions_long_all":"10","noncomm_positions_short_all":"4",'
+        b'"noncomm_positions_spread_all":"2","open_interest_all":"100"}]'
+    )
+    previous = (
+        b'[{"id":"previous-1","report_date_as_yyyy_mm_dd":"2026-07-28",'
+        b'"cftc_contract_market_code":"001","contract_market_name":"X",'
+        b'"noncomm_positions_long_all":"9","noncomm_positions_short_all":"3",'
+        b'"noncomm_positions_spread_all":"1","open_interest_all":"90"}]'
+    )
+
+    class Pages:
+        def __init__(self):
+            self.responses = [discovery, current, previous]
+            self.urls: list[str] = []
+
+        def get(self, url, **_kwargs):
+            self.urls.append(url)
+            body = self.responses.pop(0)
+            return FakeResponse(body, url=url)
+
+    client = Pages()
+    adapter = CftcAdapter()
+    raw = adapter.fetch(WINDOW, client)
+    items = adapter.normalize(raw, CFTC_WINDOW)
+    assert len(client.urls) == 3
+    assert "$select=report_date_as_yyyy_mm_dd" in client.urls[0]
+    assert all("$limit=100" in url and "$offset=0" in url for url in client.urls[1:])
+    assert items[0]["payload"]["comparison"]["status"] == "available"
+    assert items[0]["payload"]["delta_metrics"]["net_noncommercial"] == {
+        "value": "0",
+        "unit": "contracts",
+    }
+
+
+def test_cftc_v2_first_resource_denial_is_typed_and_later_page_denial_is_typed():
+    class Denied:
+        def __init__(self, statuses):
+            self.statuses = list(statuses)
+
+        def get(self, url, **_kwargs):
+            return FakeResponse(b"[]", status=self.statuses.pop(0), url=url)
+
+    with pytest.raises(FetchError, match="HTTP 403"):
+        CftcAdapter().fetch(WINDOW, Denied([403]))
+
+    class DiscoveryThenDenied:
+        def __init__(self):
+            self.responses = [
+                FakeResponse(
+                    b'[{"report_date_as_yyyy_mm_dd":"2026-08-04"}]',
+                    url="https://publicreporting.cftc.gov/a",
+                ),
+                FakeResponse(b"", status=403, url="https://publicreporting.cftc.gov/b"),
+            ]
+
+        def get(self, url, **_kwargs):
+            return self.responses.pop(0)
+
+    with pytest.raises(FetchError, match="HTTP 403"):
+        CftcAdapter().fetch(WINDOW, DiscoveryThenDenied())
+
+
+def test_cftc_v2_rejects_pinned_page_with_wrong_report_date():
+    class WrongPage:
+        def __init__(self):
+            self.responses = [
+                b'[{"report_date_as_yyyy_mm_dd":"2026-08-04"}]',
+                (
+                    b'[{"id":"wrong","report_date_as_yyyy_mm_dd":"2026-07-28",'
+                    b'"cftc_contract_market_code":"001","contract_market_name":"X",'
+                    b'"noncomm_positions_long_all":"1","noncomm_positions_short_all":"1",'
+                    b'"noncomm_positions_spread_all":"0","open_interest_all":"1"}]'
+                ),
+            ]
+
+        def get(self, url, **_kwargs):
+            return FakeResponse(self.responses.pop(0), url=url)
+
+    with pytest.raises(FetchError, match="pinned query"):
+        CftcAdapter().fetch(WINDOW, WrongPage())

@@ -1,6 +1,5 @@
 """Strict Feed-only configuration loading and typed models."""
 
-from .load import ConfigError, load_config
 from .model import (
     REQUIRED_PROVIDER_IDS,
     SUPPORTED_FEED_PAYLOAD_TYPES,
@@ -17,6 +16,16 @@ from .model import (
     SourceLinkRule,
     WatchCompany,
 )
+
+
+def __getattr__(name: str):
+    if name not in {"ConfigError", "load_config"}:
+        raise AttributeError(name)
+
+    from .load import ConfigError, load_config
+
+    return {"ConfigError": ConfigError, "load_config": load_config}[name]
+
 
 __all__ = [
     "REQUIRED_PROVIDER_IDS",
