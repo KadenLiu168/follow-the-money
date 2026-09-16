@@ -26,6 +26,8 @@ filing
 
 五个 artifact 始终存在，即使为空。八个必需且免凭据的 Provider 是 Federal Reserve、BLS、PBOC、NBS、SSE、SZSE、SEC EDGAR 和 CFTC。CFTC 是 minimum-one 的必需 weekly positioning coverage member。
 
+SEC EDGAR v3 的 filing item 区分完整的 `form13f` current-state evidence 与有界 current-window `form4`/`4/A` ownership evidence；Form 4 保留 issuer、reporting owner、transaction/holding、post-state 和 footnote 数据，不推断 holding delta 或 amendment linkage，并继续保留 SEC v1/v2 的有界读取兼容。
+
 上一版八域 bundle 只能进入显式 bounded migration path；正常加载和远程消费拒绝上一 major，也不会把 removed-domain artifact 当作当前证据。
 
 ## 目录结构

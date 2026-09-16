@@ -478,8 +478,11 @@ def run_feed(
         complete_state_provider_ids = tuple(
             entry["provider_id"]
             for entry in contract_snapshots
-            if entry["provider_id"] in {"sec_edgar", "cftc"}
-            and entry["snapshot"].get("contract_version") == 2
+            if (
+                entry["provider_id"] == "sec_edgar"
+                and entry["snapshot"].get("contract_version") in {2, 3}
+            )
+            or (entry["provider_id"] == "cftc" and entry["snapshot"].get("contract_version") == 2)
         )
         if (
             "sec_edgar" in complete_state_provider_ids
@@ -492,19 +495,61 @@ def run_feed(
                 )
             )
         ):
-            expected_sec_ciks = {company.cik for company in cfg.watched_companies}
+            sec_contract = next(
+                entry["snapshot"]
+                for entry in contract_snapshots
+                if entry["provider_id"] == "sec_edgar"
+            )
+            sec_version = sec_contract.get("contract_version")
             sec_items = [item for item in items if item.get("provider_id") == "sec_edgar"]
-            actual_sec_cik_values = [
-                item.get("payload", {}).get("company_identity", {}).get("cik") for item in sec_items
-            ]
-            actual_sec_ciks = {value for value in actual_sec_cik_values if isinstance(value, str)}
-            if (
-                any(not isinstance(value, str) for value in actual_sec_cik_values)
-                or actual_sec_ciks != expected_sec_ciks
-                or len(actual_sec_cik_values) != len(actual_sec_ciks)
-            ):
+            expected_sec_ciks = {company.cik for company in cfg.watched_companies}
+            if sec_version == 2:
+                actual_sec_cik_values = [
+                    item.get("payload", {}).get("company_identity", {}).get("cik")
+                    for item in sec_items
+                ]
+                actual_sec_ciks = {
+                    value for value in actual_sec_cik_values if isinstance(value, str)
+                }
+                complete = (
+                    not any(not isinstance(value, str) for value in actual_sec_cik_values)
+                    and actual_sec_ciks == expected_sec_ciks
+                    and len(actual_sec_cik_values) == len(actual_sec_ciks)
+                )
+                error = "SEC v2 complete slice does not equal watched CIK set"
+            else:
+                actual_13f_ciks = {
+                    item.get("payload", {}).get("company_identity", {}).get("cik")
+                    for item in sec_items
+                    if item.get("payload", {}).get("filing_subtype") == "form13f"
+                }
+                form4_items = [
+                    item
+                    for item in sec_items
+                    if item.get("payload", {}).get("filing_subtype") == "form4"
+                ]
+                actual_form4_accessions = {
+                    item.get("payload", {}).get("accession_number") for item in form4_items
+                }
+                expected_form4_accessions: set[str] = set()
+                form4_selection_complete = True
+                for adapter in adapters_by_id.get("sec_edgar", []):
+                    if hasattr(adapter, "selected_accessions"):
+                        if not getattr(adapter, "selection_complete", False):
+                            form4_selection_complete = False
+                        expected_form4_accessions.update(
+                            getattr(adapter, "selected_accessions", ())
+                        )
+                complete = (
+                    actual_13f_ciks == expected_sec_ciks
+                    and actual_form4_accessions == expected_form4_accessions
+                    and len(actual_form4_accessions) == len(form4_items)
+                    and form4_selection_complete
+                )
+                error = "SEC v3 complete slice does not equal watched 13F/Form 4 selection"
+            if not complete:
                 outcomes["sec_edgar"].state = "partial"
-                outcomes["sec_edgar"].error = "SEC v2 complete slice does not equal watched CIK set"
+                outcomes["sec_edgar"].error = error
                 outcomes["sec_edgar"].availability = "failed"
                 outcomes["sec_edgar"].availability_reason = outcomes["sec_edgar"].error
                 outcomes["sec_edgar"].terminal_incomplete = True
@@ -637,7 +682,7 @@ def _production_adapters(cfg: AppConfig, registry: Any) -> dict[str, list[Any]]:
     Every enabled Provider contributes one adapter instance; SEC EDGAR also
     receives the configured watched-company CIK filter.
     """
-    from ..providers.adapters import SecEdgarAdapter
+    from ..providers.adapters import SecEdgarAdapter, SecForm4Adapter
 
     adapters: dict[str, list[Any]] = {}
     for p in cfg.providers:
@@ -648,6 +693,11 @@ def _production_adapters(cfg: AppConfig, registry: Any) -> dict[str, list[Any]]:
                 SecEdgarAdapter(p, watched_company=company)
                 for company in sorted(cfg.watched_companies, key=lambda company: company.cik)
             ]
+            if p.contract_version == 3:
+                adapters[p.id].extend(
+                    SecForm4Adapter(p, watched_issuer=issuer)
+                    for issuer in sorted(cfg.watched_form4_issuers, key=lambda issuer: issuer.cik)
+                )
         else:
             try:
                 adapters[p.id] = [registry.get(p.id)]
@@ -696,7 +746,7 @@ def _run_adapter(
     """Run Provider-level attempts; actual sends are managed by the client."""
 
     window = {"start": plan.window_start, "end": plan.evidence_cutoff_at}
-    max_attempts = max(1, int(cfg.feed.max_attempts))
+    max_attempts = max(1, cfg.feed.max_attempts)
     empty_valid_for_window = _provider_empty_valid_for_window(outcome.provider_id, cfg)
     provider_contract = next(
         (provider for provider in cfg.providers if provider.id == outcome.provider_id), None
@@ -733,6 +783,49 @@ def _run_adapter(
         return (
             cancel_event is not None and cancel_event.is_set()
         ) or monotonic_now() >= deadline_at
+
+    def handle_exception(exc: BaseException, attempt: int) -> bool:
+        if isinstance(exc, RateStateError):
+            raise exc
+        if not isinstance(exc, FetchError):
+            observe_client()
+            mark_incomplete(str(exc))
+            outcome.upstream_http_status = None
+            return False
+        if exc.observed_at is not None:
+            observed_iso = fmt_utc(exc.observed_at)
+            if outcome.retrieved_at is None or observed_iso > outcome.retrieved_at:
+                outcome.retrieved_at = observed_iso
+        elif exc.response_observed and outcome.retrieved_at is None:
+            outcome.retrieved_at = fmt_utc(now_fn())
+        outcome.partial_resource_observed |= bool(exc.acquisition_progress)
+        outcome.upstream_http_status = exc.status_code
+        can_retry = exc.retryable and attempt + 1 < max_attempts
+        mark_incomplete(str(exc), terminal=not can_retry)
+        outcome.availability = "blocked" if exc.status_code in {401, 403} else "failed"
+        outcome.availability_reason = bounded_availability_reason(str(exc))
+        if deadline_expired():
+            outcome.execution_failure = True
+            outcome.error = f"pre_commit_deadline_exceeded: {exc}"
+            return False
+        if not can_retry:
+            return False
+        retry_after = exc.retry_after_seconds
+        delay = retry_after if isinstance(retry_after, (int, float)) else 0.0
+        remaining = deadline_at - monotonic_now()
+        if delay > remaining:
+            outcome.error = f"{exc}; retry_not_admitted_before_deadline"
+            outcome.execution_failure = True
+            outcome.terminal_incomplete = True
+            return False
+        if delay > 0:
+            sleep_fn(delay)
+        if monotonic_now() >= deadline_at:
+            outcome.error = f"{exc}; retry_not_admitted_before_deadline"
+            outcome.execution_failure = True
+            outcome.terminal_incomplete = True
+            return False
+        return True
 
     for attempt in range(max_attempts):
         if deadline_expired():
@@ -826,6 +919,11 @@ def _run_adapter(
                     outcome.availability = "success"
                     outcome.availability_reason = None
                     outcome.upstream_http_status = None
+            elif outcome.accepted and empty_valid_for_window:
+                outcome.state = "partial" if prior_terminal else "healthy"
+                outcome.error = None
+                outcome.availability = "failed" if prior_terminal else "success"
+                outcome.availability_reason = None
             elif outcome.accepted:
                 outcome.state = "partial"
                 outcome.error = "non-permitted empty result after accepted evidence"
@@ -843,47 +941,9 @@ def _run_adapter(
                     outcome.availability_reason = "empty result is not permitted for window"
                     outcome.terminal_incomplete = True
             return
-        except FetchError as exc:
-            observe_client()
-            if exc.observed_at is not None:
-                observed_iso = fmt_utc(exc.observed_at)
-                if outcome.retrieved_at is None or observed_iso > outcome.retrieved_at:
-                    outcome.retrieved_at = observed_iso
-            elif exc.response_observed and outcome.retrieved_at is None:
-                outcome.retrieved_at = fmt_utc(now_fn())
-            outcome.partial_resource_observed |= bool(exc.acquisition_progress)
-            outcome.upstream_http_status = exc.status_code
-            can_retry = exc.retryable and attempt + 1 < max_attempts
-            mark_incomplete(str(exc), terminal=not can_retry)
-            outcome.availability = "blocked" if exc.status_code in {401, 403} else "failed"
-            outcome.availability_reason = bounded_availability_reason(str(exc))
-            if deadline_expired():
-                outcome.execution_failure = True
-                outcome.error = f"pre_commit_deadline_exceeded: {exc}"
-                return
-            if can_retry:
-                delay = float(exc.retry_after_seconds or 0)
-                remaining = deadline_at - monotonic_now()
-                if delay > remaining:
-                    outcome.error = f"{exc}; retry_not_admitted_before_deadline"
-                    outcome.execution_failure = True
-                    outcome.terminal_incomplete = True
-                    return
-                if delay > 0:
-                    sleep_fn(delay)
-                if monotonic_now() >= deadline_at:
-                    outcome.error = f"{exc}; retry_not_admitted_before_deadline"
-                    outcome.execution_failure = True
-                    outcome.terminal_incomplete = True
-                    return
+        except Exception as exc:  # noqa: BLE001 - provider boundary normalizes failures
+            if handle_exception(exc, attempt):
                 continue
-            return
-        except RateStateError:
-            raise
-        except Exception as exc:  # noqa: BLE001 - Provider orchestration boundary
-            observe_client()
-            mark_incomplete(str(exc))
-            outcome.upstream_http_status = None
             return
 
 
@@ -948,7 +1008,8 @@ def _client_for(adapter: Any) -> Any:
     import httpx
 
     timeout = getattr(getattr(adapter, "_contract", None), "attempt_timeout_seconds", 20)
-    return httpx.Client(timeout=float(timeout), follow_redirects=False)
+    timeout_value = timeout if isinstance(timeout, (int, float)) else 20.0
+    return httpx.Client(timeout=timeout_value, follow_redirects=False)
 
 
 class _Semaphore:
@@ -1077,6 +1138,9 @@ def _provider_contract_snapshots(
             "fixture_provenance_source": p.fixture_provenance_source,
             "fixture_files": list(p.fixture_files),
         }
+        if p.max_filings_per_window is not None:
+            payload["max_filings_per_window"] = p.max_filings_per_window
+            payload["ownership_xml_schema_versions"] = list(p.ownership_xml_schema_versions)
         snapshot = {"provider_id": p.id, "snapshot": payload, "hash": canonical_digest(payload)}
         snapshots.append(snapshot)
     return snapshots
@@ -1120,6 +1184,10 @@ def _feed_config_snapshot(cfg: AppConfig) -> dict[str, Any]:
                 "tickers": sorted(company.tickers),
             }
             for company in sorted(cfg.watched_companies, key=lambda company: company.cik)
+        ],
+        "watched_form4_issuers": [
+            {"cik": issuer.cik, "name": issuer.name}
+            for issuer in sorted(cfg.watched_form4_issuers, key=lambda issuer: issuer.cik)
         ],
     }
     return {"snapshot": payload, "hash": canonical_digest(payload)}

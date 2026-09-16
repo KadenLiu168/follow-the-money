@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ from .model import (
     RateRegistry,
     SourceFamily,
     WatchCompany,
+    WatchForm4Issuer,
 )
 
 
@@ -40,6 +42,7 @@ ALLOWED_CONFIG_KEYS = frozenset(
         "rate_registry",
         "source_families",
         "watched_companies",
+        "watched_form4_issuers",
     }
 )
 ALLOWED_PROVIDER_FILE_KEYS = frozenset({"schema_version", "providers", "coverage"})
@@ -297,6 +300,29 @@ def _parse_watched_companies(raw: Any) -> tuple[WatchCompany, ...]:
     return tuple(values)
 
 
+def _parse_watched_form4_issuers(raw: Any) -> tuple[WatchForm4Issuer, ...]:
+    if not isinstance(raw, list):
+        raise ConfigError("watched_form4_issuers must be a list")
+    values: list[WatchForm4Issuer] = []
+    seen: set[str] = set()
+    previous_cik: str | None = None
+    for index, item in enumerate(raw):
+        where = f"watched_form4_issuers[{index}]"
+        data = _closed_section(item, required=frozenset({"cik", "name"}), where=where)
+        cik = _as_nonempty_str(data["cik"], f"{where}.cik")
+        if not re.fullmatch(r"\d{10}", cik):
+            raise ConfigError(f"{where}.cik must be a normalized ten-digit CIK")
+        name = _as_nonempty_str(data["name"], f"{where}.name")
+        if cik in seen:
+            raise ConfigError(f"watched_form4_issuers: duplicate CIK {cik!r}")
+        if previous_cik is not None and cik <= previous_cik:
+            raise ConfigError("watched_form4_issuers must be ordered by normalized CIK")
+        seen.add(cik)
+        previous_cik = cik
+        values.append(WatchForm4Issuer(cik, name))
+    return tuple(values)
+
+
 def _resolve_provider_entries(
     policies: tuple[dict[str, Any], ...],
     coverage: CoverageMatrix,
@@ -450,6 +476,7 @@ def load_config(
     rate_registry = _parse_rate_registry(data["rate_registry"])
     source_families = _parse_source_families(data["source_families"])
     watched_companies = _parse_watched_companies(data["watched_companies"])
+    watched_form4_issuers = _parse_watched_form4_issuers(data["watched_form4_issuers"])
     _validate_coverage(providers, coverage, strict=require_verified_enabled)
     _validate_rate_policies(providers)
     _validate_provider_sources(providers, source_families, feed)
@@ -467,6 +494,7 @@ def load_config(
         coverage=coverage,
         source_families=source_families,
         watched_companies=watched_companies,
+        watched_form4_issuers=watched_form4_issuers,
         feed=feed,
         rate_registry=rate_registry,
         runtime_state_root=values["runtime_state_root"],

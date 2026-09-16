@@ -268,12 +268,14 @@ def test_new_cftc_report_publishes_only_in_positioning_artifact(tmp_path):
     sec_contract = next(
         c for c in manifest["provider_contracts"] if c["provider_id"] == "sec_edgar"
     )
-    assert sec_contract["snapshot"]["contract_version"] == 2
+    assert sec_contract["snapshot"]["contract_version"] == 3
     assert sec_contract["snapshot"]["units"] == {
         "13f_value_before_2023_01_03": "usd_thousands",
         "13f_value_from_2023_01_03": "usd",
         "reported_value_usd_thousands": "usd_thousands",
     }
+    assert sec_contract["snapshot"]["max_filings_per_window"] == 20
+    assert sec_contract["snapshot"]["ownership_xml_schema_versions"] == ["X0609"]
     sec_items = [item for item in feed["items"] if item["provider_id"] == "sec_edgar"]
     assert len(sec_items) == 8
     assert all("holdings" in item["payload"] for item in sec_items)

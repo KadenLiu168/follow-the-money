@@ -9,7 +9,7 @@ uv sync --frozen --all-groups
 .venv/bin/pytest
 .venv/bin/python scripts/quality_gate.py
 openspec doctor
-openspec validate simplify-to-feed-only-skill --strict
+openspec validate eco-131-sec-form4-semantic-evidence --strict
 openspec validate --all --strict
 ```
 
@@ -21,12 +21,19 @@ Providers and is not a substitute for fixture tests.
 
 - the five-domain schema and exact artifact inventory reject removed or mixed
   domains;
-- v3/v1 input is accepted only by bounded migration and v4/v2 is the only
-  production output;
+- Feed schema major 4 remains the only production output; bounded migration
+  handles the previous Feed major, while SEC v1/v2 bundles remain readable and
+  SEC v3 is the only shipped SEC producer contract;
 - all eight Provider manifests resolve credential-free, and over-declared
   payloads fail before requests;
 - CFTC weekly empty/unchanged behavior preserves source times and required
   coverage;
+- SEC Form 4 selection proves recent-listing coverage, exact half-open-window
+  membership, the 20-filing bound, raw XML provenance, structured owners/table
+  entries/footnotes, and independent Form 4/A identity without analysis;
+- SEC v3 mixed 13F/Form 4 slices enforce exact watched-company and selected
+  accession sets, whole-Provider replacement, deterministic bytes, and
+  fail-closed partial acquisition;
 - fixed cutoff/window, provenance, freshness, blocked degradation, identity,
   canonical bytes, atomic publication, checkpoint, lease, and rate state fail
   closed;

@@ -25,6 +25,14 @@ class WatchCompany:
 
 
 @dataclass(frozen=True)
+class WatchForm4Issuer:
+    """SEC EDGAR watched issuer for bounded Form 4 acquisition."""
+
+    cik: str
+    name: str
+
+
+@dataclass(frozen=True)
 class RatePolicy:
     """Closed per-scope token-bucket rate policy."""
 
@@ -105,6 +113,8 @@ class ProviderEntry:
     fixture_provenance_source: str
     fixture_files: tuple[str, ...]
     coverage_groups: tuple[str, ...]
+    max_filings_per_window: int | None = None
+    ownership_xml_schema_versions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -170,6 +180,7 @@ class AppConfig:
     coverage: CoverageMatrix
     source_families: tuple[SourceFamily, ...]
     watched_companies: tuple[WatchCompany, ...]
+    watched_form4_issuers: tuple[WatchForm4Issuer, ...]
     feed: FeedLimits
     rate_registry: RateRegistry
     runtime_state_root: str

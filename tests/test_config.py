@@ -159,13 +159,13 @@ def test_provider_coverage_must_name_known_members(tmp_path: Path):
         _load(config, providers, manifests)
 
 
-def test_v2_manifest_units_and_pagination_are_closed(tmp_path: Path):
+def test_manifest_units_and_pagination_are_closed(tmp_path: Path):
     config, providers, manifests = _copy_contracts(tmp_path)
     sec_path = manifests / "sec_edgar" / "manifest.yaml"
     sec = _yaml(sec_path)
     sec["units"]["unexpected"] = "usd"
     _write(sec_path, sec)
-    with pytest.raises(ConfigError, match="SEC v2 units"):
+    with pytest.raises(ConfigError, match="SEC v3 units"):
         _load(config, providers, manifests)
 
     cftc_root = tmp_path / "cftc"
@@ -179,10 +179,76 @@ def test_v2_manifest_units_and_pagination_are_closed(tmp_path: Path):
         _load(config, providers, manifests)
 
 
+def test_watched_form4_issuer_selection_is_closed_and_ordered(tmp_path: Path):
+    for mutation, message in (
+        (lambda value: value.pop("watched_form4_issuers"), "missing"),
+        (lambda value: value["watched_form4_issuers"][0].update({"unexpected": True}), "unknown"),
+        (
+            lambda value: value["watched_form4_issuers"].append(
+                {"cik": "0001067983", "name": "Duplicate"}
+            ),
+            "duplicate",
+        ),
+        (lambda value: value["watched_form4_issuers"][0].update({"cik": "bad"}), "normalized"),
+    ):
+        case_root = tmp_path / message
+        case_root.mkdir()
+        config, providers, manifests = _copy_contracts(case_root)
+        value = _yaml(config)
+        mutation(value)
+        _write(config, value)
+        with pytest.raises(ConfigError, match=message):
+            _load(config, providers, manifests)
+
+    case_root = tmp_path / "reordered"
+    case_root.mkdir()
+    config, providers, manifests = _copy_contracts(case_root)
+    value = _yaml(config)
+    value["watched_form4_issuers"] = [
+        {"cik": "0000000002", "name": "B"},
+        {"cik": "0000000001", "name": "A"},
+    ]
+    _write(config, value)
+    with pytest.raises(ConfigError, match="ordered"):
+        _load(config, providers, manifests)
+
+
+def test_sec_v3_form4_manifest_section_is_exact_and_required(tmp_path: Path):
+    cases = (
+        (lambda form4: form4.pop("max_filings_per_window"), "required"),
+        (lambda form4: form4.update({"max_filings_per_window": 19}), "must be 20"),
+        (
+            lambda form4: form4.update({"ownership_xml_schema_versions": ["X0608"]}),
+            "ownership_xml_schema_versions",
+        ),
+        (lambda form4: form4.update({"unexpected": True}), "unknown keys"),
+    )
+    for index, (mutation, message) in enumerate(cases):
+        case_root = tmp_path / f"v3-{index}"
+        case_root.mkdir()
+        config, providers, manifests = _copy_contracts(case_root)
+        manifest_path = manifests / "sec_edgar" / "manifest.yaml"
+        manifest = _yaml(manifest_path)
+        mutation(manifest["form4"])
+        _write(manifest_path, manifest)
+        with pytest.raises(ConfigError, match=message):
+            _load(config, providers, manifests)
+
+    case_root = tmp_path / "v2-form4"
+    case_root.mkdir()
+    config, providers, manifests = _copy_contracts(case_root)
+    manifest_path = manifests / "sec_edgar" / "manifest.yaml"
+    manifest = _yaml(manifest_path)
+    manifest["contract_version"] = 2
+    _write(manifest_path, manifest)
+    with pytest.raises(ConfigError, match="only supported by SEC v3"):
+        _load(config, providers, manifests)
+
+
 def test_supported_contract_versions_are_explicit_and_bounded():
     from follow_the_money.providers.manifest import SUPPORTED_CONTRACT_VERSIONS
 
-    assert SUPPORTED_CONTRACT_VERSIONS["sec_edgar"] == frozenset({1, 2})
+    assert SUPPORTED_CONTRACT_VERSIONS["sec_edgar"] == frozenset({1, 2, 3})
     assert SUPPORTED_CONTRACT_VERSIONS["cftc"] == frozenset({1, 2})
     assert all(
         versions == frozenset({1})
@@ -197,4 +263,13 @@ def test_config_snapshot_has_no_runtime_root_or_removed_surface():
 
     snapshot = _feed_config_snapshot(cfg)["snapshot"]
     assert "runtime_state_root" not in snapshot
-    assert set(snapshot) == {"name", "feed", "coverage", "watched_companies"}
+    assert set(snapshot) == {
+        "name",
+        "feed",
+        "coverage",
+        "watched_companies",
+        "watched_form4_issuers",
+    }
+    assert snapshot["watched_form4_issuers"] == [
+        {"cik": "0001067983", "name": "Berkshire Hathaway"}
+    ]

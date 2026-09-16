@@ -8,6 +8,7 @@ from pathlib import Path
 from follow_the_money.canonical import canonical_bytes
 from follow_the_money.config.model import WatchCompany
 from follow_the_money.providers.adapters import CftcAdapter, SecEdgarAdapter
+from follow_the_money.providers.manifest import load_manifest
 from follow_the_money.providers.sec_13f import FilingCandidate
 from tests.test_cftc_cot import row
 from tests.test_sec_13f import candidate, xml
@@ -93,10 +94,17 @@ def _sec_raw() -> dict[str, object]:
     }
 
 
+def _v2_sec_adapter() -> SecEdgarAdapter:
+    manifest = dict(load_manifest("sec_edgar"))
+    manifest["contract_version"] = 2
+    return SecEdgarAdapter(
+        manifest,
+        watched_company=WatchCompany("0000000001", "Configured Name", ("CFG",)),
+    )
+
+
 def test_sec_v2_payload_and_canonical_bytes_are_pinned_before_migration():
-    item = SecEdgarAdapter(
-        watched_company=WatchCompany("0000000001", "Configured Name", ("CFG",))
-    ).normalize(_sec_raw(), {})[0]
+    item = _v2_sec_adapter().normalize(_sec_raw(), {})[0]
 
     assert item["payload"] == {
         "type": "filing",
@@ -272,9 +280,7 @@ def test_cftc_v2_payloads_and_canonical_bytes_are_pinned_before_migration():
 
 
 def test_closed_projection_and_semantic_import_surface():
-    sec_item = SecEdgarAdapter(
-        watched_company=WatchCompany("0000000001", "Configured Name", ("CFG",))
-    ).normalize(_sec_raw(), {})[0]
+    sec_item = _v2_sec_adapter().normalize(_sec_raw(), {})[0]
     cftc_item = CftcAdapter().normalize(
         {
             "current_date": "2026-08-04",

@@ -189,14 +189,18 @@ def _source_complete_cfg():
         require_verified_enabled=False,
     )
     # These tests exercise publication mechanics with stub Providers that
-    # retain no items. A complete SEC v2 outcome requires exactly one item per
-    # configured watched company, so the resolved selection is empty here: an
-    # empty watched set is the contract-permitted complete-empty SEC outcome.
+    # retain no items. Keep the SEC v2 contract here because the stubs emit the
+    # pre-Form-4 13F shape; an empty watched set is the permitted empty outcome.
     return replace(
         cfg,
         watched_companies=(),
         providers=tuple(
-            replace(provider, empty_valid_for_window=True) for provider in cfg.providers
+            replace(
+                provider,
+                contract_version=2 if provider.id == "sec_edgar" else provider.contract_version,
+                empty_valid_for_window=True,
+            )
+            for provider in cfg.providers
         ),
     )
 
@@ -412,10 +416,12 @@ def test_checkpoint_advances_after_accepted_publication_and_before_unlock(tmp_pa
 
     assert result.exit_code == 0
     assert events == ["publish", "checkpoint"]
+    assert result.feed is not None
     checkpoint = read_checkpoint(checkpoint_path)
-    assert checkpoint.previous_success is not None
-    assert checkpoint.previous_success.evidence_cutoff_at == result.feed["evidence_cutoff_at"]
-    assert checkpoint.previous_success.run_id == result.feed["run_id"]
+    previous_success = checkpoint.previous_success
+    assert previous_success is not None
+    assert previous_success.evidence_cutoff_at == result.feed["evidence_cutoff_at"]
+    assert previous_success.run_id == result.feed["run_id"]
 
 
 def test_accepted_degraded_publication_advances_checkpoint(tmp_path, monkeypatch):
@@ -441,9 +447,11 @@ def test_accepted_degraded_publication_advances_checkpoint(tmp_path, monkeypatch
 
     assert result.status == "degraded"
     assert result.exit_code == 0
+    assert result.feed is not None
     checkpoint = read_checkpoint(checkpoint_path)
-    assert checkpoint.previous_success is not None
-    assert checkpoint.previous_success.run_id == result.feed["run_id"]
+    previous_success = checkpoint.previous_success
+    assert previous_success is not None
+    assert previous_success.run_id == result.feed["run_id"]
 
 
 @pytest.mark.parametrize(
@@ -637,6 +645,7 @@ def test_denial_after_partial_resource_progress_is_blocked_without_exemption(tmp
         enabled_provider_ids=planned,
     )
 
+    assert result.feed is not None
     outcome = next(o for o in result.feed["provider_outcomes"] if o["provider_id"] == "sec_edgar")
     assert outcome["state"] == "partial"
     assert outcome["availability"] == "blocked"

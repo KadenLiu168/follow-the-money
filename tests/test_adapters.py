@@ -444,11 +444,18 @@ def test_production_sec_uses_one_acquisition_unit_per_watched_company():
         require_verified_enabled=True,
     )
     adapters = _production_adapters(cfg, build_registry({p.id: p for p in cfg.providers}))
-    assert len(adapters["sec_edgar"]) == len(cfg.watched_companies)
+    assert len(adapters["sec_edgar"]) == len(cfg.watched_companies) + len(cfg.watched_form4_issuers)
     assert {adapter.provider_id for adapter in adapters["sec_edgar"]} == {"sec_edgar"}
-    assert [adapter._watched_company.cik for adapter in adapters["sec_edgar"]] == sorted(
-        company.cik for company in cfg.watched_companies
-    )
+    assert [
+        adapter._watched_company.cik
+        for adapter in adapters["sec_edgar"]
+        if hasattr(adapter, "_watched_company")
+    ] == sorted(company.cik for company in cfg.watched_companies)
+    assert [
+        adapter._watched_cik
+        for adapter in adapters["sec_edgar"]
+        if hasattr(adapter, "_watched_cik")
+    ] == [issuer.cik for issuer in cfg.watched_form4_issuers]
 
 
 def test_all_manifests_load_and_provider_id_matches():
@@ -467,7 +474,7 @@ def test_all_manifests_load_and_provider_id_matches():
     }
     for pid, m in manifests.items():
         assert m["provider_id"] == pid
-        assert m["contract_version"] == (2 if pid in {"sec_edgar", "cftc"} else 1)
+        assert m["contract_version"] == {"sec_edgar": 3, "cftc": 2}.get(pid, 1)
 
 
 def test_no_manifest_claims_verified_without_date():

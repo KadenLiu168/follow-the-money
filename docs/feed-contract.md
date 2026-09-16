@@ -40,12 +40,18 @@ The logical Feed retains:
 - evidence-only pipeline status and structured coverage gaps.
 
 Execution observations such as Provider `retrieved_at` and Feed `generated_at`
-are not source-semantic timestamps and do not refresh carried evidence.
+are not source-semantic timestamps and do not refresh carried evidence. SEC v3
+filing evidence distinguishes the complete `form13f` current-state contract
+from the complete current-window `form4`/`4/A` contract; Form 4 acceptance time
+is retained as the source publication and knowledge time.
 
 ## Validation and publication
 
 Provider manifests are verified, HTTPS-only, credential-free, and closed over
-the five payload types. Normalization validates source URLs before items enter
+the five payload types. The SEC v3 manifest bounds Form 4 selection to 20
+eligible accessions per issuer/window and declares ownership XML schema `X0609`.
+Selection is recent-listing-only and fails closed when coverage or any selected
+raw XML is incomplete. Normalization validates source URLs before items enter
 the Feed. Items are deduplicated and serialized in the deterministic
 `(source.knowledge_available_at, id)` order. Intelligence fields and unsupported
 payloads fail closed.

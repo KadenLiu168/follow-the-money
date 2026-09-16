@@ -20,14 +20,14 @@ immutable hash for future retrieval.
 - Release Nos. 34-95148; IA-6056; IC-34635.
 - Federal Register: 87 FR 38943–38981, published 2022-06-30, document
   2022-13936.
-- Metadata: https://www.federalregister.gov/api/v1/documents/2022-13936.json —
+- Metadata: <https://www.federalregister.gov/api/v1/documents/2022-13936.json> —
   HTTP 200.
 - Full text inspected:
-  https://www.federalregister.gov/documents/full_text/text/2022/06/30/2022-13936.txt
+  <https://www.federalregister.gov/documents/full_text/text/2022/06/30/2022-13936.txt>
   — HTTP 200. The response contains the Government Publishing Office rule text
   in an HTML/pre wrapper.
 - Human-readable entry:
-  https://www.federalregister.gov/documents/2022/06/30/2022-13936/electronic-submission-of-applications-for-orders-under-the-advisers-act-and-the-investment-company
+  <https://www.federalregister.gov/documents/2022/06/30/2022-13936/electronic-submission-of-applications-for-orders-under-the-advisers-act-and-the-investment-company>
 - SHA-256 of the retrieved full-text response bytes:
   `5cf4b4056b7cb036027ab1a3a3fce3d21f83aca963b1047ddfacf27bacb1c1cd`,
   observed 2026-09-15.
@@ -73,6 +73,51 @@ to filers is not permission for this Producer to round: the Producer preserves
 the actual reported token and performs only exact unit conversion, aggregation,
 and subtraction. No magnitude-based correction is permitted even if a filer
 appears to have reported the wrong scale.
+
+## SEC Form 4 ownership XML and archive locator
+
+### Official authority and bounded contract
+
+- Submissions listing endpoint template:
+  `https://data.sec.gov/submissions/CIK<10-digit-CIK>.json`.
+- Raw filing archive root:
+  `https://www.sec.gov/Archives/edgar/data/<CIK>/<accession-without-dashes>/`.
+- Observed 2026-09-16 from Berkshire Hathaway Form 4 accession
+  `0001728451-26-000003`: the raw ownership XML is an unnamespaced
+  `ownershipDocument` with a `<schemaVersion>X0609</schemaVersion>` child,
+  `0`/`1` relationship and equity-swap booleans, root-level Section 16/Rule
+  10b5-1 flags, and an `ownerSignature`; those non-evidence fields are admitted
+  but not projected. The submissions `recent` arrays do not include a per-row
+  CIK; their required top-level `cik` identifies every row. The same live
+  listing has blank `reportDate` values for unrelated forms such as `SCHEDULE
+  13G`; alignment, accession uniqueness, and acceptance timestamps are
+  verified across the complete listing, while filing/report dates and the
+  primary document are validated for selected exact Form 4 rows. It also has a
+  historical acceptance-time inversion: `0001193125-22-183048` at
+  `2022-06-27T22:31:38.000Z` precedes `0000899243-22-024236` at
+  `2022-06-27T22:43:23.000Z`. Selection therefore derives coverage from the
+  minimum precise acceptance time and canonicalizes selected rows rather than
+  treating incidental source row order as a guarantee.
+- Observed 2026-09-16 from historical Berkshire Form 4/A accession
+  `0000919574-25-001652`: its `xslF345X05/ownership.xml` locator resolves to
+  raw XML with schema `X0508`. It is intentionally unsupported: the closed v3
+  contract admits only `X0609` and only the corresponding verified
+  `xslF345X06` presentation prefix. A future prefix/schema requires an
+  explicit contract change rather than runtime expansion.
+- SEC ownership-document payloads are admitted only for that declared `X0609`
+  shape. The checked-in parser rejects other schema versions, DTD/entity
+  content, unknown structures, unsafe primary-document locators, and
+  transformed HTML in place of raw XML.
+- Form `4` and `4/A` are selected from the aligned `recent` listing by precise
+  `acceptanceDateTime`; the Feed uses the official acceptance instant for source
+  publication and knowledge time.
+
+The Form 4 XML and submissions files under
+`providers/sec_edgar/fixtures/form4/` are explicitly synthetic,
+production-shaped fixtures. They verify the closed parser and projection
+contract; they are not claims that the fixture values were downloaded from a
+live filing. No complete live Form 4 document is copied into the repository,
+and the Producer does not broaden support to unverified filing variants.
 
 ## CFTC Legacy Futures-Only row shape
 

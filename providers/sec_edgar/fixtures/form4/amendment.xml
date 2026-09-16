@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ownershipDocument>
+  <schemaVersion>X0609</schemaVersion>
+  <documentType>4/A</documentType>
+  <periodOfReport>2026-08-09</periodOfReport>
+  <notSubjectToSection16>0</notSubjectToSection16>
+  <issuer>
+    <issuerCik>0001067983</issuerCik>
+    <issuerName>BERKSHIRE HATHAWAY INC</issuerName>
+    <issuerTradingSymbol>BRK.B</issuerTradingSymbol>
+  </issuer>
+  <reportingOwner>
+    <reportingOwnerId>
+      <rptOwnerCik>0000000001</rptOwnerCik>
+      <rptOwnerName>First Owner</rptOwnerName>
+    </reportingOwnerId>
+    <reportingOwnerRelationship><isDirector>1</isDirector></reportingOwnerRelationship>
+  </reportingOwner>
+  <aff10b5One>0</aff10b5One>
+  <nonDerivativeTable>
+    <nonDerivativeTransaction>
+      <securityTitle><value>Class B Common Stock</value></securityTitle>
+      <transactionDate><value>2026-08-08</value></transactionDate>
+      <transactionCoding>
+        <transactionFormType>4/A</transactionFormType>
+        <transactionCode>S</transactionCode>
+        <equitySwapInvolved>0</equitySwapInvolved>
+      </transactionCoding>
+      <transactionAmounts>
+        <transactionTotalValue><value>2500</value></transactionTotalValue>
+        <transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>
+      </transactionAmounts>
+      <postTransactionAmounts>
+        <sharesOwnedFollowingTransaction><value>80</value></sharesOwnedFollowingTransaction>
+      </postTransactionAmounts>
+      <ownershipNature><directOrIndirectOwnership><value>D</value></directOrIndirectOwnership></ownershipNature>
+    </nonDerivativeTransaction>
+  </nonDerivativeTable>
+  <dateOfOriginalSubmission><value>2026-08-08</value></dateOfOriginalSubmission>
+  <ownerSignature>
+    <signatureName>Example Signer</signatureName>
+    <signatureDate>2026-08-10</signatureDate>
+  </ownerSignature>
+</ownershipDocument>

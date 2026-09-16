@@ -31,21 +31,24 @@ rate_registry:
   schema_file: rate-registry.json
 
 source_families:
-  - { id: federal_reserve, name: "Federal Reserve", tier: "Tier 1" }
-  - { id: bls, name: "U.S. Bureau of Labor Statistics", tier: "Tier 1" }
-  - { id: sec, name: "SEC EDGAR", tier: "Tier 1" }
-  - { id: cftc, name: "CFTC", tier: "Tier 1" }
-  - { id: pboc, name: "中国人民银行", tier: "Tier 1" }
-  - { id: nbs, name: "国家统计局", tier: "Tier 1" }
-  - { id: sse, name: "上海证券交易所", tier: "Tier 1" }
-  - { id: szse, name: "深圳证券交易所", tier: "Tier 1" }
+  - {id: federal_reserve, name: "Federal Reserve", tier: "Tier 1"}
+  - {id: bls, name: "U.S. Bureau of Labor Statistics", tier: "Tier 1"}
+  - {id: sec, name: "SEC EDGAR", tier: "Tier 1"}
+  - {id: cftc, name: "CFTC", tier: "Tier 1"}
+  - {id: pboc, name: "中国人民银行", tier: "Tier 1"}
+  - {id: nbs, name: "国家统计局", tier: "Tier 1"}
+  - {id: sse, name: "上海证券交易所", tier: "Tier 1"}
+  - {id: szse, name: "深圳证券交易所", tier: "Tier 1"}
 
 watched_companies:
-  - { cik: "0001067983", name: "Berkshire Hathaway", tickers: [BRK.A, BRK.B] }
-  - { cik: "0001336528", name: "Pershing Square Capital", tickers: [] }
-  - { cik: "0001539579", name: "Scion Asset Management", tickers: [] }
-  - { cik: "0001535213", name: "Baupost Group", tickers: [] }
-  - { cik: "0000926522", name: "Oaktree Capital Management", tickers: [] }
-  - { cik: "0001499575", name: "ARK Investment Management", tickers: [] }
-  - { cik: "0001160822", name: "Tiger Global Management", tickers: [] }
-  - { cik: "0001098249", name: "Coatue Management", tickers: [] }
+  - {cik: "0001067983", name: "Berkshire Hathaway", tickers: [BRK.A, BRK.B]}
+  - {cik: "0001336528", name: "Pershing Square Capital", tickers: []}
+  - {cik: "0001539579", name: "Scion Asset Management", tickers: []}
+  - {cik: "0001535213", name: "Baupost Group", tickers: []}
+  - {cik: "0000926522", name: "Oaktree Capital Management", tickers: []}
+  - {cik: "0001499575", name: "ARK Investment Management", tickers: []}
+  - {cik: "0001160822", name: "Tiger Global Management", tickers: []}
+  - {cik: "0001098249", name: "Coatue Management", tickers: []}
+
+watched_form4_issuers:
+  - {cik: "0001067983", name: "Berkshire Hathaway"}

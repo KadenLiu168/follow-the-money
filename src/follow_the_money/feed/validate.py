@@ -28,8 +28,9 @@ from __future__ import annotations
 
 import itertools
 import re
+import unicodedata
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -42,6 +43,8 @@ from follow_the_money.semantic import (  # pyright: ignore[reportMissingImports]
 
 from ..canonical import canonical_digest
 from ..config.model import REQUIRED_COVERAGE_GROUPS, FreshnessContract
+from ..providers.http import stable_item_id
+from ..providers.sec_form4 import FORM4_SCHEMA_VERSION
 from ..schema import SchemaError, validate_against
 from .freshness import FreshnessError, evaluate_freshness
 
@@ -94,6 +97,15 @@ _FORBIDDEN_INTELLIGENCE_KEYS = {
     "status",
     "signal",
     "recommendation",
+    "sentiment",
+    "confidence",
+    "holding_delta",
+    "transaction_value",
+    "calculated_transaction_value",
+    "inferred_holding_delta",
+    "amendment_effectiveness",
+    "amends_accession",
+    "effective_version",
 }
 
 
@@ -530,6 +542,457 @@ def _validate_sec_v2_item(
         raise SchemaError(f"{where}: unavailable comparison has invalid current holdings")
 
 
+_FORM4_REFERENCE_FIELDS = frozenset(
+    {
+        "security_title",
+        "transaction_date",
+        "deemed_execution_date",
+        "transaction_form_type",
+        "transaction_code",
+        "equity_swap_involved",
+        "timeliness",
+        "transactionShares",
+        "transactionTotalValue",
+        "transactionPricePerShare",
+        "transactionAcquiredDisposedCode",
+        "exerciseDate",
+        "expirationDate",
+        "conversionOrExercisePrice",
+        "underlyingSecurityTitle",
+        "underlyingSecurityShares",
+        "underlyingSecurityValue",
+        "sharesOwnedFollowingTransaction",
+        "valueOwnedFollowingTransaction",
+        "directOrIndirectOwnership",
+        "natureOfOwnership",
+    }
+)
+
+
+def _form4_footnote_key(value: str) -> tuple[int, str]:
+    return len(value), value
+
+
+def _validate_form4_text(value: Any, *, where: str, max_length: int) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise SchemaError(f"{where}: Form 4 text is required")
+    normalized = unicodedata.normalize("NFC", re.sub(r"\s+", " ", value).strip())
+    if normalized != value or len(value) > max_length:
+        raise SchemaError(f"{where}: Form 4 text is not normalized or bounded")
+
+
+def _validate_form4_optional_text(value: Any, *, where: str, max_length: int) -> None:
+    if value is not None:
+        _validate_form4_text(value, where=where, max_length=max_length)
+
+
+def _validate_form4_date(value: Any, *, where: str, required: bool = True) -> None:
+    if value is None and not required:
+        return
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise SchemaError(f"{where}: Form 4 date is invalid")
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise SchemaError(f"{where}: Form 4 date is invalid") from exc
+
+
+def _validate_form4_numeric(value: Any, *, where: str, unit: str) -> None:
+    if not isinstance(value, Mapping):
+        raise SchemaError(f"{where}: Form 4 numeric value is invalid")
+    refs = value.get("footnote_ids")
+    if not isinstance(refs, list) or refs != sorted(refs, key=_form4_footnote_key):
+        raise SchemaError(f"{where}: Form 4 footnote IDs are not ordered")
+    if len(refs) != len(set(refs)):
+        raise SchemaError(f"{where}: Form 4 footnote IDs are duplicated")
+    if value.get("unit") != unit:
+        raise SchemaError(f"{where}: Form 4 numeric unit is invalid")
+    raw = value.get("value")
+    if raw is None:
+        if not refs:
+            raise SchemaError(f"{where}: null Form 4 numeric value lacks footnote support")
+        return
+    number = _decimal(value, where=where, unit=unit)
+    if number < 0:
+        raise SchemaError(f"{where}: Form 4 source numeric value is negative")
+
+
+def _validate_form4_amount(value: Any, *, where: str, post: bool = False) -> None:
+    if not isinstance(value, Mapping):
+        raise SchemaError(f"{where}: Form 4 amount is required")
+    if post:
+        branch_units = {"shares": "shares", "value": "usd"}
+        invalid_branch = "post-transaction amount branch is invalid"
+    else:
+        branch_units = {"shares": "shares", "total_value": "usd"}
+        invalid_branch = "transaction amount branch is invalid"
+    branch = value.get("branch")
+    if branch not in branch_units:
+        raise SchemaError(f"{where}: {invalid_branch}")
+    for field, unit in branch_units.items():
+        child = value.get(field)
+        if field == branch:
+            if child is None:
+                raise SchemaError(f"{where}.{field}: selected amount branch is missing")
+            _validate_form4_numeric(child, where=f"{where}.{field}", unit=unit)
+        elif child is not None:
+            raise SchemaError(f"{where}.{field}: non-selected amount branch must be null")
+
+
+def _validate_form4_field_references(value: Any, *, where: str, footnote_ids: set[str]) -> None:
+    if not isinstance(value, list):
+        raise SchemaError(f"{where}: field references are required")
+    fields: list[str] = []
+    for index, reference in enumerate(value):
+        if not isinstance(reference, Mapping):
+            raise SchemaError(f"{where}[{index}] is invalid")
+        field = reference.get("field")
+        refs = reference.get("footnote_ids")
+        if not isinstance(field, str) or field not in _FORM4_REFERENCE_FIELDS or field in fields:
+            raise SchemaError(f"{where}[{index}] field identity is invalid or duplicated")
+        if not isinstance(refs, list) or refs != sorted(refs, key=_form4_footnote_key):
+            raise SchemaError(f"{where}[{index}] footnote IDs are not ordered")
+        if any(ref not in footnote_ids for ref in refs):
+            raise SchemaError(f"{where}[{index}] has a dangling footnote reference")
+        fields.append(field)
+    if fields != sorted(fields):
+        raise SchemaError(f"{where} is not ordered by field")
+
+
+def _validate_form4_ownership(value: Any, *, where: str) -> None:
+    if not isinstance(value, Mapping):
+        raise SchemaError(f"{where}: ownership nature is required")
+    direct = value.get("direct_or_indirect")
+    nature = value.get("nature_of_ownership")
+    if direct not in {"direct", "indirect"} or not (isinstance(nature, str) or nature is None):
+        raise SchemaError(f"{where}: ownership nature is invalid")
+    _validate_form4_optional_text(nature, where=f"{where}.nature_of_ownership", max_length=300)
+    if direct == "indirect" and not nature:
+        raise SchemaError(f"{where}: indirect ownership requires nature text")
+
+
+def _validate_form4_underlying(value: Any, *, where: str) -> None:
+    if not isinstance(value, Mapping) or not isinstance(value.get("title"), str):
+        raise SchemaError(f"{where}: underlying security is invalid")
+    amount = value.get("amount")
+    if not isinstance(amount, Mapping):
+        raise SchemaError(f"{where}: underlying amount is required")
+    _validate_form4_amount(amount, where=f"{where}.amount", post=True)
+
+
+def _validate_form4_entry(
+    entry: Any,
+    *,
+    table: str,
+    ordinal: int,
+    accession: str,
+    form: str,
+    footnote_ids: set[str],
+) -> None:
+    if not isinstance(entry, Mapping):
+        raise SchemaError(f"{table}[{ordinal}] is invalid")
+    if entry.get("source_ordinal") != ordinal:
+        raise SchemaError(f"{table}[{ordinal}] source ordinal is not consecutive")
+    expected_id = stable_item_id("sec_edgar", f"{accession}|{table}|{ordinal}")
+    if entry.get("entry_id") != expected_id:
+        raise SchemaError(f"{table}[{ordinal}] entry identity is invalid")
+    _validate_form4_text(
+        entry.get("security_title"), where=f"{table}[{ordinal}].security_title", max_length=300
+    )
+    _validate_form4_amount(
+        entry.get("post_transaction_amount"),
+        where=f"{table}[{ordinal}].post_transaction_amount",
+        post=True,
+    )
+    _validate_form4_ownership(
+        entry.get("ownership_nature"), where=f"{table}[{ordinal}].ownership_nature"
+    )
+    _validate_form4_field_references(
+        entry.get("field_references"),
+        where=f"{table}[{ordinal}].field_references",
+        footnote_ids=footnote_ids,
+    )
+    derivative = table == "derivative"
+    if derivative:
+        if not isinstance(entry.get("derivative_terms"), Mapping):
+            raise SchemaError(f"{table}[{ordinal}] derivative terms are required")
+        terms = entry["derivative_terms"]
+        _validate_form4_date(
+            terms.get("exercise_date"),
+            where=f"{table}[{ordinal}].exercise_date",
+            required=False,
+        )
+        _validate_form4_date(
+            terms.get("expiration_date"),
+            where=f"{table}[{ordinal}].expiration_date",
+            required=False,
+        )
+        conversion_price = terms.get("conversion_or_exercise_price")
+        if conversion_price is not None:
+            _validate_form4_numeric(
+                conversion_price,
+                where=f"{table}[{ordinal}].conversion_or_exercise_price",
+                unit="usd_per_share",
+            )
+        if not isinstance(entry.get("underlying_security"), Mapping):
+            raise SchemaError(f"{table}[{ordinal}] underlying security is required")
+        _validate_form4_underlying(
+            entry["underlying_security"], where=f"{table}[{ordinal}].underlying_security"
+        )
+    elif "derivative_terms" in entry or "underlying_security" in entry:
+        raise SchemaError(f"{table}[{ordinal}] contains derivative-only fields")
+    if entry.get("entry_kind") == "holding":
+        return
+    if entry.get("entry_kind") != "transaction":
+        raise SchemaError(f"{table}[{ordinal}] entry kind is invalid")
+    _validate_form4_date(
+        entry.get("transaction_date"), where=f"{table}[{ordinal}].transaction_date"
+    )
+    _validate_form4_date(
+        entry.get("deemed_execution_date"),
+        where=f"{table}[{ordinal}].deemed_execution_date",
+        required=False,
+    )
+    coding = entry.get("transaction_coding")
+    if not isinstance(coding, Mapping) or coding.get("transaction_form_type") != form:
+        raise SchemaError(f"{table}[{ordinal}] transaction coding is invalid")
+    _validate_form4_text(
+        coding.get("transaction_code"),
+        where=f"{table}[{ordinal}].transaction_code",
+        max_length=16,
+    )
+    _validate_form4_optional_text(
+        entry.get("timeliness"), where=f"{table}[{ordinal}].timeliness", max_length=64
+    )
+    if not isinstance(coding.get("equity_swap_involved"), bool):
+        raise SchemaError(f"{table}[{ordinal}] equity-swap flag is invalid")
+    _validate_form4_amount(
+        entry.get("transaction_amount"), where=f"{table}[{ordinal}].transaction_amount"
+    )
+    price = entry.get("price_per_share")
+    if price is not None:
+        _validate_form4_numeric(
+            price, where=f"{table}[{ordinal}].price_per_share", unit="usd_per_share"
+        )
+    if entry.get("acquisition_disposition_code") not in {"A", "D"}:
+        raise SchemaError(f"{table}[{ordinal}] acquisition/disposition code is invalid")
+
+
+def _validate_sec_v3_item(
+    item: Mapping[str, Any],
+    *,
+    start: datetime,
+    cutoff: datetime,
+    watched_issuers: set[str],
+    where: str,
+) -> str:
+    payload = item.get("payload")
+    if not isinstance(payload, Mapping) or payload.get("filing_subtype") != "form4":
+        raise SchemaError(f"{where}: SEC v3 Form 4 subtype is required")
+    form = payload.get("form")
+    if form not in {"4", "4/A"}:
+        raise SchemaError(f"{where}: Form 4 form is invalid")
+    company = payload.get("company")
+    issuer = payload.get("issuer")
+    if not isinstance(company, str) or not re.fullmatch(r"\d{10}", company):
+        raise SchemaError(f"{where}: Form 4 issuer CIK is invalid")
+    if company not in watched_issuers:
+        raise SchemaError(f"{where}: Form 4 issuer is outside watched issuers")
+    if not isinstance(issuer, Mapping) or issuer.get("cik") != company:
+        raise SchemaError(f"{where}: Form 4 issuer identity is invalid")
+    for key, max_length in (("name", 300), ("trading_symbol", 32)):
+        _validate_form4_text(issuer.get(key), where=f"{where}.issuer.{key}", max_length=max_length)
+    accession = payload.get("accession_number")
+    if not isinstance(accession, str) or not re.fullmatch(r"\d{10}-\d{2}-\d{6}", accession):
+        raise SchemaError(f"{where}: Form 4 accession is invalid")
+    if item.get("id") != stable_item_id("sec_edgar", accession):
+        raise SchemaError(f"{where}: Form 4 item identity is invalid")
+    accepted_at = payload.get("accepted_at")
+    filed_at = payload.get("filed_at")
+    report_period = payload.get("report_period")
+    accepted = (
+        _parse_ts(accepted_at, f"{where}.accepted_at") if isinstance(accepted_at, str) else None
+    )
+    if accepted is None or not start <= accepted < cutoff:
+        raise SchemaError(f"{where}: Form 4 acceptance time is outside the current window")
+    if not isinstance(filed_at, str):
+        raise SchemaError(f"{where}: Form 4 filed_at is invalid")
+    _parse_ts(filed_at, f"{where}.filed_at")
+    _validate_form4_date(report_period, where=f"{where}.report_period")
+    source = item.get("source")
+    if not isinstance(source, Mapping):
+        raise SchemaError(f"{where}: Form 4 source is invalid")
+    if (
+        source.get("published_at") != accepted_at
+        or source.get("knowledge_available_at") != accepted_at
+    ):
+        raise SchemaError(f"{where}: Form 4 source time is not the precise acceptance time")
+    source_url = source.get("url")
+    expected_accession_path = accession.replace("-", "")
+    if not isinstance(source_url, str) or not re.fullmatch(
+        rf"https://www\.sec\.gov/Archives/edgar/data/{re.escape(company)}/"
+        rf"{re.escape(expected_accession_path)}/[A-Za-z0-9][A-Za-z0-9_.-]*\.xml",
+        source_url,
+    ):
+        raise SchemaError(f"{where}: Form 4 source URL is not the official raw XML URL")
+    owners = payload.get("reporting_owners")
+    if not isinstance(owners, list) or not owners:
+        raise SchemaError(f"{where}: Form 4 reporting owners are required")
+    owner_ciks: list[str] = []
+    for index, owner in enumerate(owners):
+        if not isinstance(owner, Mapping) or not re.fullmatch(r"\d{10}", str(owner.get("cik", ""))):
+            raise SchemaError(f"{where}.reporting_owners[{index}] is invalid")
+        _validate_form4_text(
+            owner.get("name"), where=f"{where}.reporting_owners[{index}].name", max_length=300
+        )
+        relationship = owner.get("relationship")
+        if not isinstance(relationship, Mapping):
+            raise SchemaError(f"{where}.reporting_owners[{index}].relationship is invalid")
+        flags = [
+            relationship.get(key) for key in ("director", "officer", "ten_percent_owner", "other")
+        ]
+        if not all(isinstance(flag, bool) for flag in flags) or not any(flags):
+            raise SchemaError(f"{where}.reporting_owners[{index}] relationship is incomplete")
+        _validate_form4_optional_text(
+            relationship.get("officer_title"),
+            where=f"{where}.reporting_owners[{index}].officer_title",
+            max_length=300,
+        )
+        _validate_form4_optional_text(
+            relationship.get("other_text"),
+            where=f"{where}.reporting_owners[{index}].other_text",
+            max_length=300,
+        )
+        if relationship.get("officer") and not relationship.get("officer_title"):
+            raise SchemaError(f"{where}.reporting_owners[{index}] officer title is required")
+        if relationship.get("other") and not relationship.get("other_text"):
+            raise SchemaError(f"{where}.reporting_owners[{index}] other text is required")
+        owner_ciks.append(owner["cik"])
+    if owner_ciks != sorted(owner_ciks) or len(owner_ciks) != len(set(owner_ciks)):
+        raise SchemaError(f"{where}: reporting owners are not unique and ordered")
+    footnotes = payload.get("footnotes")
+    if not isinstance(footnotes, list):
+        raise SchemaError(f"{where}: Form 4 footnotes are required")
+    footnote_keys: list[str] = []
+    for footnote in footnotes:
+        if not isinstance(footnote, Mapping) or not isinstance(footnote.get("id"), str):
+            raise SchemaError(f"{where}: Form 4 footnote is invalid")
+        identifier = footnote["id"]
+        if identifier in footnote_keys or not re.fullmatch(r"F(?:[1-9]|[1-9]\d)", identifier):
+            raise SchemaError(f"{where}: Form 4 footnote ID is invalid")
+        text = footnote.get("text")
+        normalized = re.sub(r"\s+", " ", str(text)).strip() if isinstance(text, str) else ""
+        if not text or unicodedata.normalize("NFC", normalized) != text or len(text) > 4000:
+            raise SchemaError(f"{where}: Form 4 footnote text is not normalized or bounded")
+        footnote_keys.append(identifier)
+    if footnote_keys != sorted(footnote_keys, key=_form4_footnote_key):
+        raise SchemaError(f"{where}: Form 4 footnotes are not ordered")
+    footnote_ids = set(footnote_keys)
+    for table in ("non_derivative_entries", "derivative_entries"):
+        entries = payload.get(table)
+        if not isinstance(entries, list):
+            raise SchemaError(f"{where}.{table} is required")
+        kind = "non_derivative" if table.startswith("non_") else "derivative"
+        for ordinal, entry in enumerate(entries):
+            _validate_form4_entry(
+                entry,
+                table=kind,
+                ordinal=ordinal,
+                accession=accession,
+                form=form,
+                footnote_ids=footnote_ids,
+            )
+    if not payload.get("non_derivative_entries") and not payload.get("derivative_entries"):
+        raise SchemaError(f"{where}: Form 4 contains no entries")
+    if payload.get("is_amendment") != (form == "4/A"):
+        raise SchemaError(f"{where}: Form 4 amendment flag is invalid")
+    original = payload.get("date_of_original_submission")
+    if form == "4/A":
+        _validate_form4_date(original, where=f"{where}.date_of_original_submission")
+    if form == "4" and original is not None:
+        raise SchemaError(f"{where}: original submission date is not valid for Form 4")
+    remarks = payload.get("remarks")
+    _validate_form4_optional_text(remarks, where=f"{where}.remarks", max_length=2000)
+    if payload.get("raw_metadata") != {}:
+        raise SchemaError(f"{where}: generic Form 4 metadata is prohibited")
+    return accession
+
+
+def _validate_sec_v3_items(
+    items: list[Mapping[str, Any]],
+    *,
+    start: datetime,
+    cutoff: datetime,
+    contract: Mapping[str, Any],
+    watched_issuers: set[str],
+    watched_companies: set[str],
+    outcome: Mapping[str, Any],
+) -> None:
+    units = contract.get("units")
+    if not isinstance(units, Mapping) or set(units) != {
+        "13f_value_before_2023_01_03",
+        "13f_value_from_2023_01_03",
+        "reported_value_usd_thousands",
+    }:
+        raise SchemaError("SEC v3 13F unit contract is missing or not closed")
+    if contract.get("max_filings_per_window") != 20 or contract.get(
+        "ownership_xml_schema_versions"
+    ) != [FORM4_SCHEMA_VERSION]:
+        raise SchemaError("SEC v3 Form 4 bounds/schema versions are not closed")
+    thirteenf_ciks: list[str] = []
+    accessions: set[str] = set()
+    for item in items:
+        payload = item.get("payload")
+        if not isinstance(payload, Mapping):
+            raise SchemaError("SEC v3 filing payload is invalid")
+        subtype = payload.get("filing_subtype")
+        if subtype == "form13f":
+            if any(
+                field in payload
+                for field in (
+                    "issuer",
+                    "reporting_owners",
+                    "non_derivative_entries",
+                    "derivative_entries",
+                    "footnotes",
+                )
+            ):
+                raise SchemaError("SEC v3 form13f contains Form 4 fields")
+            _validate_sec_v2_item(
+                item,
+                cutoff=cutoff,
+                units=units,
+                where=f"items[{item.get('id')!r}]",
+            )
+            cik = item["payload"]["company_identity"]["cik"]
+            thirteenf_ciks.append(cik)
+            accession = item["payload"].get("accession_number")
+        elif subtype == "form4":
+            if any(field in payload for field in ("company_identity", "holdings", "comparison")):
+                raise SchemaError("SEC v3 form4 contains legacy 13F fields")
+            accession = _validate_sec_v3_item(
+                item,
+                start=start,
+                cutoff=cutoff,
+                watched_issuers=watched_issuers,
+                where=f"items[{item.get('id')!r}]",
+            )
+        else:
+            raise SchemaError("SEC v3 filing subtype is missing or unsupported")
+        if not isinstance(accession, str) or accession in accessions:
+            raise SchemaError("SEC v3 filing accessions are missing or duplicated")
+        accessions.add(accession)
+    if len(thirteenf_ciks) != len(set(thirteenf_ciks)):
+        raise SchemaError("SEC v3 13F company CIKs are not unique")
+    if not set(thirteenf_ciks).issubset(watched_companies):
+        raise SchemaError("SEC v3 13F item CIK is outside watched companies")
+    complete = outcome.get("state") == "healthy" or (
+        outcome.get("state") == "empty" and _is_true(contract.get("empty_valid_for_window"))
+    )
+    if complete and set(thirteenf_ciks) != watched_companies:
+        raise SchemaError("SEC v3 complete slice does not equal watched 13F CIK set")
+
+
 def _validate_cftc_metrics(
     value: Any, *, where: str, nonnegative_components: bool
 ) -> dict[str, Decimal]:
@@ -636,6 +1099,15 @@ def _validate_versioned_semantics(feed: Mapping[str, Any]) -> None:
             "value_normalization",
             "comparison",
             "holdings",
+            "filing_subtype",
+            "issuer",
+            "reporting_owners",
+            "non_derivative_entries",
+            "derivative_entries",
+            "footnotes",
+            "remarks",
+            "is_amendment",
+            "date_of_original_submission",
         },
         "cftc": {
             "market_identity",
@@ -647,19 +1119,20 @@ def _validate_versioned_semantics(feed: Mapping[str, Any]) -> None:
         },
     }
     cutoff = _parse_ts(feed["evidence_cutoff_at"], "evidence_cutoff_at")
+    window_start = _parse_ts(feed["window"]["start"], "window.start")
     items_by_provider: dict[str, list[Mapping[str, Any]]] = {}
     for item in feed.get("items", []):
         if isinstance(item, Mapping) and isinstance(item.get("provider_id"), str):
             items_by_provider.setdefault(item["provider_id"], []).append(item)
-    # A Provider embedding a v2 contract must satisfy its contract-level
-    # requirements even when the run retained no items for it; otherwise a
-    # blocked-exempt or empty SEC/CFTC outcome would skip them entirely.
-    v2_provider_ids = {
+    # A Provider embedding a versioned semantic contract must satisfy its
+    # contract-level requirements even when the run retained no items for it;
+    # otherwise a blocked-exempt or empty outcome would skip them entirely.
+    versioned_provider_ids = {
         provider_id
         for provider_id, contract in contracts.items()
-        if contract.get("contract_version") == 2
+        if contract.get("contract_version") in {2, 3}
     }
-    for provider_id in sorted(set(items_by_provider) | v2_provider_ids):
+    for provider_id in sorted(set(items_by_provider) | versioned_provider_ids):
         items = items_by_provider.get(provider_id, [])
         contract = contracts[provider_id]
         version = contract.get("contract_version", 1)
@@ -670,6 +1143,53 @@ def _validate_versioned_semantics(feed: Mapping[str, Any]) -> None:
                     payload
                 ):
                     raise SchemaError(f"{provider_id} v1 item contains v2 semantic fields")
+        if version == 3:
+            if provider_id != "sec_edgar":
+                raise SchemaError(f"unsupported v3 semantic Provider {provider_id!r}")
+            config = feed.get("feed_config", {}).get("snapshot", {})
+            watched_issuers = (
+                config.get("watched_form4_issuers") if isinstance(config, Mapping) else None
+            )
+            if not isinstance(watched_issuers, list):
+                raise SchemaError("SEC v3 requires watched_form4_issuers in configuration snapshot")
+            issuer_ciks = [
+                row["cik"]
+                for row in watched_issuers
+                if isinstance(row, Mapping) and isinstance(row.get("cik"), str)
+            ]
+            if len(issuer_ciks) != len(watched_issuers) or any(
+                not re.fullmatch(r"\d{10}", cik) for cik in issuer_ciks
+            ):
+                raise SchemaError("SEC v3 watched Form 4 issuer selection is invalid")
+            if issuer_ciks != sorted(issuer_ciks) or len(issuer_ciks) != len(set(issuer_ciks)):
+                raise SchemaError("SEC v3 watched Form 4 issuer selection is invalid")
+            watched_companies = (
+                config.get("watched_companies") if isinstance(config, Mapping) else None
+            )
+            if not isinstance(watched_companies, list) or any(
+                not isinstance(row, Mapping) or not isinstance(row.get("cik"), str)
+                for row in watched_companies
+            ):
+                raise SchemaError("SEC v3 requires watched_companies in configuration snapshot")
+            watched_company_ciks = {row["cik"] for row in watched_companies}
+            outcome: Mapping[str, Any] = next(
+                (
+                    o
+                    for o in feed.get("provider_outcomes", [])
+                    if o.get("provider_id") == "sec_edgar"
+                ),
+                {},
+            )
+            _validate_sec_v3_items(
+                items,
+                start=window_start,
+                cutoff=cutoff,
+                contract=contract,
+                watched_issuers=set(issuer_ciks),
+                watched_companies=watched_company_ciks,
+                outcome=outcome,
+            )
+            continue
         if version != 2:
             continue
         if provider_id == "sec_edgar":
@@ -699,7 +1219,7 @@ def _validate_versioned_semantics(feed: Mapping[str, Any]) -> None:
             watched_ciks = [row.get("cik") for row in watched]
             if any(not isinstance(cik, str) or not cik for cik in watched_ciks):
                 raise SchemaError("SEC v2 watched company CIK is invalid")
-            outcome: Mapping[str, Any] = next(
+            v2_outcome: Mapping[str, Any] = next(
                 (
                     o
                     for o in feed.get("provider_outcomes", [])
@@ -710,8 +1230,9 @@ def _validate_versioned_semantics(feed: Mapping[str, Any]) -> None:
             watched_cik_set = set(watched_ciks)
             if not set(ciks).issubset(watched_cik_set):
                 raise SchemaError("SEC v2 item CIK is outside watched companies")
-            complete = outcome.get("state") == "healthy" or (
-                outcome.get("state") == "empty" and _is_true(contract.get("empty_valid_for_window"))
+            complete = v2_outcome.get("state") == "healthy" or (
+                v2_outcome.get("state") == "empty"
+                and _is_true(contract.get("empty_valid_for_window"))
             )
             if complete and set(ciks) != watched_cik_set:
                 raise SchemaError("SEC v2 complete slice does not equal watched CIK set")

@@ -21,7 +21,7 @@ from ..config.model import (
 MANIFEST_ROOT = Path(__file__).resolve().parents[3] / "providers"
 # Provider contracts evolve independently while the logical Feed remains v4.
 SUPPORTED_CONTRACT_VERSIONS: dict[str, frozenset[int]] = {
-    "sec_edgar": frozenset({1, 2}),
+    "sec_edgar": frozenset({1, 2, 3}),
     "cftc": frozenset({1, 2}),
     "federal_reserve": frozenset({1}),
     "bls": frozenset({1}),
@@ -74,6 +74,7 @@ _ALLOWED_MANIFEST_KEYS = frozenset(
         "pagination",
         "default_enabled",
         "fixture_provenance",
+        "form4",
     }
 )
 
@@ -88,6 +89,15 @@ def _unknown(mapping: Mapping[str, Any], allowed: frozenset[str], where: str) ->
     extra = set(mapping) - allowed
     if extra:
         raise ManifestError(f"{where}: unknown keys: {sorted(extra)}")
+
+
+def _as_int(value: Any, where: str) -> int:
+    if isinstance(value, bool):
+        raise ManifestError(f"{where} must be an integer")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ManifestError(f"{where} must be an integer") from exc
 
 
 def _read_manifest(path: Path) -> Mapping[str, Any]:
@@ -154,9 +164,12 @@ def _validate_rate(raw: Any, where: str) -> None:
         raise ManifestError(f"{where}.scope_id must be non-empty")
     if raw.get("unlimited", False):
         return
-    if int(raw["capacity"]) <= 0 or int(raw["refill_period_seconds"]) <= 0:
+    capacity = _as_int(raw["capacity"], f"{where}.capacity")
+    refill_period = _as_int(raw["refill_period_seconds"], f"{where}.refill_period_seconds")
+    minimum_interval = _as_int(raw["minimum_interval_seconds"], f"{where}.minimum_interval_seconds")
+    if capacity <= 0 or refill_period <= 0:
         raise ManifestError(f"{where}: capacity and refill_period_seconds must be positive")
-    if int(raw["minimum_interval_seconds"]) < 0:
+    if minimum_interval < 0:
         raise ManifestError(f"{where}.minimum_interval_seconds must be non-negative")
 
 
@@ -294,7 +307,11 @@ def _validate_manifest(data: Mapping[str, Any], path: Path, provider_id: str) ->
         data["source_link_hosts"], f"manifest {path}.source_link_hosts", source=True
     )
     _validate_rate(data["rate_policy"], f"manifest {path}.rate_policy")
-    if int(data["response_limit_bytes"]) <= 0 or int(data["attempt_timeout_seconds"]) <= 0:
+    response_limit = _as_int(data["response_limit_bytes"], f"manifest {path}.response_limit_bytes")
+    attempt_timeout = _as_int(
+        data["attempt_timeout_seconds"], f"manifest {path}.attempt_timeout_seconds"
+    )
+    if response_limit <= 0 or attempt_timeout <= 0:
         raise ManifestError(f"manifest {path}: response and timeout limits must be positive")
 
     for section, required in (
@@ -339,18 +356,42 @@ def _validate_manifest(data: Mapping[str, Any], path: Path, provider_id: str) ->
         raise ManifestError(f"manifest {path}.fixture_provenance.files must be a list")
     if not isinstance(data["units"], dict):
         raise ManifestError(f"manifest {path}.units must be a mapping")
-    if version == 2 and provider_id == "sec_edgar":
+    if provider_id == "sec_edgar" and version in {2, 3}:
         expected_units = {
             "13f_value_before_2023_01_03": "usd_thousands",
             "13f_value_from_2023_01_03": "usd",
             "reported_value_usd_thousands": "usd_thousands",
         }
         if data["units"] != expected_units:
-            raise ManifestError(f"manifest {path}: SEC v2 units are not the closed contract")
+            raise ManifestError(
+                f"manifest {path}: SEC v{version} units are not the closed contract"
+            )
+    form4 = data.get("form4")
+    if provider_id == "sec_edgar" and version == 3:
+        if not isinstance(form4, dict):
+            raise ManifestError(f"manifest {path}: SEC v3 form4 section is required")
+        _require(
+            form4,
+            {"max_filings_per_window", "ownership_xml_schema_versions"},
+            f"manifest {path}.form4",
+        )
+        _unknown(
+            form4,
+            frozenset({"max_filings_per_window", "ownership_xml_schema_versions"}),
+            f"manifest {path}.form4",
+        )
+        if form4["max_filings_per_window"] != 20:
+            raise ManifestError(f"manifest {path}: SEC v3 max_filings_per_window must be 20")
+        if form4["ownership_xml_schema_versions"] != ["X0609"]:
+            raise ManifestError(
+                f"manifest {path}: SEC v3 ownership_xml_schema_versions must be ['X0609']"
+            )
+    elif form4 is not None:
+        raise ManifestError(f"manifest {path}: form4 section is only supported by SEC v3")
     if version == 2 and provider_id == "cftc":
         if data["units"] != {"contracts": "contracts"}:
             raise ManifestError(f"manifest {path}: CFTC v2 units are not the closed contract")
-        if data["empty_valid_for_window"] is not False or data["pagination"] != "page_number":
+        if data["empty_valid_for_window"] or data["pagination"] != "page_number":
             raise ManifestError(
                 f"manifest {path}: CFTC v2 requires non-empty complete reports and page-number pagination"
             )
@@ -367,7 +408,10 @@ def _source_link_rules(manifest: Mapping[str, Any]) -> tuple[SourceLinkRule, ...
         SourceLinkRule(
             host=str(rule["host"]).lower().rstrip("."),
             allow_subdomains=bool(rule.get("allow_subdomains", False)),
-            allowed_ports=tuple(int(port) for port in rule.get("allowed_ports", [443])),
+            allowed_ports=tuple(
+                _as_int(port, "manifest source-link allowed port")
+                for port in rule.get("allowed_ports", [443])
+            ),
             allowed_query_params=tuple(rule.get("allowed_query_params", [])),
             query_value_grammar=str(rule.get("query_value_grammar", "any")),
             drop_query_params=tuple(rule.get("drop_query_params", [])),
@@ -421,9 +465,11 @@ def _manifest_rate(manifest: Mapping[str, Any]) -> RatePolicy | None:
         )
     return RatePolicy(
         scope_id=str(rate["scope_id"]),
-        capacity=int(rate["capacity"]),
-        refill_period_seconds=int(rate["refill_period_seconds"]),
-        minimum_interval_seconds=int(rate["minimum_interval_seconds"]),
+        capacity=_as_int(rate["capacity"], "manifest rate capacity"),
+        refill_period_seconds=_as_int(rate["refill_period_seconds"], "manifest rate refill period"),
+        minimum_interval_seconds=_as_int(
+            rate["minimum_interval_seconds"], "manifest rate minimum interval"
+        ),
         shared_host=rate.get("shared_host"),
     )
 
@@ -440,6 +486,28 @@ def manifest_to_provider_entry(
         enabled = bool(verification["verified"] and manifest["default_enabled"])
     charset = manifest["charset"]
     time = manifest["time"]
+    response_limit = _as_int(manifest["response_limit_bytes"], "manifest response limit")
+    contract_version = _as_int(manifest["contract_version"], "manifest contract version")
+    attempt_timeout = _as_int(manifest["attempt_timeout_seconds"], "manifest attempt timeout")
+    valid_for = (
+        _as_int(
+            manifest["freshness"]["valid_for_seconds"],
+            "manifest freshness valid_for_seconds",
+        )
+        if "valid_for_seconds" in manifest["freshness"]
+        else None
+    )
+    form4 = manifest.get("form4")
+    max_form4_filings = (
+        _as_int(form4["max_filings_per_window"], "manifest Form 4 filing bound")
+        if isinstance(form4, Mapping)
+        else None
+    )
+    form4_schema_versions = (
+        tuple(str(version) for version in form4["ownership_xml_schema_versions"])
+        if isinstance(form4, Mapping)
+        else ()
+    )
     return ProviderEntry(
         id=str(manifest["provider_id"]),
         name=str(manifest["name"]),
@@ -453,7 +521,9 @@ def manifest_to_provider_entry(
             FetchRule(
                 str(f["host"]).lower().rstrip("."),
                 bool(f.get("allow_subdomains", False)),
-                tuple(int(p) for p in f.get("allowed_ports", [443])),
+                tuple(
+                    _as_int(p, "manifest fetch allowed port") for p in f.get("allowed_ports", [443])
+                ),
             )
             for f in manifest["fetch_hosts"]
         ),
@@ -461,7 +531,10 @@ def manifest_to_provider_entry(
             FetchRule(
                 str(f["host"]).lower().rstrip("."),
                 bool(f.get("allow_subdomains", False)),
-                tuple(int(p) for p in f.get("allowed_ports", [443])),
+                tuple(
+                    _as_int(p, "manifest redirect allowed port")
+                    for p in f.get("allowed_ports", [443])
+                ),
             )
             for f in manifest["redirect_hosts"]
         ),
@@ -472,16 +545,16 @@ def manifest_to_provider_entry(
         allowed_content_type_header=charset["content_type_header"],
         pagination=str(manifest["pagination"]),
         empty_valid_for_window=bool(manifest["empty_valid_for_window"]),
-        response_limit_bytes=int(manifest["response_limit_bytes"]),
+        response_limit_bytes=response_limit,
         credentials_required=str(manifest["authentication"]).lower() not in {"none", "anonymous"},
         verification_date=verification["verification_date"],
         contract_url=verification["contract_url"],
         notes=verification["usage_note"],
-        contract_version=int(manifest["contract_version"]),
+        contract_version=contract_version,
         authentication=str(manifest["authentication"]),
         protocol=str(manifest["protocol"]),
-        attempt_timeout_seconds=int(manifest["attempt_timeout_seconds"]),
-        request_limit_bytes=int(manifest["response_limit_bytes"]),
+        attempt_timeout_seconds=attempt_timeout,
+        request_limit_bytes=response_limit,
         time_knowledge_time=str(time["knowledge_time"]),
         payload_types=tuple(str(p) for p in time["payload_types"]),
         identity_stable_record_id=str(manifest["identity"]["stable_record_id"]),
@@ -489,15 +562,13 @@ def manifest_to_provider_entry(
         freshness=FreshnessContract(
             cadence=str(manifest["freshness"]["cadence"]),
             reference_time=str(manifest["freshness"]["reference_time"]),
-            valid_for_seconds=(
-                int(manifest["freshness"]["valid_for_seconds"])
-                if "valid_for_seconds" in manifest["freshness"]
-                else None
-            ),
+            valid_for_seconds=valid_for,
         ),
         fixture_provenance_source=str(manifest["fixture_provenance"]["source"]),
         fixture_files=tuple(str(f) for f in manifest["fixture_provenance"]["files"]),
         coverage_groups=tuple(coverage_groups),
+        max_filings_per_window=max_form4_filings,
+        ownership_xml_schema_versions=form4_schema_versions,
     )
 
 

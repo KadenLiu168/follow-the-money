@@ -1,8 +1,9 @@
 # SEC EDGAR — Provider contract manifest
-# Contract status: verified on 2026-08-11 against the public submissions JSON
-# contract and the checked-in fixture.
+# Existing SEC source contract was verified on 2026-08-11 against the public
+# submissions JSON contract. Form 4 v3 support is covered by synthetic,
+# production-shaped fixtures; see fixture_provenance below.
 
-contract_version: 2
+contract_version: 3
 provider_id: sec_edgar
 name: SEC EDGAR
 source_family_id: sec
@@ -10,11 +11,13 @@ tier: "Tier 1"
 verification:
   verified: true
   verification_date: "2026-08-11"
-  contract_url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=13F"
+  contract_url: >-
+    https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=13F
   usage_note: >
-    Exact 13F-HR company filings for watched companies. Public data; EDGAR
-    requires a descriptive user agent with a contact identifier.
-    The submissions endpoint and archive source-link rules are verified.
+    Exact 13F-HR company filings for watched companies and bounded Form 4/4-A
+    ownership filings for configured issuers. Public data; EDGAR requires a
+    descriptive user agent with a contact identifier. The submissions endpoint,
+    ownership XML schema X0609, and archive source-link rules are verified.
 
 authentication: none
 protocol: https
@@ -26,11 +29,11 @@ charset:
   content_type_header: null
 
 fetch_hosts:
-  - { host: www.sec.gov, allow_subdomains: false, allowed_ports: [443] }
-  - { host: data.sec.gov, allow_subdomains: false, allowed_ports: [443] }
+  - {host: www.sec.gov, allow_subdomains: false, allowed_ports: [443]}
+  - {host: data.sec.gov, allow_subdomains: false, allowed_ports: [443]}
 redirect_hosts:
-  - { host: www.sec.gov, allow_subdomains: false, allowed_ports: [443] }
-  - { host: data.sec.gov, allow_subdomains: false, allowed_ports: [443] }
+  - {host: www.sec.gov, allow_subdomains: false, allowed_ports: [443]}
+  - {host: data.sec.gov, allow_subdomains: false, allowed_ports: [443]}
 
 source_link_hosts:
   - host: sec.gov
@@ -75,10 +78,21 @@ empty_valid_for_window: true
 pagination: page_number
 default_enabled: true
 
+form4:
+  max_filings_per_window: 20
+  ownership_xml_schema_versions: [X0609]
+
 fixture_provenance:
-  source: "Official SEC 13F rule is verified in references/provider-source-verification.md; arithmetic fixtures are explicitly synthetic production-shaped fixtures."
+  source: >-
+    SEC 13F and Form 4 source rules are verified in
+    references/provider-source-verification.md; checked-in ownership documents
+    are explicitly synthetic production-shaped fixtures with no claims of live
+    filing provenance.
   files:
     - fixtures/browse-13f.json
     - fixtures/semantic-submissions.json
     - fixtures/semantic-current.xml
     - fixtures/semantic-previous.xml
+    - fixtures/form4/submissions.json
+    - fixtures/form4/mixed.xml
+    - fixtures/form4/amendment.xml

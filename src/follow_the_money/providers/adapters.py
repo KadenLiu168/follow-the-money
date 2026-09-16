@@ -39,6 +39,13 @@ from .http import (
 )
 from .manifest import load_manifest, manifest_to_provider_entry
 from .sec_13f import compare_holdings, parse_complete_submission, select_filings
+from .sec_form4 import (
+    Form4ListingCandidate,
+    derive_form4_xml_url,
+    form4_feed_item,
+    parse_form4_document,
+    select_form4_filings,
+)
 from .urls import UrlValidationError
 
 
@@ -230,12 +237,14 @@ class SecEdgarAdapter(BaseAdapter):
         self._watched_ciks = tuple(str(c) for c in watched_ciks)
         self._watched_company = watched_company
         self._semantic_v2 = watched_company is not None and self._contract.contract_version == 2
-        if self._contract.contract_version == 2 and self._contract.units != {
+        self._semantic_v3 = watched_company is not None and self._contract.contract_version == 3
+        self._semantic_13f = self._semantic_v2 or self._semantic_v3
+        if self._contract.contract_version in {2, 3} and self._contract.units != {
             "13f_value_before_2023_01_03": "usd_thousands",
             "13f_value_from_2023_01_03": "usd",
             "reported_value_usd_thousands": "usd_thousands",
         }:
-            raise ValueError("SEC v2 units are not the closed contract")
+            raise ValueError("SEC semantic units are not the closed contract")
 
     def _complete_url(self, candidate: Any) -> str:
         cik = str(candidate.cik).zfill(10)
@@ -245,13 +254,13 @@ class SecEdgarAdapter(BaseAdapter):
         )
 
     def fetch(self, window: Mapping[str, str], client: Any) -> Any:
-        if self._semantic_v2:
+        if self._semantic_13f:
             assert self._watched_company is not None
             cik = str(self._watched_company.cik).zfill(10)
         else:
             cik = self._watched_ciks[0] if self._watched_ciks else "0001067983"
         submissions_url = f"https://data.sec.gov/submissions/CIK{cik}.json"
-        if not self._semantic_v2:
+        if not self._semantic_13f:
             return self._fetch(client, submissions_url)
         assert self._watched_company is not None
         submissions_raw = self._fetch(client, submissions_url)
@@ -277,7 +286,7 @@ class SecEdgarAdapter(BaseAdapter):
         }
 
     def normalize(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
-        if not self._semantic_v2:
+        if not self._semantic_13f:
             return self._normalize_v1(raw, window)
         if not isinstance(raw, Mapping):
             raise FetchError("SEC acquisition result is invalid")
@@ -354,6 +363,8 @@ class SecEdgarAdapter(BaseAdapter):
             "comparison": comparison,
             "holdings": comparison_rows,
         }
+        if self._semantic_v3:
+            payload["filing_subtype"] = "form13f"
         return [
             {
                 "id": item_id,
@@ -421,6 +432,114 @@ class SecEdgarAdapter(BaseAdapter):
                     },
                 }
             )
+        return items
+
+
+class SecForm4Adapter(BaseAdapter):
+    """SEC EDGAR acquisition unit for one watched issuer's Form 4 events."""
+
+    provider_id: str = "sec_edgar"
+
+    def __init__(
+        self,
+        manifest: Mapping[str, Any] | ProviderEntry | None = None,
+        watched_issuer: Any | None = None,
+        watched_cik: str | None = None,
+    ) -> None:
+        super().__init__(manifest)
+        if self._contract.contract_version != 3:
+            raise ValueError("SEC Form 4 requires contract version 3")
+        if (
+            self._contract.max_filings_per_window != 20
+            or not self._contract.ownership_xml_schema_versions
+        ):
+            raise ValueError("SEC Form 4 contract bounds are not closed")
+        self._watched_cik = str(getattr(watched_issuer, "cik", None) or watched_cik or "0001067983")
+        self.selected_accessions: tuple[str, ...] = ()
+        self.selection_complete = False
+
+    def fetch(self, window: Mapping[str, str], client: Any) -> Any:
+        submissions_url = f"https://data.sec.gov/submissions/CIK{self._watched_cik}.json"
+        submissions_raw = self._fetch(client, submissions_url)
+        submissions = self._json_body(submissions_raw)
+        if not isinstance(submissions, Mapping):
+            raise FetchError("SEC Form 4 submissions response is not an object")
+        filing_bound = self._contract.max_filings_per_window
+        if not isinstance(filing_bound, int):
+            raise FetchError("SEC Form 4 filing bound is missing")
+        candidates = select_form4_filings(
+            submissions,
+            window,
+            max_filings_per_window=filing_bound,
+        )
+        documents: list[dict[str, Any]] = []
+        for candidate in candidates:
+            url = derive_form4_xml_url(
+                candidate.issuer_cik,
+                candidate.accession_number,
+                candidate.primary_document,
+            )
+            raw = self._fetch(client, url)
+            documents.append(
+                {
+                    "candidate": candidate,
+                    "source_url": self._validate_url(url),
+                    "body": raw.body_bytes,
+                }
+            )
+        self.selected_accessions = tuple(candidate.accession_number for candidate in candidates)
+        self.selection_complete = True
+        return {"submissions": submissions, "documents": documents}
+
+    def normalize(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
+        if not isinstance(raw, Mapping) or not isinstance(raw.get("submissions"), Mapping):
+            raise FetchError("SEC Form 4 acquisition result is invalid")
+        official_cik = str(raw["submissions"].get("cik") or "")
+        if official_cik != self._watched_cik:
+            raise FetchError("SEC Form 4 official issuer CIK is mismatched")
+        documents = raw.get("documents")
+        if not isinstance(documents, list):
+            raise FetchError("SEC Form 4 documents are invalid")
+        if not self.selection_complete:
+            raise FetchError("SEC Form 4 selection was not completed")
+        candidates = [
+            document.get("candidate") for document in documents if isinstance(document, Mapping)
+        ]
+        document_accessions = [
+            candidate.accession_number
+            for candidate in candidates
+            if isinstance(candidate, Form4ListingCandidate)
+        ]
+        if document_accessions != list(self.selected_accessions):
+            raise FetchError("SEC Form 4 documents do not equal the selected accession set")
+        items: list[dict[str, Any]] = []
+        for document in documents:
+            if not isinstance(document, Mapping):
+                raise FetchError("SEC Form 4 document record is invalid")
+            candidate = document.get("candidate")
+            body = document.get("body")
+            source_url = document.get("source_url")
+            if not isinstance(candidate, Form4ListingCandidate):
+                raise FetchError("SEC Form 4 candidate record is invalid")
+            if not isinstance(body, (bytes, str)) or not isinstance(source_url, str):
+                raise FetchError("SEC Form 4 document record is incomplete")
+            normalized = parse_form4_document(
+                body,
+                candidate,
+                source_url=source_url,
+                allowed_schema_versions=self._contract.ownership_xml_schema_versions,
+            )
+            accepted_at = normalized.candidate.accepted_at
+            source = self._source(
+                source_id=f"sec-{stable_item_id(self.provider_id, normalized.candidate.accession_number)}",
+                name="SEC EDGAR",
+                tier="Tier 1",
+                kind="filing",
+                url=normalized.source_url,
+                published_at=accepted_at,
+                knowledge=accepted_at,
+            )
+            items.append(form4_feed_item(normalized, source=source))
         return items
 
 

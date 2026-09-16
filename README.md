@@ -40,8 +40,11 @@ filing
 Every artifact is required, including when empty. The required credential-free
 Providers are Federal Reserve, BLS, PBOC, NBS, SSE, SZSE, SEC EDGAR, and CFTC.
 CFTC is a required minimum-one weekly positioning coverage member. SEC EDGAR
-v2 filing items expose typed company identity, filing-date unit normalization,
-current/previous holdings, and deterministic deltas. CFTC v2 positioning items
+v3 filing items distinguish complete `form13f` current-state evidence from
+bounded current-window `form4`/`4/A` ownership evidence; Form 4 items retain
+issuer, reporting-owner, transaction/holding, post-state, and footnote data
+without inferred deltas or amendment linkage. SEC v1/v2 reads remain bounded
+compatibility paths. CFTC v2 positioning items
 expose market-code identity, typed current/previous metrics, deltas, and the
 explicit net-position derivation. These are evidence fields only; consumers do
 not infer market impact or direction.

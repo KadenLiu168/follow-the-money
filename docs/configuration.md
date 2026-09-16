@@ -11,7 +11,9 @@ Provider-specific facts remain in `providers/<provider>/manifest.yaml`.
 - output, runtime-state, and run roots;
 - rate-registry persistence contract;
 - source-family provenance;
-- SEC watched-company CIK filters;
+- SEC watched-company CIK filters and the separately ordered
+  `watched_form4_issuers` CIK selection (shipped with Berkshire Hathaway
+  issuer CIK `0001067983`);
 - exactly eight required Provider activation entries;
 - exactly five required coverage groups.
 
@@ -22,7 +24,9 @@ and CFTC. CFTC is enabled and required with minimum one in
 Each Provider manifest owns identity, verification evidence, authentication and
 protocol, fetch/redirect/source-link policy, charset/content type, limits, rate
 policy, pagination, empty-window semantics, implemented payload types, cadence,
-and fixture provenance. All shipped manifests are HTTPS and credential-free.
+and fixture provenance. The SEC v3 manifest additionally owns the closed
+Form 4 bound of 20 eligible filings per window and ownership XML schema list
+`[X0609]`. All shipped manifests are HTTPS and credential-free.
 
 Unknown keys, removed analytics/Agent fields, unsupported Provider IDs,
 missing required values, disabled required Providers, over-declared payloads,
