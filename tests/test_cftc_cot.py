@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from decimal import ROUND_DOWN, ROUND_HALF_EVEN, Inexact, localcontext
 from pathlib import Path
 
 import pytest
@@ -48,12 +49,26 @@ def row(date, code, name, long="10", short="4", spread="2", oi="100", stable=Non
     }
 
 
-def test_official_column_names_are_consumed():
+def test_numeric_fact_provenance_records_the_selected_cftc_source_fields():
     normalized = normalize_report_rows([row("2026-08-04", "001", "X", spread="7")], "2026-08-04")
     assert normalized["001"]["metrics"]["noncommercial_spreading"] == {
         "value": "7",
         "unit": "contracts",
     }
+    assert normalized["001"]["_numeric_facts"]["noncommercial_spreading"].source_fields == (
+        "noncomm_postions_spread_all",
+    )
+
+    renamed = row("2026-08-04", "002", "Y")
+    renamed["noncommercial_long"] = renamed.pop("noncomm_positions_long_all")
+    renamed["noncommercial_short"] = renamed.pop("noncomm_positions_short_all")
+    renamed["noncommercial_spreading"] = renamed.pop("noncomm_postions_spread_all")
+    renamed["open_interest"] = renamed.pop("open_interest_all")
+    facts = normalize_report_rows([renamed], "2026-08-04")["002"]["_numeric_facts"]
+    assert facts["noncommercial_long"].source_fields == ("noncommercial_long",)
+    assert facts["noncommercial_short"].source_fields == ("noncommercial_short",)
+    assert facts["noncommercial_spreading"].source_fields == ("noncommercial_spreading",)
+    assert facts["open_interest"].source_fields == ("open_interest",)
 
 
 def test_checked_in_fixtures_reproduce_the_official_row_shape():
@@ -170,6 +185,46 @@ def test_numeric_arithmetic_and_every_delta_are_typed_contracts():
     )
 
 
+def test_internal_provenance_is_ordered_and_not_projected_to_cftc_payload():
+    current_rows = [row("2026-08-04", "001", "X", long="12", short="5")]
+    previous_rows = [row("2026-07-28", "001", "X", long="10", short="4")]
+    current = normalize_report_rows(current_rows, "2026-08-04")
+    previous = normalize_report_rows(previous_rows, "2026-07-28")
+    item = compare_reports(
+        current_rows,
+        previous_rows,
+        current_date="2026-08-04",
+        previous_date="2026-07-28",
+    )[0]
+    payload = item["payload"]
+    provenance = payload.__getattribute__("provenance")
+    net = provenance["net_noncommercial"]
+    assert net.derivation.operation == "subtract"
+    assert net.derivation.inputs == (
+        current["001"]["_numeric_facts"]["noncommercial_long"],
+        current["001"]["_numeric_facts"]["noncommercial_short"],
+    )
+    net_delta = provenance["delta_metrics"]["net_noncommercial"]
+    assert net_delta.derivation.inputs == (
+        current["001"]["_numeric_facts"]["net_noncommercial"],
+        previous["001"]["_numeric_facts"]["net_noncommercial"],
+    )
+    assert set(payload) == {
+        "type",
+        "instrument_id",
+        "as_of",
+        "position",
+        "raw_metadata",
+        "market_identity",
+        "current_metrics",
+        "previous_metrics",
+        "delta_metrics",
+        "comparison",
+        "derivations",
+    }
+    assert not hasattr(net.derivation, "formula_id")
+
+
 def test_duplicate_codes_and_numeric_failures_fail_closed():
     with pytest.raises(SchemaError, match="duplicate"):
         normalize_report_rows(
@@ -177,6 +232,66 @@ def test_duplicate_codes_and_numeric_failures_fail_closed():
         )
     with pytest.raises(SchemaError, match="invalid"):
         normalize_report_rows([row("2026-08-04", "001", "X", long="not-number")], "2026-08-04")
+
+
+def _contextual_cftc_comparison(
+    *, precision: int, rounding: str, trap_inexact: bool, flag_inexact: bool
+):
+    current = [
+        row(
+            "2026-08-04",
+            "001",
+            "X",
+            long="123456789.123456789",
+            short="0.123456789",
+            spread="3",
+            oi="110",
+        )
+    ]
+    previous = [
+        row(
+            "2026-07-28",
+            "001",
+            "X",
+            long="123456789.023456789",
+            short="0.023456789",
+            spread="2",
+            oi="100",
+        )
+    ]
+    with localcontext() as context:
+        context.prec = precision
+        context.rounding = rounding
+        context.clear_flags()
+        context.flags[Inexact] = flag_inexact
+        context.traps[Inexact] = trap_inexact
+        return compare_reports(
+            current,
+            previous,
+            current_date="2026-08-04",
+            previous_date="2026-07-28",
+        )
+
+
+def test_cftc_numeric_output_is_independent_of_ambient_decimal_context():
+    expected = _contextual_cftc_comparison(
+        precision=28, rounding=ROUND_HALF_EVEN, trap_inexact=False, flag_inexact=False
+    )
+    options = (
+        (28, ROUND_DOWN, True, True),
+        (6, ROUND_DOWN, False, True),
+        (6, ROUND_HALF_EVEN, False, False),
+    )
+    for precision, rounding, trap_inexact, flag_inexact in options:
+        assert (
+            _contextual_cftc_comparison(
+                precision=precision,
+                rounding=rounding,
+                trap_inexact=trap_inexact,
+                flag_inexact=flag_inexact,
+            )
+            == expected
+        )
 
 
 def test_directional_fields_are_not_part_of_the_pure_payload():

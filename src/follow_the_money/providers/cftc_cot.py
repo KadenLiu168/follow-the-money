@@ -4,11 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, time, timedelta
-from decimal import Decimal, InvalidOperation
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from ..feed.validate import validate_canonical_numeric, validate_numeric_token
+from follow_the_money.semantic import (  # pyright: ignore[reportMissingImports]
+    DerivedNumericFact,
+    MeasuredNumericFact,
+    canonicalize_numeric,
+    derive_subtraction,
+)
+
 from ..schema import SchemaError
 
 PUBLICATION_HOUR = 15
@@ -84,21 +89,12 @@ def select_report_dates(
 def _number(value: Any, *, where: str, nonnegative: bool = True) -> str:
     if value is None:
         raise CotError(f"{where}: numeric field is missing")
-    text = str(value).strip().replace(",", "")
     try:
-        validate_numeric_token(text, where=where)
-        number = Decimal(text)
-    except (InvalidOperation, ValueError) as exc:
+        return canonicalize_numeric(
+            str(value).strip().replace(",", ""), where=where, nonnegative=nonnegative
+        )
+    except SchemaError as exc:
         raise CotError(f"{where}: numeric field is invalid") from exc
-    if not number.is_finite() or (nonnegative and number < 0):
-        raise CotError(f"{where}: numeric field is invalid")
-    normalized = format(number.normalize(), "f")
-    if "." in normalized:
-        normalized = normalized.rstrip("0").rstrip(".")
-    if normalized in {"", "-0"}:
-        normalized = "0"
-    validate_canonical_numeric(normalized, where=where)
-    return normalized
 
 
 def _field(row: Mapping[str, Any], *names: str) -> Any:
@@ -106,6 +102,33 @@ def _field(row: Mapping[str, Any], *names: str) -> Any:
         if name in row:
             return row[name]
     return None
+
+
+def _field_with_name(row: Mapping[str, Any], *names: str) -> tuple[Any, str]:
+    for name in names:
+        if name in row:
+            return row[name], name
+    return None, names[0]
+
+
+class _MetricDelta(dict[str, Any]):
+    """Wire-shaped metric delta with non-serialized derivation references."""
+
+    __slots__ = ("derivations",)
+
+    def __init__(self, payload: dict[str, Any], *, derivations: dict[str, DerivedNumericFact]):
+        super().__init__(payload)
+        self.derivations = derivations
+
+
+class _PositioningPayload(dict[str, Any]):
+    """Existing CFTC payload mapping with private in-memory provenance."""
+
+    __slots__ = ("provenance",)
+
+    def __init__(self, payload: dict[str, Any], *, provenance: dict[str, Any]):
+        super().__init__(payload)
+        self.provenance = provenance
 
 
 def normalize_report_rows(
@@ -129,31 +152,62 @@ def normalize_report_rows(
         name = _field(row, "contract_market_name", "market_and_exchange_names")
         if not isinstance(name, str) or not name.strip():
             raise CotError(f"CFTC market {code!r} has no display name")
-        long = _number(
-            _field(row, "noncomm_positions_long_all", "noncommercial_long"),
-            where=f"CFTC[{code}].long",
+        long_raw, long_source = _field_with_name(
+            row, "noncomm_positions_long_all", "noncommercial_long"
         )
-        short = _number(
-            _field(row, "noncomm_positions_short_all", "noncommercial_short"),
-            where=f"CFTC[{code}].short",
+        long = _number(long_raw, where=f"CFTC[{code}].long")
+        long_fact = MeasuredNumericFact.from_canonical(
+            name=f"CFTC[{code}].long",
+            value=long,
+            unit="contracts",
+            source_fields=(long_source,),
+            nonnegative=True,
         )
-        spreading = _number(
-            _field(
-                row,
-                # The official Socrata column is misspelled upstream; see
-                # references/provider-source-verification.md. The corrected
-                # spelling is retained only as a bounded alias in case CFTC
-                # renames it.
-                "noncomm_postions_spread_all",
-                "noncomm_positions_spread_all",
-                "noncommercial_spreading",
-            ),
-            where=f"CFTC[{code}].spreading",
+        short_raw, short_source = _field_with_name(
+            row, "noncomm_positions_short_all", "noncommercial_short"
         )
-        open_interest = _number(
-            _field(row, "open_interest_all", "open_interest"), where=f"CFTC[{code}].open_interest"
+        short = _number(short_raw, where=f"CFTC[{code}].short")
+        short_fact = MeasuredNumericFact.from_canonical(
+            name=f"CFTC[{code}].short",
+            value=short,
+            unit="contracts",
+            source_fields=(short_source,),
+            nonnegative=True,
         )
-        net = _number(Decimal(long) - Decimal(short), where=f"CFTC[{code}].net", nonnegative=False)
+        spreading_raw, spreading_source = _field_with_name(
+            row,
+            # The official Socrata column is misspelled upstream; see
+            # references/provider-source-verification.md. The corrected
+            # spelling is retained only as a bounded alias in case CFTC
+            # renames it.
+            "noncomm_postions_spread_all",
+            "noncomm_positions_spread_all",
+            "noncommercial_spreading",
+        )
+        spreading = _number(spreading_raw, where=f"CFTC[{code}].spreading")
+        open_interest_raw, open_interest_source = _field_with_name(
+            row, "open_interest_all", "open_interest"
+        )
+        open_interest = _number(open_interest_raw, where=f"CFTC[{code}].open_interest")
+        spreading_fact = MeasuredNumericFact.from_canonical(
+            name=f"CFTC[{code}].spreading",
+            value=spreading,
+            unit="contracts",
+            source_fields=(spreading_source,),
+            nonnegative=True,
+        )
+        open_interest_fact = MeasuredNumericFact.from_canonical(
+            name=f"CFTC[{code}].open_interest",
+            value=open_interest,
+            unit="contracts",
+            source_fields=(open_interest_source,),
+            nonnegative=True,
+        )
+        net_fact = derive_subtraction(
+            name=f"CFTC[{code}].net",
+            minuend=long_fact,
+            subtrahend=short_fact,
+        )
         normalized[code] = {
             "code": code,
             "name": name.strip(),
@@ -164,7 +218,14 @@ def normalize_report_rows(
                 "noncommercial_short": {"value": short, "unit": "contracts"},
                 "noncommercial_spreading": {"value": spreading, "unit": "contracts"},
                 "open_interest": {"value": open_interest, "unit": "contracts"},
-                "net_noncommercial": {"value": net, "unit": "contracts"},
+                "net_noncommercial": {"value": net_fact.value, "unit": "contracts"},
+            },
+            "_numeric_facts": {
+                "noncommercial_long": long_fact,
+                "noncommercial_short": short_fact,
+                "noncommercial_spreading": spreading_fact,
+                "open_interest": open_interest_fact,
+                "net_noncommercial": net_fact,
             },
         }
     if not normalized:
@@ -172,16 +233,20 @@ def normalize_report_rows(
     return normalized
 
 
-def _delta(current: Mapping[str, Any], previous: Mapping[str, Any]) -> dict[str, Any]:
+def _delta(current: Mapping[str, Any], previous: Mapping[str, Any]) -> _MetricDelta:
     result: dict[str, Any] = {}
+    derivations: dict[str, DerivedNumericFact] = {}
+    current_facts = current["_numeric_facts"]
+    previous_facts = previous["_numeric_facts"]
     for field in METRIC_FIELDS:
-        value = _number(
-            Decimal(current[field]["value"]) - Decimal(previous[field]["value"]),
-            where=f"CFTC delta {field}",
-            nonnegative=False,
+        derivation = derive_subtraction(
+            name=f"CFTC delta {field}",
+            minuend=current_facts[field],
+            subtrahend=previous_facts[field],
         )
-        result[field] = {"value": value, "unit": "contracts"}
-    return result
+        result[field] = {"value": derivation.value, "unit": "contracts"}
+        derivations[field] = derivation
+    return _MetricDelta(result, derivations=derivations)
 
 
 def compare_reports(
@@ -230,32 +295,34 @@ def compare_reports(
                 "reason": None,
             }
             previous_metrics = prior["metrics"]
-            delta_metrics = _delta(current_metrics, previous_metrics)
-        result.append(
+            delta_metrics = _delta(row, prior)
+        payload = _PositioningPayload(
             {
-                "stable_id": row["stable_id"],
-                "payload": {
-                    "type": "positioning",
-                    "instrument_id": row["name"],
-                    "as_of": f"{current_date}T00:00:00.000Z",
-                    "position": dict(current_metrics["noncommercial_long"]),
-                    "raw_metadata": {},
-                    "market_identity": {
-                        "cftc_contract_market_code": code,
-                        "contract_market_name": row["name"],
-                    },
-                    "current_metrics": current_metrics,
-                    "previous_metrics": previous_metrics,
-                    "delta_metrics": delta_metrics,
-                    "comparison": comparison,
-                    "derivations": {
-                        "net_noncommercial": {
-                            "formula_id": "noncommercial_long_minus_short",
-                        }
-                    },
+                "type": "positioning",
+                "instrument_id": row["name"],
+                "as_of": f"{current_date}T00:00:00.000Z",
+                "position": dict(current_metrics["noncommercial_long"]),
+                "raw_metadata": {},
+                "market_identity": {
+                    "cftc_contract_market_code": code,
+                    "contract_market_name": row["name"],
                 },
-            }
+                "current_metrics": current_metrics,
+                "previous_metrics": previous_metrics,
+                "delta_metrics": delta_metrics,
+                "comparison": comparison,
+                "derivations": {
+                    "net_noncommercial": {
+                        "formula_id": "noncommercial_long_minus_short",
+                    }
+                },
+            },
+            provenance={
+                "net_noncommercial": row["_numeric_facts"]["net_noncommercial"],
+                "delta_metrics": delta_metrics.derivations if delta_metrics is not None else None,
+            },
         )
+        result.append({"stable_id": row["stable_id"], "payload": payload})
     return result
 
 

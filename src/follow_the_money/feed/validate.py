@@ -33,6 +33,13 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from follow_the_money.semantic import (  # pyright: ignore[reportMissingImports]
+    validate_canonical_numeric as _validate_canonical_numeric,
+)
+from follow_the_money.semantic import (  # pyright: ignore[reportMissingImports]
+    validate_numeric_token as _validate_numeric_token,
+)
+
 from ..canonical import canonical_digest
 from ..config.model import REQUIRED_COVERAGE_GROUPS, FreshnessContract
 from ..schema import SchemaError, validate_against
@@ -74,13 +81,7 @@ SEMANTIC_PROJECTION_MEMBERS = (
     "pipeline",
 )
 
-_RAW_NUMERIC = re.compile(r"^[+-]?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$")
-_CANONICAL_NUMERIC = re.compile(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
-
-_MAX_BYTES = 64
-_MAX_SIGNIFICANT_DIGITS = 24
-_MAX_EXPONENT = 12
-_MAX_MAGNITUDE = 10**18
+# Numeric bounds and parsing authority live in follow_the_money.semantic.numeric.
 
 _FORBIDDEN_INTELLIGENCE_KEYS = {
     "importance",
@@ -111,42 +112,13 @@ def _parse_ts(value: str, where: str) -> datetime:
 
 
 def validate_numeric_token(token: str, *, where: str) -> None:
-    """Validate a raw numeric token before Decimal construction."""
-    if not _RAW_NUMERIC.match(token):
-        raise SchemaError(f"{where}: invalid raw numeric token {token!r}")
-    mantissa = token.lstrip("+-")
-    exponent = 0
-    if "e" in mantissa.lower():
-        mantissa, _, exp_part = mantissa.lower().partition("e")
-        exponent = int(exp_part)
-    if exponent < -_MAX_EXPONENT or exponent > _MAX_EXPONENT:
-        raise SchemaError(f"{where}: exponent out of range [-12, 12]: {token!r}")
-    digits = mantissa.replace(".", "").lstrip("0") or "0"
-    if len(digits) > _MAX_SIGNIFICANT_DIGITS:
-        raise SchemaError(f"{where}: more than 24 significant digits: {token!r}")
-    if len(token) > _MAX_BYTES:
-        raise SchemaError(f"{where}: token longer than 64 bytes: {token!r}")
+    """Compatibility entry point for the semantic numeric authority."""
+    _validate_numeric_token(token, where=where)
 
 
 def validate_canonical_numeric(value: str, *, where: str) -> None:
-    """Validate a persisted canonical plain decimal string."""
-    if not _CANONICAL_NUMERIC.match(value):
-        raise SchemaError(f"{where}: not canonical plain decimal: {value!r}")
-    if value.startswith("-"):
-        digits = value[1:].replace(".", "").lstrip("0")
-        if digits == "":
-            raise SchemaError(f"{where}: negative zero is forbidden: {value!r}")
-    if len(value) > _MAX_BYTES:
-        raise SchemaError(f"{where}: canonical value longer than 64 bytes")
-    body = value.lstrip("-")
-    digits = body.replace(".", "").lstrip("0") or "0"
-    if len(digits) > _MAX_SIGNIFICANT_DIGITS:
-        raise SchemaError(f"{where}: more than 24 significant digits: {value!r}")
-    int_part = body.split(".")[0].lstrip("0") or "0"
-    # Magnitude guard: |value| <= 10^18. A 19-digit integer part is allowed
-    # only for exactly 10^18; anything larger overflows the guard.
-    if len(int_part) > 19 or (len(int_part) == 19 and int_part > "1000000000000000000"):
-        raise SchemaError(f"{where}: magnitude exceeds 10^18: {value!r}")
+    """Compatibility entry point for the semantic numeric authority."""
+    _validate_canonical_numeric(value, where=where)
 
 
 def validate_feed(feed: Mapping[str, Any], *, allow_previous: bool = False) -> None:

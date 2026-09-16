@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import ROUND_DOWN, ROUND_HALF_EVEN, Inexact, localcontext
+
 import pytest
 
 from follow_the_money.providers.sec_13f import (
@@ -370,6 +372,21 @@ def test_comparison_uses_amount_and_is_order_independent():
     assert by_cusip["333333333"]["change_type"] == "new"
     assert by_cusip["333333333"]["previous"] is None
 
+    matched = by_cusip["111111111"]
+    derivations = matched.__getattribute__("derivations")
+    current_facts = current.holdings[0]["_numeric_facts"]
+    previous_facts = previous.holdings[0]["_numeric_facts"]
+    assert derivations["reported_amount"].derivation.operation == "subtract"
+    assert derivations["reported_amount"].derivation.inputs == (
+        current_facts["reported_amount"],
+        previous_facts["reported_amount"],
+    )
+    assert derivations["reported_value_usd_thousands"].derivation.inputs == (
+        current_facts["reported_value_usd_thousands"],
+        previous_facts["reported_value_usd_thousands"],
+    )
+    assert set(matched) == {"security", "current", "previous", "delta", "change_type"}
+
 
 def test_no_previous_keeps_change_fields_null_and_previous_only_is_not_synthesized():
     filing = parse_complete_submission(
@@ -380,6 +397,67 @@ def test_no_previous_keeps_change_fields_null_and_previous_only_is_not_synthesiz
     row = compare_holdings(filing, None)[0]
     assert row["current"] is not None
     assert row["previous"] is None and row["delta"] is None and row["change_type"] is None
+
+
+def _contextual_sec_comparison(
+    *, precision: int, rounding: str, trap_inexact: bool, flag_inexact: bool
+):
+    with localcontext() as context:
+        context.prec = precision
+        context.rounding = rounding
+        context.clear_flags()
+        context.flags[Inexact] = flag_inexact
+        context.traps[Inexact] = trap_inexact
+        current = parse_complete_submission(
+            xml(
+                [
+                    {
+                        "cusip": "111111111",
+                        "amount": "123456789012.345",
+                        "value": "123456789012.345",
+                    },
+                    {"cusip": "111111111", "amount": "0.655", "value": "0.655"},
+                ],
+                header=False,
+            ),
+            candidate(accession="0000000001-23-current", filed="2023-02-01"),
+            source_url="https://www.sec.gov/current",
+        )
+        previous = parse_complete_submission(
+            xml(
+                [{"cusip": "111111111", "amount": "123456789000", "value": "123456789000"}],
+                header=False,
+            ),
+            candidate(
+                accession="0000000001-23-previous",
+                filed="2023-01-04",
+                report="2022-09-30",
+                accepted="2023-01-05T00:00:00Z",
+            ),
+            source_url="https://www.sec.gov/previous",
+        )
+        return compare_holdings(current, previous)
+
+
+def test_sec_numeric_output_is_independent_of_ambient_decimal_context():
+    expected = _contextual_sec_comparison(
+        precision=28, rounding=ROUND_HALF_EVEN, trap_inexact=False, flag_inexact=False
+    )
+    options = (
+        (28, ROUND_DOWN, True, True),
+        (6, ROUND_DOWN, False, True),
+        (6, ROUND_HALF_EVEN, False, False),
+    )
+    for precision, rounding, trap_inexact, flag_inexact in options:
+        assert (
+            _contextual_sec_comparison(
+                precision=precision,
+                rounding=rounding,
+                trap_inexact=trap_inexact,
+                flag_inexact=flag_inexact,
+            )
+            == expected
+        )
 
 
 def test_key_dimensions_and_conflicting_figi_are_conservative():

@@ -12,10 +12,16 @@ import xml.etree.ElementTree as ET
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any
 
-from ..feed.validate import validate_canonical_numeric, validate_numeric_token
+from follow_the_money.semantic import (  # pyright: ignore[reportMissingImports]
+    MeasuredNumericFact,
+    add_canonical,
+    derive_subtraction,
+    scale_power_of_ten,
+)
+
 from ..schema import SchemaError
 
 TRANSITION_DATE = "2023-01-03"
@@ -66,32 +72,6 @@ def _timestamp(value: str) -> datetime:
 def _iso(value: str) -> str:
     result = _timestamp(value)
     return result.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-
-
-def _canonical_decimal(value: Any, *, where: str, nonnegative: bool = False) -> str:
-    text = str(value).strip().replace(",", "")
-    validate_numeric_token(text, where=where)
-    try:
-        number = Decimal(text)
-    except InvalidOperation as exc:
-        raise SchemaError(f"{where}: invalid decimal") from exc
-    if not number.is_finite() or (nonnegative and number < 0):
-        raise SchemaError(f"{where}: numeric value is invalid")
-    normalized = format(number.normalize(), "f")
-    if "." in normalized:
-        normalized = normalized.rstrip("0").rstrip(".")
-    if normalized in {"", "-0"}:
-        normalized = "0"
-    validate_canonical_numeric(normalized, where=where)
-    return normalized
-
-
-def _add(left: str, right: str, *, where: str, nonnegative: bool = False) -> str:
-    return _canonical_decimal(Decimal(left) + Decimal(right), where=where, nonnegative=nonnegative)
-
-
-def _sub(left: str, right: str, *, where: str) -> str:
-    return _canonical_decimal(Decimal(left) - Decimal(right), where=where)
 
 
 def _local(element: ET.Element, name: str) -> list[ET.Element]:
@@ -287,11 +267,19 @@ def parse_complete_submission(
             "figi": _text(row, "figi"),
         }
         key = _security_key(raw)
-        amount = _canonical_decimal(
-            raw["amount"], where=f"holding[{row_index}].amount", nonnegative=True
+        amount_fact = MeasuredNumericFact.from_raw(
+            name=f"holding[{row_index}].reported_amount",
+            raw_value=str(raw["amount"]).replace(",", ""),
+            unit="shares",
+            source_fields=("sshPrnamt",),
+            nonnegative=True,
         )
-        raw_value = _canonical_decimal(
-            raw["value"], where=f"holding[{row_index}].value", nonnegative=True
+        raw_value_fact = MeasuredNumericFact.from_raw(
+            name=f"holding[{row_index}].reported_value",
+            raw_value=str(raw["value"]).replace(",", ""),
+            unit="usd" if candidate.filing_date >= TRANSITION_DATE else "usd_thousands",
+            source_fields=("value",),
+            nonnegative=True,
         )
         entry = aggregate.get(key)
         display = {
@@ -305,17 +293,35 @@ def parse_complete_submission(
                 "cusip": key[0],
                 "put_call": key[1] or None,
                 "amount_type": key[2],
-                "amount": amount,
-                "raw_value": raw_value,
+                "amount_fact": amount_fact,
+                "raw_value_fact": raw_value_fact,
                 "display_candidates": [display],
             }
             aggregate[key] = entry
         else:
-            entry["amount"] = _add(
-                entry["amount"], amount, where=f"holding[{row_index}].amount", nonnegative=True
+            entry["amount_fact"] = MeasuredNumericFact.from_canonical(
+                name=f"holding[{row_index}].reported_amount",
+                value=add_canonical(
+                    entry["amount_fact"].value,
+                    amount_fact.value,
+                    where=f"holding[{row_index}].amount",
+                    nonnegative=True,
+                ),
+                unit="shares",
+                source_fields=("sshPrnamt",),
+                nonnegative=True,
             )
-            entry["raw_value"] = _add(
-                entry["raw_value"], raw_value, where=f"holding[{row_index}].value", nonnegative=True
+            entry["raw_value_fact"] = MeasuredNumericFact.from_canonical(
+                name=f"holding[{row_index}].reported_value",
+                value=add_canonical(
+                    entry["raw_value_fact"].value,
+                    raw_value_fact.value,
+                    where=f"holding[{row_index}].value",
+                    nonnegative=True,
+                ),
+                unit=raw_value_fact.unit,
+                source_fields=("value",),
+                nonnegative=True,
             )
             entry["display_candidates"].append(display)
     if not aggregate:
@@ -336,12 +342,19 @@ def parse_complete_submission(
             (display for display in displays),
             key=lambda value: (value["issuer_name"], value["title_of_class"], value["figi"] or ""),
         )
-        value = (
-            entry["raw_value"]
+        value_fact = (
+            entry["raw_value_fact"]
             if source_unit == "usd_thousands"
-            else _canonical_decimal(
-                Decimal(entry["raw_value"]) / Decimal(1000),
-                where=f"holding[{key}].converted_value",
+            else MeasuredNumericFact.from_canonical(
+                name=f"holding[{key}].converted_value",
+                value=scale_power_of_ten(
+                    entry["raw_value_fact"].value,
+                    -3,
+                    where=f"holding[{key}].converted_value",
+                    nonnegative=True,
+                ),
+                unit="usd_thousands",
+                source_fields=("value",),
                 nonnegative=True,
             )
         )
@@ -355,8 +368,15 @@ def parse_complete_submission(
                     "put_call": entry["put_call"],
                     "amount_type": entry["amount_type"],
                 },
-                "reported_amount": {"value": entry["amount"], "unit": "shares"},
-                "reported_value_usd_thousands": {"value": value, "unit": "usd_thousands"},
+                "reported_amount": {"value": entry["amount_fact"].value, "unit": "shares"},
+                "reported_value_usd_thousands": {
+                    "value": value_fact.value,
+                    "unit": "usd_thousands",
+                },
+                "_numeric_facts": {
+                    "reported_amount": entry["amount_fact"],
+                    "reported_value_usd_thousands": value_fact,
+                },
             }
         )
     return NormalizedFiling(
@@ -365,6 +385,16 @@ def parse_complete_submission(
         holdings=tuple(holdings),
         source_url=source_url,
     )
+
+
+class _HoldingComparison(dict[str, Any]):
+    """Wire-shaped comparison row with non-serialized internal derivations."""
+
+    __slots__ = ("derivations",)
+
+    def __init__(self, payload: dict[str, Any], *, derivations: dict[str, Any] | None = None):
+        super().__init__(payload)
+        self.derivations = derivations or {}
 
 
 def compare_holdings(
@@ -421,34 +451,44 @@ def compare_holdings(
             current_values = current_row_values(current_row)
             previous_values = current_row_values(previous_row)
             assert current_values is not None and previous_values is not None
-            amount_delta = _sub(
-                current_values["reported_amount"]["value"],
-                previous_values["reported_amount"]["value"],
-                where=f"delta[{key}].amount",
+            current_facts = current_row["_numeric_facts"]
+            previous_facts = previous_row["_numeric_facts"]
+            amount_derivation = derive_subtraction(
+                name=f"delta[{key}].amount",
+                minuend=current_facts["reported_amount"],
+                subtrahend=previous_facts["reported_amount"],
             )
-            value_delta = _sub(
-                current_values["reported_value_usd_thousands"]["value"],
-                previous_values["reported_value_usd_thousands"]["value"],
-                where=f"delta[{key}].value",
+            value_derivation = derive_subtraction(
+                name=f"delta[{key}].value",
+                minuend=current_facts["reported_value_usd_thousands"],
+                subtrahend=previous_facts["reported_value_usd_thousands"],
             )
+            amount_delta = amount_derivation.value
+            value_delta = value_derivation.value
             result.append(
-                {
-                    "security": security,
-                    "current": current_values,
-                    "previous": previous_values,
-                    "delta": {
-                        "reported_amount": {"value": amount_delta, "unit": "shares"},
-                        "reported_value_usd_thousands": {
-                            "value": value_delta,
-                            "unit": "usd_thousands",
+                _HoldingComparison(
+                    {
+                        "security": security,
+                        "current": current_values,
+                        "previous": previous_values,
+                        "delta": {
+                            "reported_amount": {"value": amount_delta, "unit": "shares"},
+                            "reported_value_usd_thousands": {
+                                "value": value_delta,
+                                "unit": "usd_thousands",
+                            },
                         },
+                        "change_type": "increased"
+                        if Decimal(amount_delta) > 0
+                        else "decreased"
+                        if Decimal(amount_delta) < 0
+                        else "unchanged",
                     },
-                    "change_type": "increased"
-                    if Decimal(amount_delta) > 0
-                    else "decreased"
-                    if Decimal(amount_delta) < 0
-                    else "unchanged",
-                }
+                    derivations={
+                        "reported_amount": amount_derivation,
+                        "reported_value_usd_thousands": value_derivation,
+                    },
+                )
             )
     return result
 

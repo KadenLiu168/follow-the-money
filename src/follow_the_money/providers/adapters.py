@@ -68,8 +68,8 @@ class BaseAdapter(Provider):
             client,
             url,
             headers=request_headers,
-            timeout=float(self._contract.attempt_timeout_seconds),
-            max_bytes=int(self._contract.response_limit_bytes),
+            timeout=self._contract.attempt_timeout_seconds,
+            max_bytes=self._contract.response_limit_bytes,
             fetch_rules=self._fetch_rules,
             redirect_rules=self._redirect_rules,
         )
@@ -439,7 +439,8 @@ class CftcAdapter(BaseAdapter):
             raise ValueError("CFTC v2 units are not the closed contract")
         if self._semantic_v2 and (
             self._contract.pagination != "page_number"
-            or self._contract.empty_valid_for_window is not False
+            or not isinstance(self._contract.empty_valid_for_window, bool)
+            or self._contract.empty_valid_for_window
         ):
             raise ValueError("CFTC v2 requires page-number complete-report acquisition")
 
@@ -929,8 +930,8 @@ def _html_index_entries(raw: Any, *, base_url: str, charset: str) -> list[dict[s
             (title + href, r"(20\d{2})(\d{2})(\d{2})"),
         ):
             for match in re.finditer(pattern, source):
-                year, month, day = (int(part) for part in match.groups())
                 try:
+                    year, month, day = (int(part) for part in match.groups())
                     candidate = datetime(year, month, day, tzinfo=UTC)
                 except ValueError:
                     continue
