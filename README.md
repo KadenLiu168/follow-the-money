@@ -40,14 +40,17 @@ filing
 Every artifact is required, including when empty. The required credential-free
 Providers are Federal Reserve, BLS, PBOC, NBS, SSE, SZSE, SEC EDGAR, and CFTC.
 CFTC is a required minimum-one weekly positioning coverage member. SEC EDGAR
-v3 filing items distinguish complete `form13f` current-state evidence from
-bounded current-window `form4`/`4/A` ownership evidence; Form 4 items retain
-issuer, reporting-owner, transaction/holding, post-state, and footnote data
-without inferred deltas or amendment linkage. SEC v1/v2 reads remain bounded
-compatibility paths. CFTC v2 positioning items
-expose market-code identity, typed current/previous metrics, deltas, and the
-explicit net-position derivation. These are evidence fields only; consumers do
-not infer market impact or direction.
+v4 filing items distinguish complete `form13f` current-state evidence, bounded
+current-window `form4`/`4/A` ownership evidence, and bounded structured
+`SCHEDULE 13D`/`13G` beneficial-ownership evidence. Form 4 items retain
+issuer, reporting-owner, transaction/holding, post-state, and footnote data;
+beneficial-ownership items retain source-supported issuer/class identity,
+reporting positions, typed ownership facts, and conservative comparison states.
+Neither subtype infers deltas, amendment lineage, intent, control, or market
+impact. SEC v1-v3 reads remain bounded compatibility paths. CFTC v2 positioning
+items expose market-code identity, typed current/previous metrics, deltas, and
+an explicit net-position derivation; these fields are evidence only and do not
+express market impact or direction.
 
 A validated previous eight-domain bundle may enter only the explicit bounded
 migration path. Normal loading and remote consumption reject the previous

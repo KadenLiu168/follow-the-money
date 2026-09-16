@@ -1,0 +1,62 @@
+## 1. Pin Compatibility, Source Contract, and Request Budget
+
+- [x] 1.1 Add RED characterization for the complete current SEC v3 successful-path request shape, including eight 13F units plus the Form 4 listing and 20-document maximum, and verify the existing understated 24-send assertion fails for the expected reason.
+- [x] 1.2 Record official Berkshire submissions observations for exact 13D/G form tokens, aligned fields, precise acceptance times, current-window distribution, declared historical files, raw archive locators, namespaces, and schema versions in `references/provider-source-verification.md`; verify every production contract claim has a dated official URL or explicitly labeled production-shaped fixture basis.
+- [x] 1.3 Determine and pin closed v4 maxima for current ownership filings, history files, shared historical candidate documents, reporting positions, supported structured formats/schema versions, and safe locator prefixes from the verified source set; verify manifest-resolution tests reject missing, extra, malformed, or different values before Provider work.
+- [x] 1.4 Calculate the full SEC v4 successful-path managed-send floor from configured 13F units, maximum Form 4 sends, beneficial-ownership listing/current/history/candidate sends, and the unchanged SEC minimum interval; set and document bounded network headroom and verify the chosen pre-commit deadline plus commit reserve satisfies the closed formula.
+- [x] 1.5 Add request-budget regressions that recompute v3 and v4 send shapes from actual configuration/manifest selections and fail when a subtype, bound, rate interval, or deadline is omitted or changed incompatibly.
+
+## 2. Add SEC v4 Configuration, Manifest, and Compatibility Contracts
+
+- [x] 2.1 Add strict `watched_beneficial_ownership_filers` configuration modeling/loading, ship only Berkshire CIK `0001067983`, and verify missing, unknown, malformed, duplicate, unordered, or substituted values fail before requests or state mutation.
+- [x] 2.2 Embed the ordered beneficial-ownership filer selection in the canonical Feed configuration snapshot and verify selection order/content changes configuration identity without replacing filing-supplied entity evidence.
+- [x] 2.3 Extend test-local SEC supported-version dispatch to v4 and add closed beneficial-ownership manifest fields while production remains v3; verify SEC v1-v3 and non-SEC contracts reject v4-only fields and retain their current read behavior.
+- [x] 2.4 Add backward-readable JSON Schema definitions for SEC v4 `beneficial_ownership` payloads, snapshots, positions, nullable measured facts, source support, comparisons, deltas, and amendments; verify v1-v3 fixtures remain valid and unknown/generic semantic fields fail closed.
+- [x] 2.5 Add SEC v4 compatibility characterization proving unchanged `form13f` and `form4` payload semantics and canonical bytes under subtype dispatch before activating the production manifest.
+
+## 3. Build Current-Window Selection and Safe Structured Acquisition
+
+- [x] 3.1 Add Provider-specific listing candidate records and exact Schedule 13D/G selection from aligned official submissions arrays; verify half-open acceptance-time boundaries, source-row permutations, blank report dates, unrelated forms, duplicate accessions, incomplete coverage, and current-event bound exhaustion.
+- [x] 3.2 Add deterministic cross-filer accession deduplication and canonical `(accepted_at, accession_number)` ordering; verify a repeated accession is fetched/projected once without creating inferred group evidence.
+- [x] 3.3 Add narrowly validated raw structured-document URL derivation for every manifest-approved 13D/G locator prefix and archive basename; verify absolute paths, credentials, traversal, unexpected nesting/extensions, transformed responses, issuer/accession mismatches, and unapproved prefixes fail closed.
+- [x] 3.4 Add a beneficial-ownership acquisition unit using the existing managed SEC client for one submissions listing followed by every selected current document; verify zero-event, one-event, multi-event, retry, deadline, and partial-progress behavior with exact request order/counts.
+- [x] 3.5 Verify current unsupported format/schema, missing selected document, source cross-check conflict, or parser failure leaves SEC partial/incomplete with accepted diagnostics only and never produces a truncated publishable event set.
+
+## 4. Implement Bounded Form-Specific Semantic Extraction
+
+- [x] 4.1 Add recorded or production-shaped Schedule 13D and 13G fixtures covering original/amendment forms, X01/X02 locator variants, explicit/missing person CIKs, multiple persons, group membership, multiple person types, class CUSIP/title fallback, optional powers, unavailable numeric values, and prohibited sensitive metadata; verify fixture provenance is truthful and each supported fixture passes raw admission.
+- [x] 4.2 Implement closed SEC-native XML admission for manifest-approved 13D and 13G namespaces/schema versions with DTD/entity, duplicate scalar, unknown structure, unsupported mixed content, and credential/contact/signature projection rejection; verify focused negative fixtures fail closed.
+- [x] 4.3 Implement issuer and ownership-class extraction with CUSIP-first identity, exact normalized class-title fallback, and explicit unavailable identity; verify no ticker, alias, fuzzy, or corporate-action continuity is introduced.
+- [x] 4.4 Implement source-ordered reporting positions with zero-based ordinals, source names, optional explicit CIKs, source-reported person types/group membership, and conservative CIK-or-name identity basis; verify the submissions filer CIK is never assigned to a position without source support.
+- [x] 4.5 Implement explicit group evidence without derived aggregation; verify joint filings retain each source position and no group identity/amount appears unless the structured filing supplies it.
+- [x] 4.6 Implement required shares/percentage wrappers and optional voting/dispositive-power wrappers through `MeasuredNumericFact`; verify canonical decimal context independence, nonnegative share/power values, percentage range, unit correctness, closed unavailable reasons, and no zero/default/reverse-derived values.
+- [x] 4.7 Implement closed form-specific document-local `source_field_refs` tied to source ordinals and filing snapshots; verify every measured value resolves to its own document, arbitrary paths/dangling refs fail, and locator or source-order changes affect canonical content deterministically.
+- [x] 4.8 Implement accession-based item identity, exact form/schedule family, precise source time, amendment flag/number, and official raw URL projection; verify no original accession, `amends_accession`, effective version, generic raw metadata, CCC, addresses, phones, or signatures are serialized.
+
+## 5. Resolve Previous Evidence and Deterministic Changes
+
+- [x] 5.1 Build the deterministic newest-first historical metadata stream from validated recent and declared submissions files; verify history-file bounds, unique accessions, precise ordering, cutoff exclusion, and malformed/incomplete historical metadata fail according to the contract.
+- [x] 5.2 Implement one per-run shared reverse candidate scan and immutable parsed-candidate index for all current keys; verify each historical accession is fetched at most once, results are independent of current-key order, and scanning stops on all-resolved, complete exhaustion, or the total candidate bound.
+- [x] 5.3 Implement two-stage comparable resolution by filer/issuer/class and then position CIK/exact normalized name; verify schedule-family and amendment transitions remain comparable while class changes, CIK conflicts, and name changes do not false-match.
+- [x] 5.4 Preserve the nearest unsupported previous filing reference and return `previous_format_unsupported`; verify the resolver never skips it for an older parseable accession.
+- [x] 5.5 Implement closed comparison states/reasons for available, proved initial, class identity unavailable, reporting identity not comparable, history bound exhausted, previous format unsupported, and missing operands; verify only complete supported history exhaustion can produce `initial_filing` and previous never defaults to zero.
+- [x] 5.6 Derive shares and percentage-point deltas with ECO-125 subtraction and internal ordered input references, project only `current_minus_previous`, and verify exact recomputation, unit incompatibility rejection, ambient Decimal independence, and null delta when either operand is unavailable.
+- [x] 5.7 Add determinism tests that permute non-semantic listing/current-key/completion order and repeat fixed inputs; verify identical previous selection, position matching, canonical item bytes, content digest, and run identity.
+
+## 6. Integrate and Validate the Complete SEC v4 Slice
+
+- [x] 6.1 Append sorted beneficial-ownership acquisition units to production SEC adapter construction under the existing `sec_edgar` outcome, managed client, and durable rate scope; verify there is no ninth Provider, independent outcome, unmanaged send, or second rate authority.
+- [x] 6.2 Extend semantic validation to dispatch all SEC v4 subtypes and validate beneficial-ownership fields, source refs, identity bases, status/value/reason combinations, arithmetic, amendments, exact source times, watched-filer membership, and prohibited interpretations; verify focused field mutation tests fail closed.
+- [x] 6.3 Extend pre-snapshot and final-candidate completeness checks to require exact watched 13F CIKs, exact Form 4 accessions, and exact deduplicated beneficial-ownership accessions; verify missing, duplicate, extra, wrong-filer, legacy-shaped, or unselected items prevent publication.
+- [x] 6.4 Apply existing exact-set whole-Provider replacement to SEC v4 mixed slices; verify historical enrichment stays nested, independently selected previous accessions may also be top-level, prior-window events disappear without union, and byte-identical complete slices may carry unchanged.
+- [x] 6.5 Verify any required beneficial-ownership listing/current/supported-history failure remains `not_evaluated`, pipeline-failing, and ineligible for prior SEC fallback while genuine first-resource blocked exemption retains existing degraded behavior.
+- [x] 6.6 Add evidence-only boundary tests rejecting bullish/bearish, activist, takeover, control-change, accumulation/distribution, importance, confidence, signal, prediction, market-impact, recommendation, trading, inferred aggregate, and inferred amendment-lineage fields.
+
+## 7. Activate Atomically and Verify End to End
+
+- [x] 7.1 Set the verified pre-commit deadline and production SEC manifest v4 only after working configuration, parsers, history bounds, adapters, schema, semantic validation, fixtures, and budget regression exist; verify resolved production remains exactly eight Providers and five Feed domains with unchanged SEC rate policy.
+- [x] 7.2 Run deterministic fixture Feeds covering no current ownership event, one original filing, multiple current events, amendment, cross-13D/13G comparison, proved initial, unsupported previous, identity mismatch, and history-bound exhaustion; verify exact mixed SEC sets, complete provenance, typed comparison states, and stable canonical bytes.
+- [x] 7.3 Verify SEC v1/v2/v3 bundle reads, unchanged Form 4 and 13F behavior, CFTC v2 behavior, the other six Providers, whole-slice identity, publication, checkpoint, blocked degradation, deadline admission, and no-prior-fallback regressions all pass.
+- [x] 7.4 Update Feed contract, architecture, configuration, semantic evidence, Provider source verification, validation evidence, README/SKILL-facing capability text, and fixture provenance; verify documentation claims only bounded structured 13D/G event evidence and contains no legacy-parser, complete-market-state, inferred-intent, or investment-analysis claim.
+- [x] 7.5 Run focused config, manifest, SEC 13F/Form 4/13D-G, semantic numeric, schema, Feed validation, snapshot, provider-session, pipeline, bundle, determinism, provenance, and documentation tests; resolve every in-scope failure before final verification.
+- [x] 7.6 Run `.venv/bin/python scripts/quality_gate.py`, `openspec doctor`, `openspec validate eco-132-beneficial-ownership-semantic-evidence --strict`, and `openspec validate --all --strict`; record actual results and leave no in-scope failure before requesting archival.

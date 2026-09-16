@@ -419,7 +419,8 @@ def refill_tokens(state: ScopeState, *, now: Callable[[], datetime]) -> ScopeSta
 
 def eligibility_delay(state: ScopeState, *, now: Callable[[], datetime]) -> float:
     """Return seconds until a scope may admit its next dispatch."""
-    eligible = now()
+    current = now()
+    eligible = current
     if state.cooldown_until is not None:
         eligible = max(eligible, _parse_iso(state.cooldown_until))
     if state.last_dispatch_wall is not None:
@@ -428,4 +429,14 @@ def eligibility_delay(state: ScopeState, *, now: Callable[[], datetime]) -> floa
             _parse_iso(state.last_dispatch_wall)
             + timedelta(seconds=state.minimum_interval_seconds),
         )
-    return max(0.0, (eligible - now()).total_seconds())
+    tokens = Decimal(state.tokens)
+    capacity = Decimal(state.capacity)
+    if tokens < 1 and capacity > 0 and state.refill_period_seconds > 0:
+        refill_rate = capacity / Decimal(state.refill_period_seconds)
+        token_delay = (Decimal(1) - tokens) / refill_rate
+        try:
+            token_ready = current + timedelta(seconds=float(token_delay))
+        except (OverflowError, TypeError, ValueError) as exc:
+            raise RateStateError(f"scope {state.scope_id!r} has invalid token state") from exc
+        eligible = max(eligible, token_ready)
+    return max(0.0, (eligible - current).total_seconds())

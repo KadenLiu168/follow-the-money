@@ -38,17 +38,20 @@ news | macro_release | policy | positioning | filing
 
 Every domain artifact is required. The required credential-free Providers are
 Federal Reserve, BLS, PBOC, NBS, SSE, SZSE, SEC EDGAR, and CFTC. CFTC supplies
-required weekly positioning coverage. SEC v3 keeps one SEC outcome while
-combining complete watched-company `form13f` state with the current-window
-watched-issuer `form4`/`4/A` event set. No Provider is selected dynamically and
-no removed domain is reconstructed from another source.
+required weekly positioning coverage. SEC v4 keeps one SEC outcome while
+combining complete watched-company `form13f` state, the current-window watched-
+issuer `form4`/`4/A` event set, and bounded structured watched-filer
+`SCHEDULE 13D`/`13G` events. Historical ownership documents remain nested
+comparison evidence rather than accumulated top-level events. No Provider is
+selected dynamically and no removed domain is reconstructed from another source.
 
 ## Trust boundaries
 
 Provider manifests are the authority for verified identity, HTTPS URL policy,
 source provenance, rate limits, empty-window semantics, implemented payloads,
-and cadence. SEC v3 manifests also own the Form 4 filing bound and supported
-ownership XML schema versions. Activation and coverage are separately owned by
+and cadence. SEC v4 manifests also own the Form 4 bound and the Schedule
+13D/G filing, history, candidate, and supported ownership XML schema bounds.
+Activation and coverage are separately owned by
 `config/providers.yaml`. Configuration and manifest resolution fails closed
 before Provider work.
 

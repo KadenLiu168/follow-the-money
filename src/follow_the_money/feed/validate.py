@@ -35,9 +35,12 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from follow_the_money.semantic import (  # pyright: ignore[reportMissingImports]
-    validate_canonical_numeric as _validate_canonical_numeric,
+    subtract_canonical as _subtract_canonical,
 )
 from follow_the_money.semantic import (  # pyright: ignore[reportMissingImports]
+    validate_canonical_numeric as _validate_canonical_numeric,
+)
+from follow_the_money.semantic import (
     validate_numeric_token as _validate_numeric_token,
 )
 
@@ -945,6 +948,17 @@ def _validate_sec_v3_items(
         payload = item.get("payload")
         if not isinstance(payload, Mapping):
             raise SchemaError("SEC v3 filing payload is invalid")
+        if any(
+            field in payload
+            for field in (
+                "document_url",
+                "schedule_family",
+                "amendment_number",
+                "current_snapshot",
+                "previous_snapshot",
+            )
+        ):
+            raise SchemaError("SEC v3 item contains SEC v4-only beneficial-ownership fields")
         subtype = payload.get("filing_subtype")
         if subtype == "form13f":
             if any(
@@ -1081,6 +1095,558 @@ def _validate_cftc_v2_item(item: Mapping[str, Any], *, where: str) -> str:
     return code
 
 
+_BO_FORMS = {"SCHEDULE 13D", "SCHEDULE 13D/A", "SCHEDULE 13G", "SCHEDULE 13G/A"}
+_BO_REASONS = {
+    "not_reported",
+    "missing_operand",
+    "ownership_class_identity_unavailable",
+    "reporting_identity_not_comparable",
+    "history_candidate_bound_exhausted",
+    "previous_format_unsupported",
+    "history_not_evaluated",
+}
+_BO_SOURCE_FIELDS = frozenset(
+    {
+        "beneficially_owned_shares",
+        "ownership_percentage",
+        "voting_power",
+        "dispositive_power",
+    }
+)
+
+
+def _validate_bo_text(value: Any, *, where: str, max_length: int, required: bool = True) -> None:
+    if value is None and not required:
+        return
+    if not isinstance(value, str) or not value:
+        raise SchemaError(f"{where}: text is invalid")
+    normalized = unicodedata.normalize("NFC", re.sub(r"\s+", " ", value).strip())
+    if normalized != value or len(value) > max_length:
+        raise SchemaError(f"{where}: text is not normalized or bounded")
+
+
+def _validate_bo_numeric(
+    value: Any,
+    *,
+    where: str,
+    unit: str,
+    snapshot: str,
+    ordinal: int | None,
+    required_source_ref: bool,
+    allow_derivation: bool = False,
+    expected_field: str | None = None,
+    unavailable_reason: str | None = None,
+) -> Decimal | None:
+    if not isinstance(value, Mapping):
+        raise SchemaError(f"{where}: beneficial-ownership numeric wrapper is required")
+    status = value.get("status")
+    if status not in {"reported", "unavailable"}:
+        raise SchemaError(f"{where}.status is invalid")
+    if value.get("unit") != unit:
+        raise SchemaError(f"{where}.unit is invalid")
+    refs = value.get("source_field_refs")
+    if not isinstance(refs, list) or (required_source_ref and not refs):
+        raise SchemaError(f"{where}.source_field_refs is invalid")
+    if allow_derivation and refs:
+        raise SchemaError(f"{where}.derived value must not expose source refs")
+    seen_refs: set[tuple[Any, Any, Any]] = set()
+    for index, ref in enumerate(refs):
+        if not isinstance(ref, Mapping):
+            raise SchemaError(f"{where}.source_field_refs[{index}] is invalid")
+        ref_key = (ref.get("snapshot"), ref.get("source_ordinal"), ref.get("field"))
+        if ref_key in seen_refs:
+            raise SchemaError(f"{where}.source_field_refs[{index}] is duplicated")
+        seen_refs.add(ref_key)
+        if ref.get("snapshot") != snapshot:
+            raise SchemaError(f"{where}.source_field_refs[{index}] has the wrong snapshot")
+        if ordinal is not None and ref.get("source_ordinal") != ordinal:
+            raise SchemaError(f"{where}.source_field_refs[{index}] has the wrong source ordinal")
+        if expected_field is not None and ref.get("field") != expected_field:
+            raise SchemaError(f"{where}.source_field_refs[{index}] has the wrong field")
+        if not isinstance(ref.get("field"), str) or not re.fullmatch(
+            r"(?:reporting_person|group)\[[0-9]+\]\.[A-Za-z0-9_]+", ref["field"]
+        ):
+            raise SchemaError(f"{where}.source_field_refs[{index}].field is not closed")
+        prefix, _, _ = ref["field"].partition(".")
+        allowed_fields = {f"{prefix}.{field}" for field in _BO_SOURCE_FIELDS}
+        if prefix == "group[0]":
+            allowed_fields = {"group[0].aggregate_shares"}
+        if ref["field"] not in allowed_fields:
+            raise SchemaError(f"{where}.source_field_refs[{index}].field is not supported")
+    reason = value.get("reason")
+    raw = value.get("value")
+    if status == "reported":
+        if not isinstance(raw, str) or reason is not None:
+            raise SchemaError(f"{where}: reported value/reason state is invalid")
+        number = _decimal(value, where=where, unit=unit)
+        if unit in {"shares", "percent"} and number < 0:
+            raise SchemaError(f"{where}: source value must be nonnegative")
+        if unit == "percent" and not 0 <= number <= 100:
+            raise SchemaError(f"{where}: percentage is outside [0, 100]")
+        if "derivation" in value and not allow_derivation:
+            raise SchemaError(f"{where}: measured value cannot carry derivation metadata")
+        return number
+    if (
+        raw is not None
+        or not isinstance(reason, str)
+        or reason not in _BO_REASONS
+        or (unavailable_reason is not None and reason != unavailable_reason)
+    ):
+        raise SchemaError(f"{where}: unavailable value/reason state is invalid")
+    if "derivation" in value:
+        raise SchemaError(f"{where}: unavailable value cannot carry derivation metadata")
+    return None
+
+
+def _bo_class_identity(snapshot: Mapping[str, Any]) -> tuple[str, str] | None:
+    ownership_class = snapshot.get("ownership_class")
+    if not isinstance(ownership_class, Mapping):
+        return None
+    basis = ownership_class.get("identity_basis")
+    if basis == "cusip" and isinstance(ownership_class.get("cusip"), str):
+        return ("cusip", ownership_class["cusip"])
+    if basis == "class_title" and isinstance(ownership_class.get("title"), str):
+        return ("class_title", ownership_class["title"])
+    return None
+
+
+def _validate_bo_snapshot(snapshot: Any, *, where: str, label: str) -> tuple[str, str, str | None]:
+    if not isinstance(snapshot, Mapping):
+        raise SchemaError(f"{where}: beneficial-ownership snapshot is required")
+    form = snapshot.get("form")
+    if form not in _BO_FORMS:
+        raise SchemaError(f"{where}.form is invalid")
+    family = snapshot.get("schedule_family")
+    expected_family = "13D" if "13D" in form else "13G"
+    if family != expected_family:
+        raise SchemaError(f"{where}.schedule_family is invalid")
+    accession = snapshot.get("accession_number")
+    if not isinstance(accession, str) or not re.fullmatch(r"\d{10}-\d{2}-\d{6}", accession):
+        raise SchemaError(f"{where}.accession_number is invalid")
+    accepted = snapshot.get("accepted_at")
+    filed = snapshot.get("filed_at")
+    if not isinstance(accepted, str) or not isinstance(filed, str):
+        raise SchemaError(f"{where}: source times are required")
+    _parse_ts(accepted, f"{where}.accepted_at")
+    _parse_ts(filed, f"{where}.filed_at")
+    if label == "previous" and "comparison" in snapshot:
+        raise SchemaError(f"{where}: previous snapshot must not carry comparison data")
+    document_url = snapshot.get("document_url")
+    if not isinstance(document_url, str) or not re.fullmatch(
+        rf"https://www\.sec\.gov/Archives/edgar/data/\d{{10}}/{accession.replace('-', '')}/[A-Za-z0-9][A-Za-z0-9_.-]*\.xml",
+        document_url,
+    ):
+        raise SchemaError(f"{where}.document_url is not an official raw XML URL")
+    issuer = snapshot.get("issuer")
+    if not isinstance(issuer, Mapping):
+        raise SchemaError(f"{where}.issuer is invalid")
+    _validate_bo_text(issuer.get("name"), where=f"{where}.issuer.name", max_length=300)
+    issuer_cik = issuer.get("cik")
+    if issuer_cik is not None and (
+        not isinstance(issuer_cik, str) or not re.fullmatch(r"\d{10}", issuer_cik)
+    ):
+        raise SchemaError(f"{where}.issuer.cik is invalid")
+    ownership_class = snapshot.get("ownership_class")
+    if not isinstance(ownership_class, Mapping):
+        raise SchemaError(f"{where}.ownership_class is invalid")
+    class_basis = ownership_class.get("identity_basis")
+    if class_basis not in {"cusip", "class_title", "unavailable"}:
+        raise SchemaError(f"{where}.ownership_class.identity_basis is invalid")
+    cusip = ownership_class.get("cusip")
+    title = ownership_class.get("title")
+    if class_basis == "cusip" and (
+        not isinstance(cusip, str) or not re.fullmatch(r"[0-9A-Z*@#]{9}", cusip)
+    ):
+        raise SchemaError(f"{where}.ownership_class CUSIP identity is invalid")
+    if class_basis == "class_title" and (
+        not isinstance(title, str) or not title or cusip is not None
+    ):
+        raise SchemaError(f"{where}.ownership_class title identity is invalid")
+    if class_basis == "unavailable" and (cusip is not None or title is not None):
+        raise SchemaError(f"{where}.ownership_class unavailable identity has operands")
+    if title is not None:
+        _validate_bo_text(title, where=f"{where}.ownership_class.title", max_length=300)
+    if cusip is not None and (
+        not isinstance(cusip, str)
+        or cusip != cusip.upper()
+        or any(char.isspace() for char in cusip)
+    ):
+        raise SchemaError(f"{where}.ownership_class.cusip is not canonical")
+    positions = snapshot.get("reporting_positions")
+    if not isinstance(positions, list) or not positions or len(positions) > 32:
+        raise SchemaError(f"{where}.reporting_positions is invalid")
+    for ordinal, position in enumerate(positions):
+        pwhere = f"{where}.reporting_positions[{ordinal}]"
+        if not isinstance(position, Mapping) or position.get("source_ordinal") != ordinal:
+            raise SchemaError(f"{pwhere}: source ordinal is not consecutive")
+        source_name = position.get("source_name")
+        source_cik = position.get("source_cik")
+        basis = position.get("identity_basis")
+        _validate_bo_text(source_name, where=f"{pwhere}.source_name", max_length=300)
+        if source_cik is not None and (
+            not isinstance(source_cik, str) or not re.fullmatch(r"\d{10}", source_cik)
+        ):
+            raise SchemaError(f"{pwhere}.source_cik is invalid")
+        if basis != ("source_cik" if source_cik is not None else "source_name"):
+            raise SchemaError(f"{pwhere}.identity_basis is invalid")
+        membership = position.get("group_membership")
+        if not isinstance(membership, Mapping) or not isinstance(membership.get("is_member"), bool):
+            raise SchemaError(f"{pwhere}.group_membership is invalid")
+        _validate_bo_numeric(
+            position.get("beneficially_owned_shares"),
+            where=f"{pwhere}.beneficially_owned_shares",
+            unit="shares",
+            snapshot=label,
+            ordinal=ordinal,
+            required_source_ref=True,
+            expected_field=f"reporting_person[{ordinal}].beneficially_owned_shares",
+            unavailable_reason="not_reported",
+        )
+        _validate_bo_numeric(
+            position.get("ownership_percentage"),
+            where=f"{pwhere}.ownership_percentage",
+            unit="percent",
+            snapshot=label,
+            ordinal=ordinal,
+            required_source_ref=True,
+            expected_field=f"reporting_person[{ordinal}].ownership_percentage",
+            unavailable_reason="not_reported",
+        )
+        for field in ("voting_power", "dispositive_power"):
+            if field in position:
+                _validate_bo_numeric(
+                    position[field],
+                    where=f"{pwhere}.{field}",
+                    unit="shares",
+                    snapshot=label,
+                    ordinal=ordinal,
+                    required_source_ref=True,
+                    expected_field=f"reporting_person[{ordinal}].{field}",
+                    unavailable_reason="not_reported",
+                )
+        person_types = position.get("person_types")
+        if not isinstance(person_types, list) or any(
+            not isinstance(person_type, str) for person_type in person_types
+        ):
+            raise SchemaError(f"{pwhere}.person_types is invalid")
+        for type_index, person_type in enumerate(person_types):
+            _validate_bo_text(
+                person_type,
+                where=f"{pwhere}.person_types[{type_index}]",
+                max_length=100,
+            )
+        if person_types != sorted(set(person_types)):
+            raise SchemaError(f"{pwhere}.person_types are not canonical")
+        refs = position.get("source_field_refs")
+        if not isinstance(refs, list):
+            raise SchemaError(f"{pwhere}.source_field_refs is invalid")
+        expected_fields = {
+            f"reporting_person[{ordinal}].beneficially_owned_shares",
+            f"reporting_person[{ordinal}].ownership_percentage",
+        }
+        for field in ("voting_power", "dispositive_power"):
+            if field in position:
+                expected_fields.add(f"reporting_person[{ordinal}].{field}")
+        actual_fields: list[str] = []
+        for ref in refs:
+            if (
+                not isinstance(ref, Mapping)
+                or ref.get("snapshot") != label
+                or ref.get("source_ordinal") != ordinal
+                or not isinstance(ref.get("field"), str)
+            ):
+                raise SchemaError(f"{pwhere}.source_field_refs is not document-local")
+            actual_fields.append(ref["field"])
+        if (
+            len(actual_fields) != len(set(actual_fields))
+            or set(actual_fields) != expected_fields
+            or actual_fields != sorted(actual_fields)
+        ):
+            raise SchemaError(f"{pwhere}.source_field_refs do not cover measured fields")
+        comparison = position.get("comparison")
+        if label == "current":
+            if not isinstance(comparison, Mapping):
+                raise SchemaError(f"{pwhere}.comparison is required")
+            status = comparison.get("status")
+            if status not in {"available", "unavailable"}:
+                raise SchemaError(f"{pwhere}.comparison.status is invalid")
+            reason = comparison.get("reason")
+            if status == "available" and reason is not None:
+                raise SchemaError(f"{pwhere}.comparison.reason is invalid")
+            if status == "unavailable" and reason not in _BO_REASONS:
+                raise SchemaError(f"{pwhere}.comparison.reason is invalid")
+            for field, unit in (
+                ("shares_delta", "shares"),
+                ("percentage_delta", "percentage_points"),
+            ):
+                _validate_bo_numeric(
+                    comparison.get(field),
+                    where=f"{pwhere}.comparison.{field}",
+                    unit=unit,
+                    snapshot="current",
+                    ordinal=None,
+                    required_source_ref=False,
+                    allow_derivation=True,
+                )
+                delta = comparison[field]
+                if (
+                    status == "available"
+                    and delta.get("status") == "reported"
+                    and delta.get("derivation") != "current_minus_previous"
+                ):
+                    raise SchemaError(f"{pwhere}.comparison.{field} derivation is invalid")
+                if status == "unavailable" and delta.get("value") is not None:
+                    raise SchemaError(f"{pwhere}.comparison.{field} must be unavailable")
+    group_evidence = snapshot.get("group_evidence")
+    if group_evidence is not None:
+        if not isinstance(group_evidence, Mapping):
+            raise SchemaError(f"{where}.group_evidence is invalid")
+        if (
+            not isinstance(group_evidence.get("is_explicit"), bool)
+            or not group_evidence["is_explicit"]
+        ):
+            raise SchemaError(f"{where}.group_evidence is invalid")
+        _validate_bo_text(
+            group_evidence.get("name"),
+            where=f"{where}.group_evidence.name",
+            max_length=300,
+            required=False,
+        )
+        aggregate_shares = group_evidence.get("aggregate_shares")
+        if aggregate_shares is not None:
+            _validate_bo_numeric(
+                aggregate_shares,
+                where=f"{where}.group_evidence.aggregate_shares",
+                unit="shares",
+                snapshot=label,
+                ordinal=0,
+                required_source_ref=True,
+                expected_field="group[0].aggregate_shares",
+                unavailable_reason="not_reported",
+            )
+    is_amendment = snapshot.get("is_amendment")
+    if is_amendment != form.endswith("/A"):
+        raise SchemaError(f"{where}.is_amendment is invalid")
+    if not is_amendment and snapshot.get("amendment_number") is not None:
+        raise SchemaError(f"{where}: non-amendment has amendment number")
+    return accession, accepted, issuer_cik
+
+
+def _validate_sec_v4_item(
+    item: Mapping[str, Any],
+    *,
+    start: datetime,
+    cutoff: datetime,
+    watched_filers: set[str],
+    where: str,
+) -> str:
+    payload = item.get("payload")
+    if not isinstance(payload, Mapping) or payload.get("filing_subtype") != "beneficial_ownership":
+        raise SchemaError(f"{where}: SEC v4 beneficial-ownership subtype is required")
+    filer = payload.get("company")
+    if (
+        not isinstance(filer, str)
+        or not re.fullmatch(r"\d{10}", filer)
+        or filer not in watched_filers
+    ):
+        raise SchemaError(f"{where}: beneficial-ownership filer is outside watched filers")
+    accession = payload.get("accession_number")
+    if not isinstance(accession, str) or item.get("id") != stable_item_id("sec_edgar", accession):
+        raise SchemaError(f"{where}: beneficial-ownership item identity is invalid")
+    accepted = payload.get("accepted_at")
+    if not isinstance(accepted, str):
+        raise SchemaError(f"{where}.accepted_at is required")
+    accepted_dt = _parse_ts(accepted, f"{where}.accepted_at")
+    if not start <= accepted_dt < cutoff:
+        raise SchemaError(f"{where}: acceptance time is outside the current window")
+    current_accession, current_accepted, current_issuer = _validate_bo_snapshot(
+        payload.get("current_snapshot"), where=f"{where}.current_snapshot", label="current"
+    )
+    if current_accession != accession or current_accepted != accepted:
+        raise SchemaError(f"{where}: top-level and current snapshot identity differ")
+    current_snapshot = payload["current_snapshot"]
+    current_document_url = current_snapshot.get("document_url")
+    if (
+        not isinstance(current_document_url, str)
+        or f"/{filer}/{accession.replace('-', '')}/" not in current_document_url
+    ):
+        raise SchemaError(f"{where}: current document URL identity is invalid")
+    if (
+        payload.get("form") != current_snapshot.get("form")
+        or payload.get("schedule_family") != current_snapshot.get("schedule_family")
+        or payload.get("filed_at") != current_snapshot.get("filed_at")
+        or payload.get("document_url") != current_document_url
+        or payload.get("amendment_number") != current_snapshot.get("amendment_number")
+    ):
+        raise SchemaError(f"{where}: top-level current evidence is not retained exactly")
+    source = item.get("source")
+    if (
+        not isinstance(source, Mapping)
+        or source.get("id") != f"sec-{item.get('id')}"
+        or source.get("name") != "SEC EDGAR"
+        or source.get("tier") != "Tier 1"
+        or source.get("kind") != "filing"
+        or source.get("published_at") != accepted
+        or source.get("knowledge_available_at") != accepted
+    ):
+        raise SchemaError(f"{where}: source identity/time is not retained")
+    if source.get("url") != payload.get("document_url"):
+        raise SchemaError(f"{where}: source URL is not the selected raw document")
+    if payload.get("is_amendment") != payload["current_snapshot"].get("is_amendment"):
+        raise SchemaError(f"{where}: amendment state is inconsistent")
+    previous = payload.get("previous_snapshot")
+    comparison = payload.get("comparison")
+    if not isinstance(comparison, Mapping):
+        raise SchemaError(f"{where}.comparison is required")
+    status = comparison.get("status")
+    if status not in {"available", "initial_filing", "unavailable"}:
+        raise SchemaError(f"{where}.comparison.status is invalid")
+    reason = comparison.get("reason")
+    if status in {"available", "initial_filing"} and reason is not None:
+        raise SchemaError(f"{where}.comparison.reason is invalid")
+    if status == "unavailable" and reason not in _BO_REASONS:
+        raise SchemaError(f"{where}.comparison.reason is invalid")
+    if previous is None:
+        previous_ref = comparison.get("previous")
+        if status == "available":
+            raise SchemaError(f"{where}: available comparison requires previous snapshot")
+        if status == "unavailable" and reason == "previous_format_unsupported":
+            if not isinstance(previous_ref, Mapping):
+                raise SchemaError(f"{where}: unsupported previous reference is required")
+            reference_accession = previous_ref.get("accession_number")
+            reference_accepted = previous_ref.get("accepted_at")
+            reference_url = previous_ref.get("document_url")
+            if (
+                not isinstance(reference_accession, str)
+                or reference_accession == accession
+                or not re.fullmatch(r"\d{10}-\d{2}-\d{6}", reference_accession)
+                or not isinstance(reference_accepted, str)
+                or _parse_ts(reference_accepted, f"{where}.comparison.previous.accepted_at")
+                >= accepted_dt
+                or not isinstance(reference_url, str)
+                or not re.fullmatch(
+                    rf"https://www\.sec\.gov/Archives/edgar/data/{re.escape(filer)}/{reference_accession.replace('-', '')}/[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:xml|htm|html|txt)",
+                    reference_url,
+                    flags=re.IGNORECASE,
+                )
+            ):
+                raise SchemaError(f"{where}: unsupported previous reference is invalid")
+        elif previous_ref is not None:
+            raise SchemaError(f"{where}: comparison previous reference is unexpected")
+    else:
+        previous_accession, previous_accepted, previous_issuer = _validate_bo_snapshot(
+            previous, where=f"{where}.previous_snapshot", label="previous"
+        )
+        if (
+            previous_accession == accession
+            or _parse_ts(previous_accepted, f"{where}.previous_snapshot.accepted_at") >= accepted_dt
+        ):
+            raise SchemaError(f"{where}: previous snapshot is not earlier and distinct")
+        previous_ref = comparison.get("previous")
+        if (
+            not isinstance(previous_ref, Mapping)
+            or previous_ref.get("accession_number") != previous_accession
+            or previous_ref.get("accepted_at") != previous_accepted
+            or previous_ref.get("document_url") != previous.get("document_url")
+        ):
+            raise SchemaError(f"{where}: comparison previous reference is invalid")
+        previous_document_url = previous.get("document_url")
+        if (
+            not isinstance(previous_document_url, str)
+            or f"/{filer}/{previous_accession.replace('-', '')}/" not in previous_document_url
+        ):
+            raise SchemaError(f"{where}: previous document URL identity is invalid")
+        if (
+            current_issuer is None
+            or previous_issuer is None
+            or current_issuer != previous_issuer
+            or _bo_class_identity(payload["current_snapshot"]) != _bo_class_identity(previous)
+        ):
+            raise SchemaError(f"{where}: previous issuer/class identity is not comparable")
+        if status != "available":
+            raise SchemaError(f"{where}: previous snapshot requires available comparison")
+    current_snapshot = payload["current_snapshot"]
+    previous_positions = (
+        previous.get("reporting_positions") if isinstance(previous, Mapping) else None
+    )
+    previous_by_identity: dict[tuple[str, str], Mapping[str, Any]] = {}
+    if isinstance(previous_positions, list):
+        for ordinal, position in enumerate(previous_positions):
+            if not isinstance(position, Mapping):
+                raise SchemaError(
+                    f"{where}.previous_snapshot.reporting_positions[{ordinal}] is invalid"
+                )
+            basis = position.get("identity_basis")
+            identity = (
+                position.get("source_cik") if basis == "source_cik" else position.get("source_name")
+            )
+            if not isinstance(identity, str):
+                raise SchemaError(f"{where}: previous position identity is invalid")
+            key = (str(basis), identity)
+            if key in previous_by_identity:
+                raise SchemaError(f"{where}: previous position identities are duplicated")
+            previous_by_identity[key] = position
+    current_identities: set[tuple[str, str]] = set()
+    for ordinal, position in enumerate(current_snapshot["reporting_positions"]):
+        if not isinstance(position, Mapping):
+            raise SchemaError(f"{where}.current_snapshot.reporting_positions[{ordinal}] is invalid")
+        basis = position.get("identity_basis")
+        identity = (
+            position.get("source_cik") if basis == "source_cik" else position.get("source_name")
+        )
+        if not isinstance(identity, str):
+            raise SchemaError(f"{where}: current position identity is invalid")
+        identity_key = (str(basis), identity)
+        if identity_key in current_identities:
+            raise SchemaError(f"{where}: current position identities are duplicated")
+        current_identities.add(identity_key)
+        comparison_value = position.get("comparison")
+        if not isinstance(comparison_value, Mapping):
+            raise SchemaError(
+                f"{where}.current_snapshot.reporting_positions[{ordinal}].comparison is required"
+            )
+        comparison_status = comparison_value.get("status")
+        if comparison_status not in {"available", "unavailable"}:
+            raise SchemaError(f"{where}: position comparison status is invalid")
+        prior = previous_by_identity.get(identity_key) if previous is not None else None
+        if previous is None:
+            if comparison_status == "available":
+                raise SchemaError(f"{where}: position comparison requires previous snapshot")
+            continue
+        if prior is None:
+            if (
+                comparison_status != "unavailable"
+                or comparison_value.get("reason") != "reporting_identity_not_comparable"
+            ):
+                raise SchemaError(f"{where}: unmatched position comparison is invalid")
+            continue
+        if comparison_status != "available":
+            raise SchemaError(f"{where}: matched position comparison must be available")
+        for field, delta_field in (
+            ("beneficially_owned_shares", "shares_delta"),
+            ("ownership_percentage", "percentage_delta"),
+        ):
+            current_value = position[field]
+            previous_value = prior.get(field)
+            delta = comparison_value[delta_field]
+            if (
+                isinstance(current_value, Mapping)
+                and isinstance(previous_value, Mapping)
+                and current_value.get("status") == "reported"
+                and previous_value.get("status") == "reported"
+            ):
+                expected = _subtract_canonical(
+                    current_value["value"],
+                    previous_value["value"],
+                    where=f"{where}.reporting_positions[{ordinal}].{delta_field}",
+                )
+                if delta.get("status") != "reported" or delta.get("value") != expected:
+                    raise SchemaError(f"{where}: {delta_field} is not current minus previous")
+            elif delta.get("status") != "unavailable":
+                raise SchemaError(f"{where}: {delta_field} requires unavailable operands")
+    return accession
+
+
 def _validate_versioned_semantics(feed: Mapping[str, Any]) -> None:
     contracts: dict[str, Mapping[str, Any]] = {}
     for entry in feed.get("provider_contracts", []):
@@ -1108,6 +1674,11 @@ def _validate_versioned_semantics(feed: Mapping[str, Any]) -> None:
             "remarks",
             "is_amendment",
             "date_of_original_submission",
+            "document_url",
+            "schedule_family",
+            "amendment_number",
+            "current_snapshot",
+            "previous_snapshot",
         },
         "cftc": {
             "market_identity",
@@ -1130,7 +1701,7 @@ def _validate_versioned_semantics(feed: Mapping[str, Any]) -> None:
     versioned_provider_ids = {
         provider_id
         for provider_id, contract in contracts.items()
-        if contract.get("contract_version") in {2, 3}
+        if contract.get("contract_version") in {2, 3, 4}
     }
     for provider_id in sorted(set(items_by_provider) | versioned_provider_ids):
         items = items_by_provider.get(provider_id, [])
@@ -1143,6 +1714,116 @@ def _validate_versioned_semantics(feed: Mapping[str, Any]) -> None:
                     payload
                 ):
                     raise SchemaError(f"{provider_id} v1 item contains v2 semantic fields")
+        if version == 4:
+            if provider_id != "sec_edgar":
+                raise SchemaError(f"unsupported v4 semantic Provider {provider_id!r}")
+            units = contract.get("units")
+            if not isinstance(units, Mapping) or set(units) != {
+                "13f_value_before_2023_01_03",
+                "13f_value_from_2023_01_03",
+                "reported_value_usd_thousands",
+            }:
+                raise SchemaError("SEC v4 unit contract is missing or not closed")
+            if contract.get("max_filings_per_window") != 20 or contract.get(
+                "ownership_xml_schema_versions"
+            ) != [FORM4_SCHEMA_VERSION]:
+                raise SchemaError("SEC v4 Form 4 bounds/schema versions are not closed")
+            bo_bounds = {
+                "max_filings_per_window": 7,
+                "max_history_files": 1,
+                "max_historical_candidate_documents": 64,
+                "max_reporting_positions_per_filing": 32,
+                "structured_formats": ["edgarSubmission"],
+                "schema_versions": ["X0202"],
+                "locator_prefixes": ["xslSCHEDULE_13G_X01", "xslSCHEDULE_13G_X02"],
+            }
+            bo_contract = contract.get("beneficial_ownership")
+            if not isinstance(bo_contract, Mapping) or any(
+                bo_contract.get(key) != value for key, value in bo_bounds.items()
+            ):
+                raise SchemaError("SEC v4 beneficial-ownership bounds/schema are not closed")
+            config = feed.get("feed_config", {}).get("snapshot", {})
+            watched_filers = (
+                config.get("watched_beneficial_ownership_filers")
+                if isinstance(config, Mapping)
+                else None
+            )
+            if not isinstance(watched_filers, list) or not watched_filers:
+                raise SchemaError("SEC v4 requires watched beneficial-ownership filers")
+            filer_ciks: list[str] = []
+            for row in watched_filers:
+                cik = row.get("cik") if isinstance(row, Mapping) else None
+                if not isinstance(cik, str) or not re.fullmatch(r"\d{10}", cik):
+                    raise SchemaError(
+                        "SEC v4 watched beneficial-ownership filer selection is invalid"
+                    )
+                filer_ciks.append(cik)
+            if filer_ciks != sorted(filer_ciks) or len(filer_ciks) != len(set(filer_ciks)):
+                raise SchemaError("SEC v4 watched beneficial-ownership filer selection is invalid")
+            watched_filer_set = set(filer_ciks)
+            v4_outcome: Mapping[str, Any] = next(
+                (
+                    o
+                    for o in feed.get("provider_outcomes", [])
+                    if o.get("provider_id") == "sec_edgar"
+                ),
+                {},
+            )
+            watched_companies = (
+                config.get("watched_companies") if isinstance(config, Mapping) else None
+            )
+            watched_issuers = (
+                config.get("watched_form4_issuers") if isinstance(config, Mapping) else None
+            )
+            if not isinstance(watched_companies, list) or not isinstance(watched_issuers, list):
+                raise SchemaError("SEC v4 requires watched 13F companies and Form 4 issuers")
+            v4_company_ciks = {
+                row["cik"]
+                for row in watched_companies
+                if isinstance(row, Mapping) and isinstance(row.get("cik"), str)
+            }
+            v4_issuer_ciks = {
+                row["cik"]
+                for row in watched_issuers
+                if isinstance(row, Mapping) and isinstance(row.get("cik"), str)
+            }
+            legacy_items = [
+                item
+                for item in items
+                if isinstance(item.get("payload"), Mapping)
+                and item["payload"].get("filing_subtype") in {"form13f", "form4"}
+            ]
+            _validate_sec_v3_items(
+                legacy_items,
+                start=window_start,
+                cutoff=cutoff,
+                contract=contract,
+                watched_issuers=v4_issuer_ciks,
+                watched_companies=v4_company_ciks,
+                outcome=v4_outcome,
+            )
+            accessions: set[str] = set()
+            for item in items:
+                payload = item.get("payload")
+                subtype = payload.get("filing_subtype") if isinstance(payload, Mapping) else None
+                if subtype in {"form13f", "form4"}:
+                    continue
+                accession = _validate_sec_v4_item(
+                    item,
+                    start=window_start,
+                    cutoff=cutoff,
+                    watched_filers=watched_filer_set,
+                    where=f"items[{item.get('id')!r}]",
+                )
+                if accession in accessions:
+                    raise SchemaError("SEC v4 beneficial-ownership accessions are duplicated")
+                accessions.add(accession)
+            if (
+                v4_outcome.get("state") == "healthy"
+                and len(accessions) > bo_contract["max_filings_per_window"]
+            ):
+                raise SchemaError("SEC v4 beneficial-ownership current filing bound is exceeded")
+            continue
         if version == 3:
             if provider_id != "sec_edgar":
                 raise SchemaError(f"unsupported v3 semantic Provider {provider_id!r}")
@@ -1202,6 +1883,20 @@ def _validate_versioned_semantics(feed: Mapping[str, Any]) -> None:
                 raise SchemaError("SEC v2 unit contract is missing or not closed")
             ciks: list[str] = []
             for item in items:
+                payload = item.get("payload")
+                if isinstance(payload, Mapping) and any(
+                    field in payload
+                    for field in (
+                        "document_url",
+                        "schedule_family",
+                        "amendment_number",
+                        "current_snapshot",
+                        "previous_snapshot",
+                    )
+                ):
+                    raise SchemaError(
+                        "SEC v2 item contains SEC v4-only beneficial-ownership fields"
+                    )
                 _validate_sec_v2_item(
                     item, cutoff=cutoff, units=units, where=f"items[{item.get('id')!r}]"
                 )

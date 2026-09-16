@@ -20,17 +20,28 @@ CFTC weekly semantics proven here:
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
+import pytest
+
 from follow_the_money.canonical import canonical_digest
 from follow_the_money.config import load_config
 from follow_the_money.feed.bundle import MANIFEST_FILENAME, artifact_relative_path, validate_bundle
 from follow_the_money.feed.cli import run_feed as _run_feed
-from follow_the_money.providers.adapters import CftcAdapter, SecEdgarAdapter, build_registry
+from follow_the_money.feed.validate import validate_feed
+from follow_the_money.providers.adapters import (
+    CftcAdapter,
+    SecBeneficialOwnershipAdapter,
+    SecEdgarAdapter,
+    SecForm4Adapter,
+    build_registry,
+)
 from follow_the_money.providers.http import FetchError
+from follow_the_money.schema import SchemaError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CFTC_FIXTURE = REPO_ROOT / "providers" / "cftc" / "fixtures" / "cot.json"
@@ -73,13 +84,48 @@ class _FixtureClientBody:
 
 
 class _SecFixtureClient:
-    def __init__(self, cik: str, name: str) -> None:
+    def __init__(self, cik: str, name: str, kind: str = "13f") -> None:
         self.cik = cik
         self.name = name
+        self.kind = kind
         self.accession = f"{cik}-26-000001"
 
     def get(self, url, headers=None, timeout=None, follow_redirects=True):
-        if "data.sec.gov" in url:
+        if self.kind == "form4":
+            if "data.sec.gov" in url:
+                body = (
+                    REPO_ROOT / "providers/sec_edgar/fixtures/form4/submissions.json"
+                ).read_bytes()
+            else:
+                filename = Path(url).name
+                filename = "mixed.xml" if filename == "primary_doc.xml" else filename
+                body = (REPO_ROOT / "providers/sec_edgar/fixtures/form4" / filename).read_bytes()
+        elif self.kind == "beneficial_ownership":
+            if "data.sec.gov" in url:
+                body = (
+                    REPO_ROOT / "providers/sec_edgar/fixtures/beneficial_ownership/submissions.json"
+                ).read_bytes()
+            else:
+                filename = Path(url).name
+                if filename == "schedule13d.xml":
+                    filename = "13d.xml"
+                elif filename == "schedule13ga.xml":
+                    filename = "13g-amendment.xml"
+                elif filename == "schedule13g.xml":
+                    body = (
+                        REPO_ROOT
+                        / "providers/sec_edgar/fixtures/beneficial_ownership/13g-amendment.xml"
+                    ).read_bytes()
+                    body = body.replace(b"SCHEDULE 13G/A", b"SCHEDULE 13G").replace(
+                        b"<amendmentNumber>2</amendmentNumber>", b""
+                    )
+                    return SimpleNamespace(
+                        body_bytes=body, content=body, status_code=200, headers={}, url=url
+                    )
+                body = (
+                    REPO_ROOT / "providers/sec_edgar/fixtures/beneficial_ownership" / filename
+                ).read_bytes()
+        elif "data.sec.gov" in url:
             body = json.dumps(
                 {
                     "cik": self.cik,
@@ -179,12 +225,56 @@ def _fixture_registry(
                 manifest_root=REPO_ROOT / "providers",
                 require_verified_enabled=True,
             )
+            sec_contract = cast(SecEdgarAdapter, inner)._contract
             wrapped[pid] = [
-                _SecFixtureServed(
-                    SecEdgarAdapter(cast(SecEdgarAdapter, inner)._contract, watched_company=company)
-                )
+                _SecFixtureServed(SecEdgarAdapter(sec_contract, watched_company=company))
                 for company in cfg.watched_companies
             ]
+
+            class _SecSubtypeFixtureServed:
+                provider_id = "sec_edgar"
+
+                def __init__(self, adapter, kind: str, cik: str, name: str) -> None:
+                    self.adapter = adapter
+                    self.kind = kind
+                    self.selection_kind = kind
+                    self.cik = cik
+                    self.name = name
+
+                @property
+                def selected_accessions(self):
+                    return self.adapter.selected_accessions
+
+                @property
+                def selection_complete(self):
+                    return self.adapter.selection_complete
+
+                def fetch(self, window, client=None):
+                    return self.adapter.fetch(
+                        window, _SecFixtureClient(self.cik, self.name, self.kind)
+                    )
+
+                def normalize(self, raw, window):
+                    return self.adapter.normalize(raw, window)
+
+            wrapped[pid].extend(
+                _SecSubtypeFixtureServed(
+                    SecForm4Adapter(sec_contract, watched_issuer=issuer),
+                    "form4",
+                    issuer.cik,
+                    issuer.name,
+                )
+                for issuer in cfg.watched_form4_issuers
+            )
+            wrapped[pid].extend(
+                _SecSubtypeFixtureServed(
+                    SecBeneficialOwnershipAdapter(sec_contract, watched_filer=filer),
+                    "beneficial_ownership",
+                    filer.cik,
+                    filer.name,
+                )
+                for filer in cfg.watched_beneficial_ownership_filers
+            )
             continue
 
         class _FixtureServed:
@@ -268,7 +358,7 @@ def test_new_cftc_report_publishes_only_in_positioning_artifact(tmp_path):
     sec_contract = next(
         c for c in manifest["provider_contracts"] if c["provider_id"] == "sec_edgar"
     )
-    assert sec_contract["snapshot"]["contract_version"] == 3
+    assert sec_contract["snapshot"]["contract_version"] == 4
     assert sec_contract["snapshot"]["units"] == {
         "13f_value_before_2023_01_03": "usd_thousands",
         "13f_value_from_2023_01_03": "usd",
@@ -276,9 +366,18 @@ def test_new_cftc_report_publishes_only_in_positioning_artifact(tmp_path):
     }
     assert sec_contract["snapshot"]["max_filings_per_window"] == 20
     assert sec_contract["snapshot"]["ownership_xml_schema_versions"] == ["X0609"]
+    assert sec_contract["snapshot"]["beneficial_ownership"]["schema_versions"] == ["X0202"]
     sec_items = [item for item in feed["items"] if item["provider_id"] == "sec_edgar"]
-    assert len(sec_items) == 8
-    assert all("holdings" in item["payload"] for item in sec_items)
+    assert len(sec_items) == 12
+    assert all(
+        "holdings" in item["payload"]
+        for item in sec_items
+        if item["payload"].get("filing_subtype") == "form13f"
+    )
+    assert (
+        sum(item["payload"].get("filing_subtype") == "beneficial_ownership" for item in sec_items)
+        == 2
+    )
 
     # The CFTC item is inventoried only in the typed positioning artifact.
     inventory = {entry["domain"]: entry for entry in manifest["artifacts"]}
@@ -434,3 +533,91 @@ def test_cftc_failure_keeps_incomplete_outcome_and_active_bundle(tmp_path):
 
     # The active bundle is not replaced.
     assert (output / MANIFEST_FILENAME).read_bytes() == manifest_before
+
+
+def test_sec_v4_beneficial_ownership_payload_rejects_analysis_and_generic_fields(tmp_path):
+    result = _run(tmp_path / "out", CUTOFF_1)
+    assert result.exit_code == 0
+    assert result.feed is not None
+    beneficial = next(
+        item
+        for item in result.feed["items"]
+        if item["payload"].get("filing_subtype") == "beneficial_ownership"
+    )
+    for forbidden_key in (
+        "bullish",
+        "takeover_likelihood",
+        "control_change",
+        "importance",
+        "signal",
+        "recommendation",
+        "generic_fact",
+        "amends_accession",
+    ):
+        changed = deepcopy(result.feed)
+        changed_item = next(item for item in changed["items"] if item["id"] == beneficial["id"])
+        changed_item["payload"][forbidden_key] = True
+        with pytest.raises(SchemaError):
+            validate_feed(changed)
+
+
+def test_sec_v4_beneficial_ownership_validator_binds_provenance_and_legacy_refs(tmp_path):
+    result = _run(tmp_path / "out", CUTOFF_1)
+    assert result.exit_code == 0
+    assert result.feed is not None
+    item = next(
+        item
+        for item in result.feed["items"]
+        if item["payload"].get("filing_subtype") == "beneficial_ownership"
+        and item["payload"].get("previous_snapshot") is None
+    )
+
+    changed = deepcopy(result.feed)
+    changed_item = next(value for value in changed["items"] if value["id"] == item["id"])
+    changed_item["payload"]["filed_at"] = "2026-08-10T00:00:00.001Z"
+    with pytest.raises(SchemaError):
+        validate_feed(changed)
+
+    changed = deepcopy(result.feed)
+    changed_item = next(value for value in changed["items"] if value["id"] == item["id"])
+    changed_item["source"]["name"] = "SEC  EDGAR"
+    with pytest.raises(SchemaError):
+        validate_feed(changed)
+
+    changed = deepcopy(result.feed)
+    changed_item = next(value for value in changed["items"] if value["id"] == item["id"])
+    current_url = changed_item["payload"]["current_snapshot"]["document_url"]
+    changed_item["payload"]["current_snapshot"]["document_url"] = (
+        current_url.rsplit("/", 1)[0] + "/other.xml"
+    )
+    with pytest.raises(SchemaError):
+        validate_feed(changed)
+
+    changed = deepcopy(result.feed)
+    changed_item = next(value for value in changed["items"] if value["id"] == item["id"])
+    changed_item["payload"]["current_snapshot"]["reporting_positions"][0]["source_field_refs"][0][
+        "field"
+    ] = "reporting_person[0].arbitrary"
+    with pytest.raises(SchemaError):
+        validate_feed(changed)
+
+    changed = deepcopy(result.feed)
+    changed_item = next(value for value in changed["items"] if value["id"] == item["id"])
+    changed_item["payload"]["comparison"] = {
+        "status": "unavailable",
+        "reason": "previous_format_unsupported",
+        "previous": {
+            "accession_number": "0001067983-26-000007",
+            "accepted_at": "2026-08-01T10:00:00.000Z",
+            "document_url": (
+                "https://www.sec.gov/Archives/edgar/data/0001067983/000106798326000007/legacy.htm"
+            ),
+        },
+    }
+    validate_feed(changed)
+    changed_item = next(value for value in changed["items"] if value["id"] == item["id"])
+    changed_item["payload"]["comparison"]["previous"]["document_url"] = (
+        "https://www.sec.gov/Archives/edgar/data/0000000000/000106798326000007/legacy.htm"
+    )
+    with pytest.raises(SchemaError):
+        validate_feed(changed)

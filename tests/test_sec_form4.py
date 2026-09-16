@@ -6,12 +6,10 @@ import json
 from copy import deepcopy
 from decimal import ROUND_DOWN, ROUND_HALF_EVEN, localcontext
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from follow_the_money.canonical import canonical_bytes, canonical_digest
-from follow_the_money.config import load_config
 from follow_the_money.feed.validate import recompute_feed_identity, validate_feed
 from follow_the_money.providers.adapters import SecForm4Adapter
 from follow_the_money.providers.http import stable_item_id
@@ -112,8 +110,8 @@ def test_form4_selector_rejects_incomplete_duplicate_and_overbound_listing():
                 "reportDate": ["2026-08-09"] * 21,
                 "accessionNumber": [f"0001067983-26-{index:06d}" for index in range(21, 0, -1)],
                 "acceptanceDateTime": [
-                    f"2026-08-10T{12 - (index // 60):02d}:{59 - (index % 60):02d}:00Z"
-                    for index in range(20)
+                    f"2026-08-10T{12 - (minute // 60):02d}:{59 - (minute % 60):02d}:00Z"
+                    for minute in range(20)
                 ]
                 + ["2026-08-10T00:00:00Z"],
                 "primaryDocument": [f"form{index}.xml" for index in range(21)],
@@ -445,52 +443,7 @@ def test_end_to_end_v3_fixture_feed_combines_13f_and_form4_deterministically(tmp
     from tests.test_cftc_activation import CUTOFF_1, _fixture_registry, run_feed
 
     def registry_with_form4():
-        registry = _fixture_registry()
-        config = load_config(
-            ROOT / "config" / "config.yaml",
-            ROOT / "config" / "providers.yaml",
-            manifest_root=ROOT / "providers",
-            require_verified_enabled=True,
-        )
-        issuer = config.watched_form4_issuers[0]
-        adapter = SecForm4Adapter(
-            next(provider for provider in config.providers if provider.id == "sec_edgar"),
-            watched_issuer=issuer,
-        )
-        fixture_root = FIXTURES
-
-        class FixtureClient:
-            def get(self, url, **_kwargs):
-                filename = "submissions.json" if "/submissions/" in url else Path(url).name
-                filename = "mixed.xml" if filename == "primary_doc.xml" else filename
-                body = (fixture_root / filename).read_bytes()
-                return SimpleNamespace(
-                    body_bytes=body,
-                    content=body,
-                    status_code=200,
-                    headers={},
-                    url=url,
-                )
-
-        class FixtureForm4:
-            provider_id = "sec_edgar"
-
-            @property
-            def selected_accessions(self):
-                return adapter.selected_accessions
-
-            @property
-            def selection_complete(self):
-                return adapter.selection_complete
-
-            def fetch(self, window, client=None):
-                return adapter.fetch(window, FixtureClient())
-
-            def normalize(self, raw, window):
-                return adapter.normalize(raw, window)
-
-        registry["sec_edgar"].append(FixtureForm4())
-        return registry
+        return _fixture_registry()
 
     def run_fixture(root):
         return run_feed(
@@ -508,10 +461,10 @@ def test_end_to_end_v3_fixture_feed_combines_13f_and_form4_deterministically(tmp
     assert first.feed["run_id"] == second.feed["run_id"]
     assert first.feed["content_digest"] == second.feed["content_digest"]
     first_sec = [item for item in first.feed["items"] if item["provider_id"] == "sec_edgar"]
-    assert len(first_sec) == 10
+    assert len(first_sec) == 12
     assert [item["payload"]["filing_subtype"] for item in first_sec] == [
         "form13f",
-    ] * 8 + ["form4", "form4"]
+    ] * 8 + ["beneficial_ownership", "beneficial_ownership", "form4", "form4"]
     first_artifact = (
         tmp_path / "first" / "out" / artifact_relative_path("filing", first.feed["run_id"])
     ).read_bytes()

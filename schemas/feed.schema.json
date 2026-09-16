@@ -995,8 +995,7 @@
         "form",
         "company",
         "accession_number",
-        "filed_at",
-        "raw_metadata"
+        "filed_at"
       ],
       "properties": {
         "type": {
@@ -1005,7 +1004,8 @@
         "filing_subtype": {
           "enum": [
             "form13f",
-            "form4"
+            "form4",
+            "beneficial_ownership"
           ]
         },
         "form": {
@@ -1065,7 +1065,10 @@
           "$ref": "#/$defs/sec_value_normalization"
         },
         "comparison": {
-          "$ref": "#/$defs/sec_comparison"
+          "oneOf": [
+            {"$ref": "#/$defs/sec_comparison"},
+            {"$ref": "#/$defs/beneficial_ownership_comparison"}
+          ]
         },
         "holdings": {
           "type": "array",
@@ -1114,12 +1117,214 @@
         "is_amendment": {
           "type": "boolean"
         },
+        "amendment_number": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
         "date_of_original_submission": {
           "type": [
             "string",
             "null"
           ],
           "format": "date"
+        },
+        "document_url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "schedule_family": {
+          "enum": ["13D", "13G"]
+        },
+        "current_snapshot": {
+          "$ref": "#/$defs/beneficial_ownership_snapshot"
+        },
+        "previous_snapshot": {
+          "anyOf": [
+            {"$ref": "#/$defs/beneficial_ownership_snapshot"},
+            {"type": "null"}
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["filing_subtype"],
+            "properties": {"filing_subtype": {"const": "beneficial_ownership"}}
+          },
+          "then": {
+            "required": [
+              "filing_subtype",
+              "accepted_at",
+              "document_url",
+              "schedule_family",
+              "is_amendment",
+              "amendment_number",
+              "current_snapshot",
+              "previous_snapshot",
+              "comparison"
+            ],
+            "not": {"required": ["raw_metadata"]}
+          },
+          "else": {"required": ["raw_metadata"]}
+        }
+      ]
+    },
+    "beneficial_ownership_source_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshot", "source_ordinal", "field"],
+      "properties": {
+        "snapshot": {"enum": ["current", "previous"]},
+        "source_ordinal": {"type": "integer", "minimum": 0},
+        "field": {"type": "string", "pattern": "^[a-z_]+\\[[0-9]+\\]\\.[A-Za-z0-9_]+$"}
+      }
+    },
+    "beneficial_ownership_numeric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "value", "unit", "reason", "source_field_refs"],
+      "properties": {
+        "status": {"enum": ["reported", "unavailable"]},
+        "value": {"type": ["string", "null"], "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+        "unit": {"enum": ["shares", "percent", "percentage_points"]},
+        "reason": {"type": ["string", "null"]},
+        "source_field_refs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/beneficial_ownership_source_ref"}
+        },
+        "derivation": {"const": "current_minus_previous"}
+      }
+    },
+    "beneficial_ownership_position_comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason", "shares_delta", "percentage_delta"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": ["string", "null"]},
+        "shares_delta": {"$ref": "#/$defs/beneficial_ownership_numeric"},
+        "percentage_delta": {"$ref": "#/$defs/beneficial_ownership_numeric"}
+      }
+    },
+    "beneficial_ownership_position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_ordinal",
+        "source_name",
+        "source_cik",
+        "identity_basis",
+        "person_types",
+        "group_membership",
+        "beneficially_owned_shares",
+        "ownership_percentage",
+        "source_field_refs"
+      ],
+      "properties": {
+        "source_ordinal": {"type": "integer", "minimum": 0},
+        "source_name": {"type": "string", "minLength": 1, "maxLength": 300},
+        "source_cik": {"type": ["string", "null"], "pattern": "^\\d{10}$"},
+        "identity_basis": {"enum": ["source_cik", "source_name"]},
+        "person_types": {"type": "array", "maxItems": 4, "uniqueItems": true, "items": {"type": "string", "maxLength": 64}},
+        "group_membership": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["is_member"],
+          "properties": {"is_member": {"type": "boolean"}}
+        },
+        "beneficially_owned_shares": {"$ref": "#/$defs/beneficial_ownership_numeric"},
+        "ownership_percentage": {"$ref": "#/$defs/beneficial_ownership_numeric"},
+        "voting_power": {"$ref": "#/$defs/beneficial_ownership_numeric"},
+        "dispositive_power": {"$ref": "#/$defs/beneficial_ownership_numeric"},
+        "source_field_refs": {"type": "array", "items": {"$ref": "#/$defs/beneficial_ownership_source_ref"}},
+        "comparison": {"$ref": "#/$defs/beneficial_ownership_position_comparison"}
+      }
+    },
+    "beneficial_ownership_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accession_number",
+        "form",
+        "schedule_family",
+        "filed_at",
+        "accepted_at",
+        "document_url",
+        "issuer",
+        "ownership_class",
+        "reporting_positions",
+        "group_evidence",
+        "is_amendment",
+        "amendment_number"
+      ],
+      "properties": {
+        "accession_number": {"type": "string", "pattern": "^\\d{10}-\\d{2}-\\d{6}$"},
+        "form": {"enum": ["SCHEDULE 13D", "SCHEDULE 13D/A", "SCHEDULE 13G", "SCHEDULE 13G/A"]},
+        "schedule_family": {"enum": ["13D", "13G"]},
+        "filed_at": {"type": "string", "format": "date-time"},
+        "accepted_at": {"type": "string", "format": "date-time"},
+        "document_url": {"type": "string", "format": "uri", "maxLength": 2048},
+        "issuer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cik", "name"],
+          "properties": {
+            "cik": {"type": ["string", "null"], "pattern": "^\\d{10}$"},
+            "name": {"type": "string", "minLength": 1, "maxLength": 300}
+          }
+        },
+        "ownership_class": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cusip", "title", "identity_basis"],
+          "properties": {
+            "cusip": {"type": ["string", "null"], "pattern": "^[0-9A-Z*@#]{9}$"},
+            "title": {"type": ["string", "null"], "maxLength": 300},
+            "identity_basis": {"enum": ["cusip", "class_title", "unavailable"]}
+          }
+        },
+        "reporting_positions": {"type": "array", "minItems": 1, "maxItems": 32, "items": {"$ref": "#/$defs/beneficial_ownership_position"}},
+        "group_evidence": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "aggregate_shares", "is_explicit"],
+              "properties": {
+                "name": {"type": ["string", "null"], "maxLength": 300},
+                "aggregate_shares": {"anyOf": [{"$ref": "#/$defs/beneficial_ownership_numeric"}, {"type": "null"}]},
+                "is_explicit": {"const": true}
+              }
+            }
+          ]
+        },
+        "is_amendment": {"type": "boolean"},
+        "amendment_number": {"type": ["integer", "null"], "minimum": 1}
+      }
+    },
+    "beneficial_ownership_comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason", "previous"],
+      "properties": {
+        "status": {"enum": ["available", "initial_filing", "unavailable"]},
+        "reason": {"type": ["string", "null"]},
+        "previous": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["accession_number", "accepted_at", "document_url"],
+              "properties": {
+                "accession_number": {"type": "string", "pattern": "^\\d{10}-\\d{2}-\\d{6}$"},
+                "accepted_at": {"type": "string", "format": "date-time"},
+                "document_url": {"type": "string", "format": "uri", "maxLength": 2048}
+              }
+            }
+          ]
         }
       }
     },

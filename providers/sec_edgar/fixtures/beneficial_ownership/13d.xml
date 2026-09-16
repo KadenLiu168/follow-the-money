@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<edgarSubmission>
+  <schemaVersion>X0202</schemaVersion>
+  <headerData><submissionType>SCHEDULE 13D</submissionType></headerData>
+  <formData>
+    <issuerInfo>
+      <issuerCik>0000789019</issuerCik>
+      <issuerName>Example Issuer</issuerName>
+      <classTitle>Common Stock</classTitle>
+      <cusip>123456789</cusip>
+    </issuerInfo>
+    <reportingPerson>
+      <reportingPersonName>First Reporting Person</reportingPersonName>
+      <reportingPersonCik>0000000001</reportingPersonCik>
+      <personType>individual</personType>
+      <groupMember>1</groupMember>
+      <sharesOwned>1000</sharesOwned>
+      <percentOfClass>5.5</percentOfClass>
+      <votingPower>1000</votingPower>
+    </reportingPerson>
+    <reportingPerson>
+      <reportingPersonName>Second Reporting Person</reportingPersonName>
+      <personType>institution</personType>
+      <groupMember>0</groupMember>
+      <sharesOwned>500</sharesOwned>
+      <percentOfClass>2.5</percentOfClass>
+    </reportingPerson>
+    <group>
+      <name>Example Filing Group</name>
+      <aggregateShares>1500</aggregateShares>
+    </group>
+  </formData>
+</edgarSubmission>

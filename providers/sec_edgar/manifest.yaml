@@ -1,9 +1,9 @@
 # SEC EDGAR — Provider contract manifest
-# Existing SEC source contract was verified on 2026-08-11 against the public
-# submissions JSON contract. Form 4 v3 support is covered by synthetic,
-# production-shaped fixtures; see fixture_provenance below.
+# SEC v4 source contract was verified on 2026-08-11 against the public
+# submissions JSON contract. Form 4 and Schedule 13D/G support is covered by
+# synthetic, production-shaped fixtures; see fixture_provenance below.
 
-contract_version: 3
+contract_version: 4
 provider_id: sec_edgar
 name: SEC EDGAR
 source_family_id: sec
@@ -14,10 +14,12 @@ verification:
   contract_url: >-
     https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=13F
   usage_note: >
-    Exact 13F-HR company filings for watched companies and bounded Form 4/4-A
-    ownership filings for configured issuers. Public data; EDGAR requires a
+    Exact 13F-HR company filings for watched companies, bounded Form 4/4-A
+    filings for configured issuers, and bounded structured Schedule 13D/G
+    filings for configured reporting filers. Public data; EDGAR requires a
     descriptive user agent with a contact identifier. The submissions endpoint,
-    ownership XML schema X0609, and archive source-link rules are verified.
+    ownership XML schemas X0609/X0202, and archive source-link rules are
+    verified.
 
 authentication: none
 protocol: https
@@ -82,6 +84,15 @@ form4:
   max_filings_per_window: 20
   ownership_xml_schema_versions: [X0609]
 
+beneficial_ownership:
+  max_filings_per_window: 7
+  max_history_files: 1
+  max_historical_candidate_documents: 64
+  max_reporting_positions_per_filing: 32
+  structured_formats: [edgarSubmission]
+  schema_versions: [X0202]
+  locator_prefixes: [xslSCHEDULE_13G_X01, xslSCHEDULE_13G_X02]
+
 fixture_provenance:
   source: >-
     SEC 13F and Form 4 source rules are verified in
@@ -96,3 +107,6 @@ fixture_provenance:
     - fixtures/form4/submissions.json
     - fixtures/form4/mixed.xml
     - fixtures/form4/amendment.xml
+    - fixtures/beneficial_ownership/submissions.json
+    - fixtures/beneficial_ownership/13d.xml
+    - fixtures/beneficial_ownership/13g-amendment.xml

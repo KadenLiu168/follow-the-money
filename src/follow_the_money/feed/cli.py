@@ -10,7 +10,7 @@ The Feed command:
 4. plans the strictly advancing window from the runtime checkpoint,
 5. runs enabled providers with the durable rate-state debit/reconcile
    lifecycle, bounded HTTP clients, global/per-host concurrency limits,
-   and the 300-second pre-commit deadline + 15-second reserve,
+   and the configured pre-commit deadline + commit reserve,
 6. captures ``retrieved_at`` when each provider response actually returns,
    ``collection_completed_at`` after all provider work is terminal/fenced,
    and ``generated_at`` when the envelope is finalized — no offset or copied
@@ -147,7 +147,7 @@ def run_feed(
     registry built from checked-in manifests, a bounded ``httpx`` client,
     the exclusive runtime-state-root collection lock, the durable rate-state
     debit/reconcile lifecycle, global 8 / per-host 2 concurrency, and the
-    300-second pre-commit deadline. ``enabled_provider_ids`` overrides
+    configured pre-commit deadline. ``enabled_provider_ids`` overrides
     config enablement for fixtures.
     """
     from ..providers.adapters import build_registry
@@ -173,7 +173,7 @@ def run_feed(
     monotonic = monotonic_now or time.monotonic
     sleep = sleep_fn or time.sleep
     cfg = _load_app_config(config_path)
-    # The 300-second pre-commit deadline anchors at command startup (before
+    # The configured pre-commit deadline anchors at command startup (before
     # lock acquisition) so lock-waiting time counts against the deadline.
     deadline_started = monotonic()
     deadline_seconds = cfg.feed.pre_commit_deadline_seconds - cfg.feed.commit_reserve_seconds
@@ -480,7 +480,7 @@ def run_feed(
             for entry in contract_snapshots
             if (
                 entry["provider_id"] == "sec_edgar"
-                and entry["snapshot"].get("contract_version") in {2, 3}
+                and entry["snapshot"].get("contract_version") in {2, 3, 4}
             )
             or (entry["provider_id"] == "cftc" and entry["snapshot"].get("contract_version") == 2)
         )
@@ -532,21 +532,47 @@ def run_feed(
                     item.get("payload", {}).get("accession_number") for item in form4_items
                 }
                 expected_form4_accessions: set[str] = set()
+                expected_beneficial_accessions: set[str] = set()
                 form4_selection_complete = True
+                beneficial_selection_complete = True
                 for adapter in adapters_by_id.get("sec_edgar", []):
-                    if hasattr(adapter, "selected_accessions"):
+                    if getattr(adapter, "selection_kind", None) == "beneficial_ownership":
+                        if not getattr(adapter, "selection_complete", False):
+                            beneficial_selection_complete = False
+                        expected_beneficial_accessions.update(
+                            getattr(adapter, "selected_accessions", ())
+                        )
+                    elif hasattr(adapter, "selected_accessions"):
                         if not getattr(adapter, "selection_complete", False):
                             form4_selection_complete = False
                         expected_form4_accessions.update(
                             getattr(adapter, "selected_accessions", ())
                         )
+                beneficial_items = [
+                    item
+                    for item in sec_items
+                    if item.get("payload", {}).get("filing_subtype") == "beneficial_ownership"
+                ]
+                actual_beneficial_accessions = {
+                    item.get("payload", {}).get("accession_number") for item in beneficial_items
+                }
+                beneficial_slice_complete = (
+                    actual_beneficial_accessions == expected_beneficial_accessions
+                    and len(actual_beneficial_accessions) == len(beneficial_items)
+                    and beneficial_selection_complete
+                )
                 complete = (
                     actual_13f_ciks == expected_sec_ciks
                     and actual_form4_accessions == expected_form4_accessions
                     and len(actual_form4_accessions) == len(form4_items)
                     and form4_selection_complete
+                    and (sec_version < 4 or beneficial_slice_complete)
                 )
-                error = "SEC v3 complete slice does not equal watched 13F/Form 4 selection"
+                error = (
+                    "SEC v4 complete slice does not equal watched 13F/Form 4/beneficial-ownership selection"
+                    if sec_version >= 4
+                    else "SEC v3 complete slice does not equal watched 13F/Form 4 selection"
+                )
             if not complete:
                 outcomes["sec_edgar"].state = "partial"
                 outcomes["sec_edgar"].error = error
@@ -682,7 +708,11 @@ def _production_adapters(cfg: AppConfig, registry: Any) -> dict[str, list[Any]]:
     Every enabled Provider contributes one adapter instance; SEC EDGAR also
     receives the configured watched-company CIK filter.
     """
-    from ..providers.adapters import SecEdgarAdapter, SecForm4Adapter
+    from ..providers.adapters import (
+        SecBeneficialOwnershipAdapter,
+        SecEdgarAdapter,
+        SecForm4Adapter,
+    )
 
     adapters: dict[str, list[Any]] = {}
     for p in cfg.providers:
@@ -693,10 +723,17 @@ def _production_adapters(cfg: AppConfig, registry: Any) -> dict[str, list[Any]]:
                 SecEdgarAdapter(p, watched_company=company)
                 for company in sorted(cfg.watched_companies, key=lambda company: company.cik)
             ]
-            if p.contract_version == 3:
+            if p.contract_version >= 3:
                 adapters[p.id].extend(
                     SecForm4Adapter(p, watched_issuer=issuer)
                     for issuer in sorted(cfg.watched_form4_issuers, key=lambda issuer: issuer.cik)
+                )
+            if p.contract_version >= 4:
+                adapters[p.id].extend(
+                    SecBeneficialOwnershipAdapter(p, watched_filer=filer)
+                    for filer in sorted(
+                        cfg.watched_beneficial_ownership_filers, key=lambda filer: filer.cik
+                    )
                 )
         else:
             try:
@@ -844,6 +881,9 @@ def _run_adapter(
                 outcome.execution_failure = True
                 return
             normalized = list(adapter.normalize(raw, window))
+            # Some bounded adapters perform a shared reverse scan lazily
+            # during normalization; include those sends in outcome freshness.
+            observe_client()
             allowed_payload_types = (
                 set(provider_contract.payload_types) if provider_contract is not None else set()
             )
@@ -1141,6 +1181,16 @@ def _provider_contract_snapshots(
         if p.max_filings_per_window is not None:
             payload["max_filings_per_window"] = p.max_filings_per_window
             payload["ownership_xml_schema_versions"] = list(p.ownership_xml_schema_versions)
+        if p.beneficial_ownership_max_filings_per_window is not None:
+            payload["beneficial_ownership"] = {
+                "max_filings_per_window": p.beneficial_ownership_max_filings_per_window,
+                "max_history_files": p.beneficial_ownership_max_history_files,
+                "max_historical_candidate_documents": p.beneficial_ownership_max_historical_candidate_documents,
+                "max_reporting_positions_per_filing": p.beneficial_ownership_max_reporting_positions,
+                "structured_formats": list(p.beneficial_ownership_structured_formats),
+                "schema_versions": list(p.beneficial_ownership_schema_versions),
+                "locator_prefixes": list(p.beneficial_ownership_locator_prefixes),
+            }
         snapshot = {"provider_id": p.id, "snapshot": payload, "hash": canonical_digest(payload)}
         snapshots.append(snapshot)
     return snapshots
@@ -1166,6 +1216,7 @@ def _feed_config_snapshot(cfg: AppConfig) -> dict[str, Any]:
             "max_url_characters": cfg.feed.max_url_characters,
             "max_serialized_feed_bytes": cfg.feed.max_serialized_feed_bytes,
             "lock_timeout_seconds": cfg.feed.lock_timeout_seconds,
+            "sec_request_network_headroom_seconds": cfg.feed.sec_request_network_headroom_seconds,
         },
         "coverage": [
             {
@@ -1188,6 +1239,12 @@ def _feed_config_snapshot(cfg: AppConfig) -> dict[str, Any]:
         "watched_form4_issuers": [
             {"cik": issuer.cik, "name": issuer.name}
             for issuer in sorted(cfg.watched_form4_issuers, key=lambda issuer: issuer.cik)
+        ],
+        "watched_beneficial_ownership_filers": [
+            {"cik": filer.cik, "name": filer.name}
+            for filer in sorted(
+                cfg.watched_beneficial_ownership_filers, key=lambda filer: filer.cik
+            )
         ],
     }
     return {"snapshot": payload, "hash": canonical_digest(payload)}

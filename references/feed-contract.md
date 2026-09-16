@@ -27,11 +27,15 @@ identity-invalid state is not consumable.
 The Feed's fixed half-open window, `evidence_cutoff_at`, `run_id`, and
 `content_digest` are authoritative. Payload observation/effective time, source
 publication/update time, Provider retrieval/check time, and Feed generation time
-remain distinct. Every item retains traceable source provenance. SEC v3 filing
-items distinguish `form13f` current-state evidence from `form4`/`4/A` ownership evidence.
-Form 4 items retain issuer identity, ordered reporting owners and relationships,
-transaction/holding entries, post-transaction state, source footnotes, and
-precise acceptance time; SEC v1/v2 items remain bounded readable contracts.
+remain distinct. Every item retains traceable source provenance. SEC v4 filing
+items distinguish `form13f` current-state evidence, `form4`/`4/A` ownership
+evidence, and bounded structured `SCHEDULE 13D`/`13G` beneficial-ownership
+evidence. Form 4 items retain issuer identity, ordered reporting owners and
+relationships, transaction/holding entries, post-transaction state, source
+footnotes, and precise acceptance time. Beneficial-ownership items retain
+issuer/class identity, source-ordered reporting positions, typed ownership
+facts, and conservative comparison states; SEC v1-v3 items remain bounded
+readable contracts.
 CFTC positioning items may carry typed market identity, metrics, deltas, and an
 explicit arithmetic derivation. These remain evidence-only and do not express
 direction, impact, ranking, inferred holding delta, amendment linkage, or

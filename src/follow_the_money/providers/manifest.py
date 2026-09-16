@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -21,7 +23,7 @@ from ..config.model import (
 MANIFEST_ROOT = Path(__file__).resolve().parents[3] / "providers"
 # Provider contracts evolve independently while the logical Feed remains v4.
 SUPPORTED_CONTRACT_VERSIONS: dict[str, frozenset[int]] = {
-    "sec_edgar": frozenset({1, 2, 3}),
+    "sec_edgar": frozenset({1, 2, 3, 4}),
     "cftc": frozenset({1, 2}),
     "federal_reserve": frozenset({1}),
     "bls": frozenset({1}),
@@ -75,6 +77,7 @@ _ALLOWED_MANIFEST_KEYS = frozenset(
         "default_enabled",
         "fixture_provenance",
         "form4",
+        "beneficial_ownership",
     }
 )
 
@@ -307,6 +310,26 @@ def _validate_manifest(data: Mapping[str, Any], path: Path, provider_id: str) ->
         data["source_link_hosts"], f"manifest {path}.source_link_hosts", source=True
     )
     _validate_rate(data["rate_policy"], f"manifest {path}.rate_policy")
+    if provider_id == "sec_edgar" and version in {2, 3, 4}:
+        rate = data["rate_policy"]
+        if not isinstance(rate, Mapping) or {
+            rate.get("scope_id"),
+            rate.get("capacity"),
+            rate.get("refill_period_seconds"),
+            rate.get("minimum_interval_seconds"),
+        } != {"sec_edgar", 10, 60, 5}:
+            raise ManifestError(
+                f"manifest {path}: SEC v{version} rate policy is not the unchanged closed contract"
+            )
+        if set(rate) != {
+            "scope_id",
+            "capacity",
+            "refill_period_seconds",
+            "minimum_interval_seconds",
+        }:
+            raise ManifestError(
+                f"manifest {path}: SEC v{version} rate policy contains unsupported fields"
+            )
     response_limit = _as_int(data["response_limit_bytes"], f"manifest {path}.response_limit_bytes")
     attempt_timeout = _as_int(
         data["attempt_timeout_seconds"], f"manifest {path}.attempt_timeout_seconds"
@@ -356,7 +379,7 @@ def _validate_manifest(data: Mapping[str, Any], path: Path, provider_id: str) ->
         raise ManifestError(f"manifest {path}.fixture_provenance.files must be a list")
     if not isinstance(data["units"], dict):
         raise ManifestError(f"manifest {path}.units must be a mapping")
-    if provider_id == "sec_edgar" and version in {2, 3}:
+    if provider_id == "sec_edgar" and version in {2, 3, 4}:
         expected_units = {
             "13f_value_before_2023_01_03": "usd_thousands",
             "13f_value_from_2023_01_03": "usd",
@@ -367,9 +390,9 @@ def _validate_manifest(data: Mapping[str, Any], path: Path, provider_id: str) ->
                 f"manifest {path}: SEC v{version} units are not the closed contract"
             )
     form4 = data.get("form4")
-    if provider_id == "sec_edgar" and version == 3:
+    if provider_id == "sec_edgar" and version in {3, 4}:
         if not isinstance(form4, dict):
-            raise ManifestError(f"manifest {path}: SEC v3 form4 section is required")
+            raise ManifestError(f"manifest {path}: SEC v{version} form4 section is required")
         _require(
             form4,
             {"max_filings_per_window", "ownership_xml_schema_versions"},
@@ -381,13 +404,99 @@ def _validate_manifest(data: Mapping[str, Any], path: Path, provider_id: str) ->
             f"manifest {path}.form4",
         )
         if form4["max_filings_per_window"] != 20:
-            raise ManifestError(f"manifest {path}: SEC v3 max_filings_per_window must be 20")
+            raise ManifestError(
+                f"manifest {path}: SEC v{version} max_filings_per_window must be 20"
+            )
         if form4["ownership_xml_schema_versions"] != ["X0609"]:
             raise ManifestError(
-                f"manifest {path}: SEC v3 ownership_xml_schema_versions must be ['X0609']"
+                f"manifest {path}: SEC v{version} ownership_xml_schema_versions must be ['X0609']"
             )
     elif form4 is not None:
-        raise ManifestError(f"manifest {path}: form4 section is only supported by SEC v3")
+        raise ManifestError(f"manifest {path}: form4 section is only supported by SEC v3 or v4")
+    beneficial_ownership = data.get("beneficial_ownership")
+    if provider_id == "sec_edgar" and version == 4:
+        if not isinstance(beneficial_ownership, dict):
+            raise ManifestError(f"manifest {path}: SEC v4 beneficial_ownership section is required")
+        _require(
+            beneficial_ownership,
+            {
+                "max_filings_per_window",
+                "max_history_files",
+                "max_historical_candidate_documents",
+                "max_reporting_positions_per_filing",
+                "structured_formats",
+                "schema_versions",
+                "locator_prefixes",
+            },
+            f"manifest {path}.beneficial_ownership",
+        )
+        _unknown(
+            beneficial_ownership,
+            frozenset(
+                {
+                    "max_filings_per_window",
+                    "max_history_files",
+                    "max_historical_candidate_documents",
+                    "max_reporting_positions_per_filing",
+                    "structured_formats",
+                    "schema_versions",
+                    "locator_prefixes",
+                }
+            ),
+            f"manifest {path}.beneficial_ownership",
+        )
+        for key in (
+            "max_filings_per_window",
+            "max_history_files",
+            "max_historical_candidate_documents",
+            "max_reporting_positions_per_filing",
+        ):
+            if (
+                _as_int(beneficial_ownership[key], f"manifest {path}.beneficial_ownership.{key}")
+                <= 0
+            ):
+                raise ManifestError(f"manifest {path}.beneficial_ownership.{key} must be positive")
+        for key in ("structured_formats", "schema_versions", "locator_prefixes"):
+            value = beneficial_ownership[key]
+            if (
+                not isinstance(value, list)
+                or not value
+                or any(not isinstance(entry, str) or not entry.strip() for entry in value)
+            ):
+                raise ManifestError(
+                    f"manifest {path}.beneficial_ownership.{key} must be a non-empty string list"
+                )
+        if beneficial_ownership["max_filings_per_window"] != 7:
+            raise ManifestError(
+                f"manifest {path}: SEC v4 max beneficial-ownership filings must be 7"
+            )
+        if beneficial_ownership["max_history_files"] != 1:
+            raise ManifestError(f"manifest {path}: SEC v4 max history files must be 1")
+        if beneficial_ownership["max_historical_candidate_documents"] != 64:
+            raise ManifestError(
+                f"manifest {path}: SEC v4 max historical candidate documents must be 64"
+            )
+        if beneficial_ownership["max_reporting_positions_per_filing"] != 32:
+            raise ManifestError(f"manifest {path}: SEC v4 max reporting positions must be 32")
+        if beneficial_ownership["structured_formats"] != ["edgarSubmission"]:
+            raise ManifestError(
+                f"manifest {path}: SEC v4 structured_formats are not the closed contract"
+            )
+        if beneficial_ownership["schema_versions"] != ["X0202"]:
+            raise ManifestError(
+                f"manifest {path}: SEC v4 schema_versions are not the closed contract"
+            )
+        if beneficial_ownership["locator_prefixes"] != [
+            "xslSCHEDULE_13G_X01",
+            "xslSCHEDULE_13G_X02",
+        ]:
+            raise ManifestError(
+                f"manifest {path}: SEC v4 locator_prefixes are not the closed contract"
+            )
+    elif beneficial_ownership is not None:
+        raise ManifestError(
+            f"manifest {path}: beneficial_ownership section is only supported by SEC v4"
+        )
     if version == 2 and provider_id == "cftc":
         if data["units"] != {"contracts": "contracts"}:
             raise ManifestError(f"manifest {path}: CFTC v2 units are not the closed contract")
@@ -508,6 +617,8 @@ def manifest_to_provider_entry(
         if isinstance(form4, Mapping)
         else ()
     )
+    beneficial_ownership = manifest.get("beneficial_ownership")
+    beneficial_values = beneficial_ownership if isinstance(beneficial_ownership, Mapping) else {}
     return ProviderEntry(
         id=str(manifest["provider_id"]),
         name=str(manifest["name"]),
@@ -569,7 +680,152 @@ def manifest_to_provider_entry(
         coverage_groups=tuple(coverage_groups),
         max_filings_per_window=max_form4_filings,
         ownership_xml_schema_versions=form4_schema_versions,
+        beneficial_ownership_max_filings_per_window=(
+            _as_int(
+                beneficial_values["max_filings_per_window"],
+                "manifest beneficial-ownership filing bound",
+            )
+            if "max_filings_per_window" in beneficial_values
+            else None
+        ),
+        beneficial_ownership_max_history_files=(
+            _as_int(beneficial_values["max_history_files"], "manifest history-file bound")
+            if "max_history_files" in beneficial_values
+            else None
+        ),
+        beneficial_ownership_max_historical_candidate_documents=(
+            _as_int(
+                beneficial_values["max_historical_candidate_documents"],
+                "manifest historical-candidate bound",
+            )
+            if "max_historical_candidate_documents" in beneficial_values
+            else None
+        ),
+        beneficial_ownership_max_reporting_positions=(
+            _as_int(
+                beneficial_values["max_reporting_positions_per_filing"],
+                "manifest reporting-position bound",
+            )
+            if "max_reporting_positions_per_filing" in beneficial_values
+            else None
+        ),
+        beneficial_ownership_structured_formats=tuple(
+            str(value) for value in beneficial_values.get("structured_formats", [])
+        ),
+        beneficial_ownership_schema_versions=tuple(
+            str(value) for value in beneficial_values.get("schema_versions", [])
+        ),
+        beneficial_ownership_locator_prefixes=tuple(
+            str(value) for value in beneficial_values.get("locator_prefixes", [])
+        ),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class SecSendShape:
+    """Maximum successful-path sends for one resolved SEC contract."""
+
+    form13f_submissions: int
+    form13f_documents: int
+    form4_submissions: int
+    form4_documents: int
+    beneficial_ownership_submissions: int
+    beneficial_ownership_current_documents: int
+    beneficial_ownership_history_files: int
+    beneficial_ownership_candidate_documents: int
+
+    @property
+    def total(self) -> int:
+        return sum(
+            (
+                self.form13f_submissions,
+                self.form13f_documents,
+                self.form4_submissions,
+                self.form4_documents,
+                self.beneficial_ownership_submissions,
+                self.beneficial_ownership_current_documents,
+                self.beneficial_ownership_history_files,
+                self.beneficial_ownership_candidate_documents,
+            )
+        )
+
+    @property
+    def spacing_floor_seconds(self) -> int:
+        return max(0, self.total - 1)
+
+
+def sec_send_shape(config: Any, contract: Any) -> SecSendShape:
+    """Recompute the closed SEC send shape from resolved selections/bounds."""
+    form13f_units = len(config.watched_companies)
+    form4_submissions = len(config.watched_form4_issuers) if contract.contract_version >= 3 else 0
+    form4_bound = contract.max_filings_per_window if form4_submissions else 0
+    if form4_submissions and form4_bound is None:
+        raise ValueError("SEC Form 4 maximum filing bound is missing")
+    bo_submissions = (
+        len(config.watched_beneficial_ownership_filers) if contract.contract_version >= 4 else 0
+    )
+    bo_current = contract.beneficial_ownership_max_filings_per_window if bo_submissions else 0
+    bo_history = contract.beneficial_ownership_max_history_files if bo_submissions else 0
+    bo_candidates = (
+        contract.beneficial_ownership_max_historical_candidate_documents if bo_submissions else 0
+    )
+    if bo_submissions and None in (bo_current, bo_history, bo_candidates):
+        raise ValueError("SEC beneficial-ownership request bounds are incomplete")
+
+    def bound(value: Any, label: str) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{label} is not an integer") from exc
+
+    form4_bound_value = bound(form4_bound, "SEC Form 4 filing bound") if form4_submissions else 0
+    bo_current_value = (
+        bound(bo_current, "SEC beneficial-ownership current bound") if bo_submissions else 0
+    )
+    bo_history_value = (
+        bound(bo_history, "SEC beneficial-ownership history bound") if bo_submissions else 0
+    )
+    bo_candidates_value = (
+        bound(bo_candidates, "SEC beneficial-ownership candidate bound") if bo_submissions else 0
+    )
+    return SecSendShape(
+        form13f_submissions=form13f_units,
+        form13f_documents=form13f_units * 2,
+        form4_submissions=form4_submissions,
+        form4_documents=form4_submissions * form4_bound_value,
+        beneficial_ownership_submissions=bo_submissions,
+        beneficial_ownership_current_documents=bo_submissions * bo_current_value,
+        beneficial_ownership_history_files=bo_submissions * bo_history_value,
+        beneficial_ownership_candidate_documents=bo_submissions * bo_candidates_value,
+    )
+
+
+def validate_sec_deadline(config: Any, contract: Any) -> SecSendShape:
+    """Fail closed unless the configured pre-commit budget admits the shape."""
+    policy = contract.rate_policy
+    if policy is None or policy.unlimited:
+        raise ValueError("SEC rate policy must be bounded")
+    shape = sec_send_shape(config, contract)
+    token_refill_floor = 0
+    if shape.total > policy.capacity:
+        token_refill_floor = math.ceil(
+            (shape.total - policy.capacity) * policy.refill_period_seconds / policy.capacity
+        )
+    managed_send_floor = max(
+        shape.spacing_floor_seconds * policy.minimum_interval_seconds,
+        token_refill_floor,
+    )
+    required = (
+        managed_send_floor
+        + config.feed.sec_request_network_headroom_seconds
+        + config.feed.commit_reserve_seconds
+    )
+    if config.feed.pre_commit_deadline_seconds < required:
+        raise ValueError(
+            "SEC pre-commit deadline is below the closed request budget: "
+            f"{config.feed.pre_commit_deadline_seconds} < {required}"
+        )
+    return shape
 
 
 def load_all_manifests(root: Path | None = None) -> dict[str, Mapping[str, Any]]:

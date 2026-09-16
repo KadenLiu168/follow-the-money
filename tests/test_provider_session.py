@@ -10,7 +10,12 @@ import pytest
 from follow_the_money.config import load_config
 from follow_the_money.config.model import FetchRule
 from follow_the_money.providers.http import FetchError, bounded_fetch
-from follow_the_money.providers.manifest import load_manifest, manifest_to_provider_entry
+from follow_the_money.providers.manifest import (
+    load_manifest,
+    manifest_to_provider_entry,
+    sec_send_shape,
+    validate_sec_deadline,
+)
 from follow_the_money.providers.rate import RateRegistry, RateStateError
 from follow_the_money.providers.session import ManagedProviderClient
 
@@ -66,6 +71,12 @@ class Gate:
 
 def provider():
     return manifest_to_provider_entry(load_manifest("sec_edgar"))
+
+
+def provider_scope_id(provider):
+    policy = provider.rate_policy
+    assert policy is not None
+    return policy.scope_id
 
 
 def rate_for(tmp_path, p, *, now=NOW):
@@ -127,7 +138,7 @@ def test_two_sends_have_two_debits_and_reconciliations(tmp_path, monkeypatch):
     )
     client.get("https://data.sec.gov/a", follow_redirects=False)
     client.get("https://data.sec.gov/b", follow_redirects=False)
-    state = registry.recover_or_load(p.rate_policy.scope_id)
+    state = registry.recover_or_load(provider_scope_id(p))
     assert counts == {"debit": 2, "reconcile": 2}
     assert state.tokens == "8"
 
@@ -156,7 +167,7 @@ def test_deadline_between_sends_does_not_dispatch_or_debit_second_send(tmp_path)
     with pytest.raises(FetchError, match="deadline"):
         client.get("https://data.sec.gov/b", follow_redirects=False)
     assert [call[0] for call in transport.calls] == ["https://data.sec.gov/a"]
-    assert registry.recover_or_load(p.rate_policy.scope_id).tokens == "9"
+    assert registry.recover_or_load(provider_scope_id(p)).tokens == "9"
 
 
 def test_global_and_target_host_gates_are_admitted_for_each_send(tmp_path):
@@ -236,7 +247,7 @@ def test_transport_failure_reconciles_after_dispatch(tmp_path):
     with pytest.raises(FetchError) as info:
         client.get("https://data.sec.gov/a", follow_redirects=False)
     assert info.value.retryable
-    assert registry.recover_or_load(p.rate_policy.scope_id).tokens == "9"
+    assert registry.recover_or_load(provider_scope_id(p)).tokens == "9"
 
 
 def test_confirmed_pre_send_gate_failure_refunds_debit(tmp_path):
@@ -254,7 +265,7 @@ def test_confirmed_pre_send_gate_failure_refunds_debit(tmp_path):
     )
     with pytest.raises(FetchError, match="gate closed"):
         client.get("https://data.sec.gov/a", follow_redirects=False)
-    assert registry.recover_or_load(p.rate_policy.scope_id).tokens == "10"
+    assert registry.recover_or_load(provider_scope_id(p)).tokens == "10"
 
 
 def test_redirects_are_manual_bounded_and_each_hop_is_a_send(tmp_path):
@@ -280,7 +291,7 @@ def test_redirects_are_manual_bounded_and_each_hop_is_a_send(tmp_path):
         "https://data.sec.gov/a",
         "https://data.sec.gov/b",
     ]
-    assert registry.recover_or_load(p.rate_policy.scope_id).tokens == "8"
+    assert registry.recover_or_load(provider_scope_id(p)).tokens == "8"
     assert all(kwargs["follow_redirects"] is False for _, kwargs in transport.calls)
 
 
@@ -427,14 +438,8 @@ def test_last_concrete_response_and_successful_resource_progress_survive_later_f
     assert info.value.acquisition_progress
 
 
-def test_sec_v2_send_shape_respects_the_rate_floor_and_fits_the_pre_commit_budget(tmp_path):
-    """The one deterministic acquisition cost driver is SEC: one adapter per
-    watched company with at most three resource GETs each. Simulate that exact
-    send shape against the resolved production rate policy and budget so a
-    lowered deadline, raised minimum interval, or grown watched set cannot
-    silently make the Provider unacquirable, while the per-send spacing itself
-    cannot be lost.
-    """
+def test_sec_v4_send_shape_respects_the_rate_floor_and_fits_the_pre_commit_budget(tmp_path):
+    """The complete SEC v4 successful path must fit its closed request budget."""
     cfg = load_config(
         ROOT / "config" / "config.yaml",
         ROOT / "config" / "providers.yaml",
@@ -444,8 +449,13 @@ def test_sec_v2_send_shape_respects_the_rate_floor_and_fits_the_pre_commit_budge
     provider_entry = manifest_to_provider_entry(load_manifest("sec_edgar"))
     policy = provider_entry.rate_policy
     assert policy is not None
-    sends = len(cfg.watched_companies) * 3
-    assert sends > 1
+    shape = sec_send_shape(cfg, provider_entry)
+    sends = shape.total
+    assert sends == 118
+    assert provider_entry.contract_version == 4
+    assert shape.form4_submissions == 1
+    assert shape.form4_documents == 20
+    assert validate_sec_deadline(cfg, provider_entry).total == shape.total
     budget = cfg.feed.pre_commit_deadline_seconds - cfg.feed.commit_reserve_seconds
 
     class Clock:
@@ -481,8 +491,10 @@ def test_sec_v2_send_shape_respects_the_rate_floor_and_fits_the_pre_commit_budge
         transport.responses.append(Response(200, url=f"https://data.sec.gov/{index}"))
         client.get(f"https://data.sec.gov/{index}", follow_redirects=False)
 
-    # Measured 2026-09-15 with the resolved policy: 24 sends -> 115.0s.
-    assert clock.monotonic == (sends - 1) * policy.minimum_interval_seconds
+    # The minimum interval and token-refill floor both remain enforced.
+    spacing_floor = (sends - 1) * policy.minimum_interval_seconds
+    token_refill_floor = (sends - policy.capacity) * policy.refill_period_seconds / policy.capacity
+    assert clock.monotonic == max(spacing_floor, token_refill_floor)
     assert clock.monotonic < budget
 
 

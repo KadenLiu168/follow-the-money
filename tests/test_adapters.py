@@ -435,7 +435,11 @@ def test_cftc_invalid_numeric_value_fails_closed():
 def test_production_sec_uses_one_acquisition_unit_per_watched_company():
     from follow_the_money.config import load_config
     from follow_the_money.feed.cli import _production_adapters
-    from follow_the_money.providers.adapters import build_registry
+    from follow_the_money.providers.adapters import (
+        SecBeneficialOwnershipAdapter,
+        SecForm4Adapter,
+        build_registry,
+    )
 
     cfg = load_config(
         Path(__file__).parents[1] / "config" / "config.yaml",
@@ -444,8 +448,15 @@ def test_production_sec_uses_one_acquisition_unit_per_watched_company():
         require_verified_enabled=True,
     )
     adapters = _production_adapters(cfg, build_registry({p.id: p for p in cfg.providers}))
-    assert len(adapters["sec_edgar"]) == len(cfg.watched_companies) + len(cfg.watched_form4_issuers)
+    assert len(adapters["sec_edgar"]) == (
+        len(cfg.watched_companies)
+        + len(cfg.watched_form4_issuers)
+        + len(cfg.watched_beneficial_ownership_filers)
+    )
     assert {adapter.provider_id for adapter in adapters["sec_edgar"]} == {"sec_edgar"}
+    assert sum(
+        isinstance(adapter, SecBeneficialOwnershipAdapter) for adapter in adapters["sec_edgar"]
+    ) == len(cfg.watched_beneficial_ownership_filers)
     assert [
         adapter._watched_company.cik
         for adapter in adapters["sec_edgar"]
@@ -454,8 +465,13 @@ def test_production_sec_uses_one_acquisition_unit_per_watched_company():
     assert [
         adapter._watched_cik
         for adapter in adapters["sec_edgar"]
-        if hasattr(adapter, "_watched_cik")
+        if isinstance(adapter, SecForm4Adapter)
     ] == [issuer.cik for issuer in cfg.watched_form4_issuers]
+    assert [
+        adapter._watched_cik
+        for adapter in adapters["sec_edgar"]
+        if isinstance(adapter, SecBeneficialOwnershipAdapter)
+    ] == [filer.cik for filer in cfg.watched_beneficial_ownership_filers]
 
 
 def test_all_manifests_load_and_provider_id_matches():
@@ -474,7 +490,7 @@ def test_all_manifests_load_and_provider_id_matches():
     }
     for pid, m in manifests.items():
         assert m["provider_id"] == pid
-        assert m["contract_version"] == {"sec_edgar": 3, "cftc": 2}.get(pid, 1)
+        assert m["contract_version"] == {"sec_edgar": 4, "cftc": 2}.get(pid, 1)
 
 
 def test_no_manifest_claims_verified_without_date():

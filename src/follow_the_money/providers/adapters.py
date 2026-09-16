@@ -28,6 +28,7 @@ from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 from ..config.model import ProviderEntry
+from ..schema import SchemaError
 from .base import Provider, ProviderRegistry
 from .cftc_cot import compare_reports, publication_boundary, select_report_dates
 from .http import (
@@ -39,6 +40,18 @@ from .http import (
 )
 from .manifest import load_manifest, manifest_to_provider_entry
 from .sec_13f import compare_holdings, parse_complete_submission, select_filings
+from .sec_beneficial_ownership import (
+    BeneficialOwnershipListingCandidate,
+    build_shared_historical_candidate_index,
+    compare_beneficial_ownership,
+    declared_beneficial_ownership_history_files,
+    derive_beneficial_ownership_historical_url,
+    derive_beneficial_ownership_xml_url,
+    is_unsupported_historical_document,
+    parse_beneficial_ownership_document,
+    select_beneficial_ownership_filings,
+    select_historical_beneficial_ownership_filings_with_status,
+)
 from .sec_form4 import (
     Form4ListingCandidate,
     derive_form4_xml_url,
@@ -237,9 +250,12 @@ class SecEdgarAdapter(BaseAdapter):
         self._watched_ciks = tuple(str(c) for c in watched_ciks)
         self._watched_company = watched_company
         self._semantic_v2 = watched_company is not None and self._contract.contract_version == 2
-        self._semantic_v3 = watched_company is not None and self._contract.contract_version == 3
+        self._semantic_v3 = watched_company is not None and self._contract.contract_version in {
+            3,
+            4,
+        }
         self._semantic_13f = self._semantic_v2 or self._semantic_v3
-        if self._contract.contract_version in {2, 3} and self._contract.units != {
+        if self._contract.contract_version in {2, 3, 4} and self._contract.units != {
             "13f_value_before_2023_01_03": "usd_thousands",
             "13f_value_from_2023_01_03": "usd",
             "reported_value_usd_thousands": "usd_thousands",
@@ -447,8 +463,8 @@ class SecForm4Adapter(BaseAdapter):
         watched_cik: str | None = None,
     ) -> None:
         super().__init__(manifest)
-        if self._contract.contract_version != 3:
-            raise ValueError("SEC Form 4 requires contract version 3")
+        if self._contract.contract_version not in {3, 4}:
+            raise ValueError("SEC Form 4 requires contract version 3 or 4")
         if (
             self._contract.max_filings_per_window != 20
             or not self._contract.ownership_xml_schema_versions
@@ -540,6 +556,323 @@ class SecForm4Adapter(BaseAdapter):
                 knowledge=accepted_at,
             )
             items.append(form4_feed_item(normalized, source=source))
+        return items
+
+
+class SecBeneficialOwnershipAdapter(BaseAdapter):
+    """SEC EDGAR acquisition unit for one watched Schedule 13D/G filer."""
+
+    provider_id: str = "sec_edgar"
+    selection_kind: str = "beneficial_ownership"
+
+    def __init__(
+        self,
+        manifest: Mapping[str, Any] | ProviderEntry | None = None,
+        watched_filer: Any | None = None,
+        watched_cik: str | None = None,
+    ) -> None:
+        super().__init__(manifest)
+        if self._contract.contract_version != 4:
+            raise ValueError("SEC beneficial ownership requires contract version 4")
+        if (
+            self._contract.beneficial_ownership_max_filings_per_window != 7
+            or self._contract.beneficial_ownership_max_history_files != 1
+            or self._contract.beneficial_ownership_max_historical_candidate_documents != 64
+            or self._contract.beneficial_ownership_max_reporting_positions != 32
+            or self._contract.beneficial_ownership_structured_formats != ("edgarSubmission",)
+            or self._contract.beneficial_ownership_schema_versions != ("X0202",)
+        ):
+            raise ValueError("SEC beneficial-ownership contract bounds are not closed")
+        self._watched_cik = str(getattr(watched_filer, "cik", None) or watched_cik or "0001067983")
+        self.selected_accessions: tuple[str, ...] = ()
+        self.selection_complete = False
+
+    def fetch(self, window: Mapping[str, str], client: Any) -> Any:
+        submissions_raw = self._fetch(
+            client, f"https://data.sec.gov/submissions/CIK{self._watched_cik}.json"
+        )
+        submissions = self._json_body(submissions_raw)
+        if not isinstance(submissions, Mapping):
+            raise FetchError("SEC beneficial-ownership submissions response is not an object")
+        if str(submissions.get("cik") or "") != self._watched_cik:
+            raise FetchError("SEC beneficial-ownership official filer CIK is mismatched")
+        current_bound = self._contract.beneficial_ownership_max_filings_per_window
+        history_bound = self._contract.beneficial_ownership_max_history_files
+        candidate_bound = self._contract.beneficial_ownership_max_historical_candidate_documents
+        if current_bound is None or history_bound is None or candidate_bound is None:
+            raise FetchError("SEC beneficial-ownership request bounds are incomplete")
+        current = select_beneficial_ownership_filings(
+            submissions, window, max_filings_per_window=current_bound
+        )
+        current_documents: list[dict[str, Any]] = []
+        for candidate in current:
+            url = derive_beneficial_ownership_xml_url(
+                candidate.filer_cik,
+                candidate.accession_number,
+                candidate.primary_document,
+                allowed_locator_prefixes=self._contract.beneficial_ownership_locator_prefixes,
+            )
+            response = self._fetch(client, url)
+            current_documents.append(
+                {
+                    "candidate": candidate,
+                    "source_url": self._validate_url(url),
+                    "body": response.body_bytes,
+                }
+            )
+        history_names = declared_beneficial_ownership_history_files(
+            submissions, max_history_files=history_bound
+        )
+        self.selected_accessions = tuple(candidate.accession_number for candidate in current)
+        self.selection_complete = True
+        if not current:
+            return {
+                "submissions": submissions,
+                "current_documents": current_documents,
+                "historical_candidates": (),
+                "historical_documents": [],
+                "history_evaluated": False,
+                "history_complete": False,
+                "history_bound_exhausted": False,
+            }
+
+        history_submissions: list[Mapping[str, Any]] = []
+        for name in history_names:
+            response = self._fetch(client, f"https://data.sec.gov/submissions/{name}")
+            history = self._json_body(response)
+            if not isinstance(history, Mapping):
+                raise FetchError("SEC beneficial-ownership history response is not an object")
+            history_submissions.append(history)
+        history_candidates, history_bound_exhausted = (
+            select_historical_beneficial_ownership_filings_with_status(
+                submissions,
+                history_submissions,
+                window["end"],
+                max_history_files=history_bound,
+                max_candidate_documents=candidate_bound,
+            )
+        )
+        current_accessions = {candidate.accession_number for candidate in current}
+        historical_documents: list[dict[str, Any]] = []
+        loaded_historical: dict[str, dict[str, Any]] = {}
+
+        def load_historical_document(candidate: Any) -> dict[str, Any]:
+            accession = candidate.accession_number
+            cached = loaded_historical.get(accession)
+            if cached is not None:
+                return cached
+            try:
+                url = derive_beneficial_ownership_xml_url(
+                    candidate.filer_cik,
+                    candidate.accession_number,
+                    candidate.primary_document,
+                    allowed_locator_prefixes=self._contract.beneficial_ownership_locator_prefixes,
+                )
+            except SchemaError:
+                url = derive_beneficial_ownership_historical_url(
+                    candidate.filer_cik,
+                    candidate.accession_number,
+                    candidate.primary_document,
+                    allowed_locator_prefixes=self._contract.beneficial_ownership_locator_prefixes,
+                )
+            response = self._fetch(client, url)
+            document = {
+                "candidate": candidate,
+                "source_url": self._validate_url(url),
+                "body": response.body_bytes,
+            }
+            loaded_historical[accession] = document
+            historical_documents.append(document)
+            return document
+
+        return {
+            "submissions": submissions,
+            "current_documents": current_documents,
+            "historical_candidates": history_candidates,
+            "historical_documents": historical_documents,
+            "historical_loader": load_historical_document,
+            "history_evaluated": bool(history_names),
+            "history_complete": bool(history_names) and not history_bound_exhausted,
+            "history_bound_exhausted": history_bound_exhausted,
+            "current_accessions": current_accessions,
+        }
+
+    def normalize(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
+        if not isinstance(raw, Mapping) or not isinstance(raw.get("submissions"), Mapping):
+            raise FetchError("SEC beneficial-ownership acquisition result is invalid")
+        submissions = raw["submissions"]
+        if str(submissions.get("cik") or "") != self._watched_cik:
+            raise FetchError("SEC beneficial-ownership official filer CIK is mismatched")
+        if not self.selection_complete:
+            raise FetchError("SEC beneficial-ownership selection was not completed")
+        current_documents = raw.get("current_documents")
+        historical_candidates = raw.get("historical_candidates")
+        historical_documents = raw.get("historical_documents")
+        historical_loader = raw.get("historical_loader")
+        if not isinstance(current_documents, list) or not isinstance(historical_candidates, tuple):
+            raise FetchError("SEC beneficial-ownership current selection is invalid")
+        if not isinstance(historical_documents, list):
+            raise FetchError("SEC beneficial-ownership historical selection is invalid")
+        if historical_loader is not None and not callable(historical_loader):
+            raise FetchError("SEC beneficial-ownership historical loader is invalid")
+        history_complete = raw.get("history_complete", False)
+        history_evaluated = raw.get("history_evaluated", True)
+        history_bound_exhausted = raw.get("history_bound_exhausted", False)
+        if not all(
+            isinstance(value, bool)
+            for value in (history_complete, history_evaluated, history_bound_exhausted)
+        ):
+            raise FetchError("SEC beneficial-ownership history status is invalid")
+        candidate_bound = self._contract.beneficial_ownership_max_historical_candidate_documents
+        if candidate_bound is None:
+            raise FetchError("SEC beneficial-ownership request bounds are incomplete")
+        for candidate in historical_candidates:
+            if not isinstance(candidate, BeneficialOwnershipListingCandidate):
+                raise FetchError("SEC beneficial-ownership historical candidate is invalid")
+        current: list[Any] = []
+        by_accession: dict[str, Any] = {}
+        current_accessions: list[str] = []
+        for document in current_documents:
+            if not isinstance(document, Mapping):
+                raise FetchError("SEC beneficial-ownership current document is invalid")
+            candidate = document.get("candidate")
+            body = document.get("body")
+            source_url = document.get("source_url")
+            if not isinstance(candidate, BeneficialOwnershipListingCandidate):
+                raise FetchError("SEC beneficial-ownership current candidate is invalid")
+            if not isinstance(source_url, str) or not isinstance(body, (bytes, str)):
+                raise FetchError("SEC beneficial-ownership current document is incomplete")
+            current_accessions.append(candidate.accession_number)
+            normalized = parse_beneficial_ownership_document(
+                body,
+                candidate,
+                source_url=source_url,
+                allowed_schema_versions=self._contract.beneficial_ownership_schema_versions,
+                allowed_locator_prefixes=self._contract.beneficial_ownership_locator_prefixes,
+            )
+            current.append(normalized)
+            by_accession[normalized.candidate.accession_number] = normalized
+        if current_accessions != list(self.selected_accessions):
+            raise FetchError(
+                "SEC beneficial-ownership documents do not equal the selected accession set"
+            )
+
+        expected_historical = [
+            candidate.accession_number
+            for candidate in historical_candidates
+            if candidate.accession_number not in set(self.selected_accessions)
+        ]
+        actual_historical: list[str] = []
+        historical_urls: dict[str, str] = {}
+
+        def parse_historical(document: Mapping[str, Any]) -> Any:
+            candidate = document.get("candidate")
+            body = document.get("body")
+            source_url = document.get("source_url")
+            if not isinstance(candidate, BeneficialOwnershipListingCandidate):
+                raise FetchError("SEC beneficial-ownership historical candidate is invalid")
+            if not isinstance(source_url, str) or not isinstance(body, (bytes, str)):
+                raise FetchError("SEC beneficial-ownership historical document is incomplete")
+            actual_historical.append(candidate.accession_number)
+            if candidate.accession_number not in expected_historical:
+                raise FetchError("SEC beneficial-ownership historical document is not selected")
+            if candidate.accession_number in historical_urls:
+                raise FetchError("SEC beneficial-ownership historical document is duplicated")
+            historical_urls[candidate.accession_number] = source_url
+            if is_unsupported_historical_document(
+                body,
+                candidate,
+                allowed_schema_versions=self._contract.beneficial_ownership_schema_versions,
+            ):
+                return None
+            return parse_beneficial_ownership_document(
+                body,
+                candidate,
+                source_url=source_url,
+                allowed_schema_versions=self._contract.beneficial_ownership_schema_versions,
+                allowed_locator_prefixes=self._contract.beneficial_ownership_locator_prefixes,
+            )
+
+        for document in historical_documents:
+            if not isinstance(document, Mapping):
+                raise FetchError("SEC beneficial-ownership historical document is invalid")
+            normalized = parse_historical(document)
+            if normalized is not None:
+                by_accession[normalized.candidate.accession_number] = normalized
+        if historical_loader is None and actual_historical != expected_historical:
+            raise FetchError("SEC beneficial-ownership historical documents are incomplete")
+
+        def load(candidate: Any) -> Any:
+            accession = candidate.accession_number
+            existing = by_accession.get(accession)
+            if existing is not None:
+                return existing
+            if historical_loader is None:
+                return None
+            document = historical_loader(candidate)
+            if not isinstance(document, Mapping):
+                raise FetchError("SEC beneficial-ownership historical loader returned invalid data")
+            normalized = parse_historical(document)
+            if normalized is not None:
+                by_accession[accession] = normalized
+            return normalized
+
+        index = build_shared_historical_candidate_index(
+            current,
+            historical_candidates,
+            load,
+            max_candidate_documents=candidate_bound,
+            history_complete=history_complete,
+            history_evaluated=history_evaluated,
+            history_bound_exhausted=history_bound_exhausted,
+        )
+        items: list[dict[str, Any]] = []
+        for normalized in sorted(
+            current,
+            key=lambda value: (value.candidate.accepted_at, value.candidate.accession_number),
+        ):
+            resolution = index.resolutions.get(normalized.candidate.accession_number)
+            if resolution is None:
+                compared = compare_beneficial_ownership(
+                    normalized, None, unavailable_reason="missing_operand"
+                )
+            elif resolution.previous is not None:
+                compared = compare_beneficial_ownership(normalized, resolution.previous)
+            else:
+                compared = compare_beneficial_ownership(
+                    normalized,
+                    None,
+                    unavailable_reason=resolution.reason,
+                    previous_reference=(
+                        resolution.candidate
+                        if resolution.reason == "previous_format_unsupported"
+                        else None
+                    ),
+                    previous_reference_url=(
+                        historical_urls.get(resolution.candidate.accession_number)
+                        if resolution.candidate is not None
+                        else None
+                    ),
+                )
+            accession = compared.candidate.accession_number
+            item_id = stable_item_id(self.provider_id, accession)
+            accepted_at = compared.candidate.accepted_at
+            items.append(
+                {
+                    "id": item_id,
+                    "provider_id": self.provider_id,
+                    "source": self._source(
+                        source_id=f"sec-{item_id}",
+                        name="SEC EDGAR",
+                        tier="Tier 1",
+                        kind="filing",
+                        url=compared.source_url,
+                        published_at=accepted_at,
+                        knowledge=accepted_at,
+                    ),
+                    "payload": compared.payload,
+                }
+            )
         return items
 
 

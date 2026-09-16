@@ -119,6 +119,62 @@ contract; they are not claims that the fixture values were downloaded from a
 live filing. No complete live Form 4 document is copied into the repository,
 and the Producer does not broaden support to unverified filing variants.
 
+## SEC Schedule 13D/G beneficial-ownership source shape
+
+### Official authority and dated observations
+
+- Agency: Securities and Exchange Commission, EDGAR submissions API. The
+  official listing template is
+  `https://data.sec.gov/submissions/CIK<10-digit-CIK>.json`; the Berkshire
+  listing for CIK `0001067983` was inspected on 2026-09-16.
+- The complete aligned `recent` arrays use `form`, `filingDate`, `reportDate`,
+  `accessionNumber`, `acceptanceDateTime`, and `primaryDocument`. Eligibility
+  is based only on the precise `acceptanceDateTime`; `reportDate` may be blank
+  on unrelated rows and is not used for ownership selection.
+- Exact observed form tokens are `SCHEDULE 13D`, `SCHEDULE 13D/A`,
+  `SCHEDULE 13G`, and `SCHEDULE 13G/A`. The inspection found 223 matching
+  recent rows and an observed rolling 72-hour maximum of seven matching rows.
+  These observations are the production-shaped basis for the closed current
+  event bound; the runtime never truncates an over-bound listing.
+- The listing declares one historical submissions file covering
+  1998-08-10 through 2017-01-08. Historical metadata is therefore bounded by
+  the declared file count and its aligned fields; it is not an open-ended
+  historical archive.
+- The structured source is SEC-native `edgarSubmission` XML with observed
+  schema version `X0202`. The 13D and 13G structures are distinct and are
+  admitted by separate form-specific contracts. Observed raw-document locator
+  forms include `xslSCHEDULE_13G_X01/<basename>.xml` and
+  `xslSCHEDULE_13G_X02/<basename>.xml`; no other prefix is implicitly allowed.
+- Raw filing documents are derived from the official archive root
+  `https://www.sec.gov/Archives/edgar/data/<CIK>/<accession-without-dashes>/`.
+  The checked-in Schedule 13D/G documents are explicitly production-shaped
+  fixtures, not downloaded filing copies; their values and namespaces do not
+  claim live provenance.
+
+### Contract consequences
+
+The verified source observations pin the following closed v4 limits:
+
+| Contract field | Pinned value | Basis |
+| --- | ---: | --- |
+| `max_filings_per_window` | 7 | observed Berkshire rolling 72-hour maximum, 2026-09-16 |
+| `max_history_files` | 1 | declared Berkshire submissions history file |
+| `max_historical_candidate_documents` | 64 | production-shaped bounded reverse-scan safety limit |
+| `max_reporting_positions_per_filing` | 32 | production-shaped structured projection limit |
+| structured schema versions | `X0202` | observed SEC-native `edgarSubmission` shape, 2026-09-16 |
+| raw locator prefixes | `xslSCHEDULE_13G_X01`, `xslSCHEDULE_13G_X02` | observed archive locators, 2026-09-16 |
+
+The 64-document and 32-position limits are explicitly labeled
+production-shaped fixture contract limits rather than claims about an
+unbounded EDGAR universe. Missing, extra, malformed, or changed manifest
+values fail manifest resolution before Provider work. Current, historical,
+and nested candidate acquisition remains fail-closed at every bound.
+
+Every production contract claim above has either a dated official SEC URL or
+an explicitly labeled production-shaped fixture basis. No runtime selection
+uses a fixture as a source registry, and no unsupported namespace, schema
+version, locator prefix, or legacy document format is accepted implicitly.
+
 ## CFTC Legacy Futures-Only row shape
 
 Observed 2026-09-15 against the live dataset.

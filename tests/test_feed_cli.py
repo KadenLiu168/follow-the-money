@@ -662,7 +662,7 @@ def test_dry_run_late_result_after_retained_evidence_is_execution_failure(tmp_pa
 
     class LateAdapter(_OutcomeAdapter):
         def fetch(self, window, client=None):
-            clock["now"] = 285.0
+            clock["now"] = 705.0
             return super().fetch(window, client)
 
     out = tmp_path / "out"
@@ -701,7 +701,7 @@ def test_dry_run_provider_start_after_global_deadline_is_execution_failure(tmp_p
         if current_thread().name == "MainThread" or not clock["armed"]:
             return 0.0
         clock["worker_reads"] += 1
-        return 0.0 if clock["worker_reads"] == 1 else 286.0
+        return 0.0 if clock["worker_reads"] == 1 else 706.0
 
     class FirstAdapter(_OutcomeAdapter):
         def normalize(self, raw, window):

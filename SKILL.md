@@ -8,9 +8,9 @@ disable-model-invocation: true
 
 Generate the current evidence-based information digest from the validated
 published five-domain Evidence Feed (`news`, `macro_release`, `policy`,
-`positioning`, and `filing`). The `filing` domain includes SEC v3 `form13f`
-current-state evidence and bounded current-window `form4`/`4/A` ownership
-records.
+`positioning`, and `filing`). The `filing` domain includes SEC v4 `form13f`
+current-state evidence, bounded current-window `form4`/`4/A` ownership records,
+and bounded structured `SCHEDULE 13D`/`13G` beneficial-ownership records.
 
 ## Execution
 

@@ -165,7 +165,7 @@ def test_manifest_units_and_pagination_are_closed(tmp_path: Path):
     sec = _yaml(sec_path)
     sec["units"]["unexpected"] = "usd"
     _write(sec_path, sec)
-    with pytest.raises(ConfigError, match="SEC v3 units"):
+    with pytest.raises(ConfigError, match=r"SEC v[34] units"):
         _load(config, providers, manifests)
 
     cftc_root = tmp_path / "cftc"
@@ -213,6 +213,111 @@ def test_watched_form4_issuer_selection_is_closed_and_ordered(tmp_path: Path):
         _load(config, providers, manifests)
 
 
+def test_watched_beneficial_ownership_filer_selection_is_closed_and_exact(tmp_path: Path):
+    for mutation, message in (
+        (lambda value: value.pop("watched_beneficial_ownership_filers"), "missing"),
+        (
+            lambda value: value["watched_beneficial_ownership_filers"][0].update(
+                {"unexpected": True}
+            ),
+            "unknown",
+        ),
+        (
+            lambda value: value["watched_beneficial_ownership_filers"][0].update({"cik": "bad"}),
+            "normalized",
+        ),
+        (
+            lambda value: value["watched_beneficial_ownership_filers"][0].update(
+                {"cik": "0000000001"}
+            ),
+            "only Berkshire",
+        ),
+    ):
+        root = tmp_path / message.replace(" ", "-")
+        root.mkdir()
+        config, providers, manifests = _copy_contracts(root)
+        value = _yaml(config)
+        mutation(value)
+        _write(config, value)
+        with pytest.raises(ConfigError, match=message):
+            _load(config, providers, manifests)
+
+    root = tmp_path / "duplicate"
+    root.mkdir()
+    config, providers, manifests = _copy_contracts(root)
+    value = _yaml(config)
+    value["watched_beneficial_ownership_filers"].append({"cik": "0001067983", "name": "Duplicate"})
+    _write(config, value)
+    with pytest.raises(ConfigError, match="duplicate"):
+        _load(config, providers, manifests)
+
+
+def test_sec_v4_beneficial_ownership_manifest_bounds_are_closed(tmp_path: Path):
+    case_root = tmp_path / "v4"
+    case_root.mkdir()
+    config, providers, manifests = _copy_contracts(case_root)
+    config_value = _yaml(config)
+    config_value["feed"]["pre_commit_deadline_seconds"] = 720
+    _write(config, config_value)
+    manifest_path = manifests / "sec_edgar" / "manifest.yaml"
+    manifest = _yaml(manifest_path)
+    manifest["contract_version"] = 4
+    manifest["beneficial_ownership"] = {
+        "max_filings_per_window": 7,
+        "max_history_files": 1,
+        "max_historical_candidate_documents": 64,
+        "max_reporting_positions_per_filing": 32,
+        "structured_formats": ["edgarSubmission"],
+        "schema_versions": ["X0202"],
+        "locator_prefixes": ["xslSCHEDULE_13G_X01", "xslSCHEDULE_13G_X02"],
+    }
+    _write(manifest_path, manifest)
+    loaded = _load(config, providers, manifests)
+    sec = loaded.provider("sec_edgar")
+    assert sec.contract_version == 4
+    assert sec.beneficial_ownership_max_filings_per_window == 7
+    assert sec.beneficial_ownership_max_history_files == 1
+    assert sec.beneficial_ownership_max_historical_candidate_documents == 64
+    assert sec.beneficial_ownership_max_reporting_positions == 32
+    assert sec.beneficial_ownership_schema_versions == ("X0202",)
+    from follow_the_money.providers.manifest import sec_send_shape, validate_sec_deadline
+
+    shape = sec_send_shape(loaded, sec)
+    assert shape.total == 118
+    assert shape.spacing_floor_seconds == 117
+    assert validate_sec_deadline(loaded, sec).total == 118
+
+    mutations = (
+        (lambda value: value.pop("beneficial_ownership"), "required"),
+        (
+            lambda value: value["beneficial_ownership"].update({"unexpected": True}),
+            "unknown keys",
+        ),
+        (
+            lambda value: value["beneficial_ownership"].update({"max_history_files": 2}),
+            "max history files",
+        ),
+        (
+            lambda value: value["beneficial_ownership"].update({"schema_versions": ["X0201"]}),
+            "schema_versions",
+        ),
+    )
+    for index, (mutation, message) in enumerate(mutations):
+        root = tmp_path / f"v4-mutation-{index}"
+        root.mkdir()
+        mutated_config, mutated_providers, mutated_manifests = _copy_contracts(root)
+        config_value = _yaml(mutated_config)
+        config_value["feed"]["pre_commit_deadline_seconds"] = 720
+        _write(mutated_config, config_value)
+        value = _yaml(mutated_manifests / "sec_edgar" / "manifest.yaml")
+        value["contract_version"] = 4
+        value["beneficial_ownership"] = dict(manifest["beneficial_ownership"])
+        mutation(value)
+        _write(mutated_manifests / "sec_edgar" / "manifest.yaml", value)
+        with pytest.raises(ConfigError, match=message):
+            _load(mutated_config, mutated_providers, mutated_manifests)
+
+
 def test_sec_v3_form4_manifest_section_is_exact_and_required(tmp_path: Path):
     cases = (
         (lambda form4: form4.pop("max_filings_per_window"), "required"),
@@ -248,7 +353,7 @@ def test_sec_v3_form4_manifest_section_is_exact_and_required(tmp_path: Path):
 def test_supported_contract_versions_are_explicit_and_bounded():
     from follow_the_money.providers.manifest import SUPPORTED_CONTRACT_VERSIONS
 
-    assert SUPPORTED_CONTRACT_VERSIONS["sec_edgar"] == frozenset({1, 2, 3})
+    assert SUPPORTED_CONTRACT_VERSIONS["sec_edgar"] == frozenset({1, 2, 3, 4})
     assert SUPPORTED_CONTRACT_VERSIONS["cftc"] == frozenset({1, 2})
     assert all(
         versions == frozenset({1})
@@ -269,7 +374,19 @@ def test_config_snapshot_has_no_runtime_root_or_removed_surface():
         "coverage",
         "watched_companies",
         "watched_form4_issuers",
+        "watched_beneficial_ownership_filers",
     }
     assert snapshot["watched_form4_issuers"] == [
         {"cik": "0001067983", "name": "Berkshire Hathaway"}
     ]
+    assert snapshot["watched_beneficial_ownership_filers"] == [
+        {"cik": "0001067983", "name": "Berkshire Hathaway"}
+    ]
+
+    changed = dict(snapshot)
+    changed["watched_beneficial_ownership_filers"] = [
+        {"cik": "0001067983", "name": "Changed audit label"}
+    ]
+    from follow_the_money.canonical import canonical_digest
+
+    assert canonical_digest(changed) != canonical_digest(snapshot)

@@ -11,7 +11,7 @@ runs_root: runs
 feed:
   bootstrap_lookback_hours: 72
   gap_threshold_hours: 72
-  pre_commit_deadline_seconds: 300
+  pre_commit_deadline_seconds: 720
   commit_reserve_seconds: 15
   global_concurrency: 8
   per_host_concurrency: 2
@@ -24,6 +24,7 @@ feed:
   max_url_characters: 2048
   max_serialized_feed_bytes: 52428800
   lock_timeout_seconds: 60
+  sec_request_network_headroom_seconds: 45
 
 rate_registry:
   version: "1"
@@ -51,4 +52,7 @@ watched_companies:
   - {cik: "0001098249", name: "Coatue Management", tickers: []}
 
 watched_form4_issuers:
+  - {cik: "0001067983", name: "Berkshire Hathaway"}
+
+watched_beneficial_ownership_filers:
   - {cik: "0001067983", name: "Berkshire Hathaway"}

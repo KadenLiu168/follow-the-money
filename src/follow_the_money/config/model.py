@@ -33,6 +33,14 @@ class WatchForm4Issuer:
 
 
 @dataclass(frozen=True)
+class WatchBeneficialOwnershipFiler:
+    """SEC EDGAR reporting filer for bounded Schedule 13D/G acquisition."""
+
+    cik: str
+    name: str
+
+
+@dataclass(frozen=True)
 class RatePolicy:
     """Closed per-scope token-bucket rate policy."""
 
@@ -115,6 +123,13 @@ class ProviderEntry:
     coverage_groups: tuple[str, ...]
     max_filings_per_window: int | None = None
     ownership_xml_schema_versions: tuple[str, ...] = ()
+    beneficial_ownership_max_filings_per_window: int | None = None
+    beneficial_ownership_max_history_files: int | None = None
+    beneficial_ownership_max_historical_candidate_documents: int | None = None
+    beneficial_ownership_max_reporting_positions: int | None = None
+    beneficial_ownership_structured_formats: tuple[str, ...] = ()
+    beneficial_ownership_schema_versions: tuple[str, ...] = ()
+    beneficial_ownership_locator_prefixes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -159,6 +174,7 @@ class FeedLimits:
     max_url_characters: int
     max_serialized_feed_bytes: int
     lock_timeout_seconds: int
+    sec_request_network_headroom_seconds: int
 
 
 @dataclass(frozen=True)
@@ -181,6 +197,7 @@ class AppConfig:
     source_families: tuple[SourceFamily, ...]
     watched_companies: tuple[WatchCompany, ...]
     watched_form4_issuers: tuple[WatchForm4Issuer, ...]
+    watched_beneficial_ownership_filers: tuple[WatchBeneficialOwnershipFiler, ...]
     feed: FeedLimits
     rate_registry: RateRegistry
     runtime_state_root: str
