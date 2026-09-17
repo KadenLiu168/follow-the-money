@@ -8,9 +8,7 @@ disable-model-invocation: true
 
 Generate the current evidence-based information digest from the validated
 published five-domain Evidence Feed (`news`, `macro_release`, `policy`,
-`positioning`, and `filing`). The `filing` domain includes SEC v4 `form13f`
-current-state evidence, bounded current-window `form4`/`4/A` ownership records,
-and bounded structured `SCHEDULE 13D`/`13G` beneficial-ownership records.
+`positioning`, and `filing`).
 
 ## Execution
 
@@ -20,11 +18,14 @@ published Feed -> validation -> Host Agent summarization/formatting -> evidence-
 
 Run `scripts/skill/prepare-feed` under
 [the Feed contract](references/feed-contract.md), then apply
-[the safety boundary](references/safety-boundary.md). Use only its validated
-current output. Preserve degraded status, warnings, provenance, freshness,
-coverage, and source-availability limits. On retrieval or validation failure,
-surface the exact stderr and stop. Never substitute local, stale, partial,
-historical, or unvalidated data.
+[the safety boundary](references/safety-boundary.md) and the global [Digest
+presentation contract](references/digest/presentation-contract.md). Use only
+its validated current output. Apply the one domain contract selected by the
+item's validated `payload.type` and apply the shared compression contract from
+the presentation hierarchy. Preserve degraded status, warnings, provenance,
+freshness, coverage, and source-availability limits. On retrieval or
+validation failure, surface the exact stderr and stop. Never substitute local,
+stale, partial, historical, or unvalidated data.
 
 Generate the digest immediately without requesting or accepting a company,
 asset, topic, time range, research question, or other user-supplied scope.
@@ -40,28 +41,15 @@ The digest must contain:
 4. Source provenance and freshness
 5. Data-quality, unavailable-source, and compression limitations
 
-The validated `news`, `macro_release`, and `policy` items may include the
-closed `semantic_context` field. Treat it as source-supported evidence for
-subjects, event/document facts, numeric observations, macro periods or
-revisions, and policy dates or scope; do not turn it into ranking, sentiment,
-market impact, prediction, recommendation, or trading language. Legacy v4
-items may omit the field, while `filing` and `positioning` items do not acquire
-it through this contract.
-
-For every Feed domain, report its total item count and reconcile every item as
-individually summarized, represented through a consolidated summary, or
-omitted. Disclose omissions as editorial compression; never justify them by
-calling an item unimportant or irrelevant. The representation counts must
-reconcile to the domain total.
-
 The Host Agent may group related evidence across domains, derive editorial
 headings, order content for readability, consolidate repetition, and compress
 detail. These are presentation choices, not deterministic Feed results or
-evidence of importance, priority, ranking, or another analytical finding.
-Every factual summary must remain semantically supported by the cited Feed
-items. If a source item contains analytical or predictive language, summarize
-it only with clear source attribution and do not adopt it as a Host-Agent
-conclusion.
+evidence of importance, priority, ranking, or another analytical finding. Use
+the presentation hierarchy for field-level evidence, representation, and
+compression accounting. Every factual summary must remain semantically
+supported by the cited Feed items. If a source item contains analytical or
+predictive language, summarize it only with clear source attribution and do
+not adopt it as a Host-Agent conclusion.
 
 Do not introduce or infer significance, anomaly, signal, causality, market
 impact, prediction, investment judgment, investment recommendation, or trading

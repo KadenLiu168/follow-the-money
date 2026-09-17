@@ -8,6 +8,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILL = REPO_ROOT / "SKILL.md"
 AGENTS = REPO_ROOT / "AGENTS.md"
 FEED_REFERENCE = REPO_ROOT / "references" / "feed-contract.md"
+PRESENTATION_CONTRACT = REPO_ROOT / "references" / "digest" / "presentation-contract.md"
+COMPRESSION_CONTRACT = REPO_ROOT / "references" / "digest" / "compression.md"
 DOCUMENTATION = (
     FEED_REFERENCE,
     REPO_ROOT / "README.md",
@@ -58,13 +60,25 @@ def test_skill_generates_only_the_current_information_digest():
         "freshness",
         "coverage",
         "limitations",
-        "total item count",
-        "individually summarized",
-        "consolidated",
-        "omitted",
-        "reconcile",
     ):
         assert term in lowered
+
+
+def test_presentation_hierarchy_owns_field_and_compression_guidance():
+    presentation = PRESENTATION_CONTRACT.read_text(encoding="utf-8").lower()
+    compression = COMPRESSION_CONTRACT.read_text(encoding="utf-8").lower()
+
+    assert "validated" in presentation
+    assert "payload.type" in presentation
+    for term in (
+        "domain total",
+        "individually summarized",
+        "represented through consolidation",
+        "omitted",
+        "reconcile",
+        "traceab",
+    ):
+        assert term in compression
 
 
 def test_normal_skill_output_does_not_require_financial_judgment_sections():
