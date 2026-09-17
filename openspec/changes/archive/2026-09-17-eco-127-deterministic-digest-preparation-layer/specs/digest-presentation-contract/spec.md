@@ -1,10 +1,4 @@
-# digest-presentation-contract Specification
-
-## Purpose
-
-Define the static global, compression, and per-domain contracts that constrain Host-Agent presentation of the validated current Evidence Feed while preserving its evidence-only authority and existing runtime boundary.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Every active Feed domain has exactly one presentation contract
 The contract set SHALL contain exactly one domain contract per active Feed payload type and none for non-Feed domains. Deterministic Digest preparation SHALL select it only by the validated `payload.type` and SHALL apply its closed evidence-field rules before Agent consumption. Selection SHALL NOT depend on title, Provider, source text, inferred subtype, model behavior, or another evidence category.
@@ -42,28 +36,6 @@ Domain presentation contracts and deterministic preparation SHALL preserve null 
 #### Scenario: Optional evidence is null or unavailable
 - **WHEN** a whitelisted field is null or explicitly unavailable
 - **THEN** `DigestContext` preserves that state and the Digest preserves or accurately discloses the limitation instead of inventing a value or interpretation
-
-### Requirement: Domain presentation remains evidence preserving
-Every domain contract SHALL define its factual purpose, closed evidence fields, recommended representation, and forbidden interpretation. It MUST NOT direct the Host Agent to add unsupported facts or infer importance, anomaly, ranking, score, causality, sentiment, direction, market impact, signal, prediction, recommendation, or trading instruction. Source-authored analysis MAY be summarized only with attribution and no authority upgrade.
-
-#### Scenario: Facts invite financial interpretation
-- **WHEN** a domain item contains facts from which an analytical or financial conclusion could be inferred
-- **THEN** the applicable contract permits presentation of supported facts but prohibits adding the inferred conclusion
-
-#### Scenario: Source contains analytical wording
-- **WHEN** analytical or predictive wording is itself present in whitelisted validated source evidence
-- **THEN** the contract permits only an accurately attributed summary that is not presented as a Feed, Skill, or Host-Agent conclusion
-
-### Requirement: Compression rules are global and transparent
-The presentation-contract hierarchy SHALL define compression once for all domains. It SHALL preserve per-domain accounting of total items as individually summarized, represented through consolidation, or omitted; preserve traceability to all items supporting a consolidated summary; disclose omissions as editorial compression; and prohibit importance or relevance claims as an omission rationale.
-
-#### Scenario: Multiple items are consolidated
-- **WHEN** multiple Feed items are represented through one consolidated summary
-- **THEN** every supporting item remains traceable and the domain accounting assigns all of them to the consolidated category
-
-#### Scenario: Item is omitted for compression
-- **WHEN** a Feed item is not represented in the Digest body
-- **THEN** the omission is counted and disclosed without characterizing the item as unimportant or irrelevant
 
 ### Requirement: Presentation contracts preserve the Host-Agent and runtime boundary
 The Skill SHALL retain validated current-Feed consumption and fail-closed behavior, then deterministically prepare one typed, versioned, non-persisted `DigestContext`. Closed field selection and domain dispatch SHALL belong to preparation; recommended representation, semantic-support assessment, summarization, editorial operations, compression decisions and accounting, and final formatting SHALL remain Host-Agent-owned. The presentation hierarchy and preparation layer MUST NOT modify Feed schemas, Providers, collection, validation, identity, publication, or retrieval, and MUST NOT add a prose renderer, template engine, prompt pipeline, model invocation, Agent orchestration, standalone Digest service, or another evidence authority.

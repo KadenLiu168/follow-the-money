@@ -5,8 +5,8 @@
 Present validated `macro_release` evidence as a factual release for its
 Provider series, release time, reporting period, and explicitly available
 observations. Preserve numeric value, unit, unknown reason, and source
-provenance. The list below is a closed whitelist; it does not authorize facts
-outside the listed paths.
+provenance. The list below is a closed whitelist enforced by deterministic
+preparation; it does not authorize facts outside the listed paths.
 
 ## Evidence Fields
 

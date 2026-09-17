@@ -1,9 +1,4 @@
-# skill-agent-responsibility-boundary Specification
-
-## Purpose
-Define the evidence-preserving responsibility and authority boundary between the Feed Skill and the Host Agent.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Skill owns only the validated Evidence Feed
 The Skill SHALL own the accepted deterministic semantics and trust guarantees of Feed production and current published-Feed consumption, including the typed, versioned, deterministic preparation of a non-persisted Agent-facing `DigestContext` wholly derived from one validated Feed. Preparation SHALL remain Feed consumption machinery and SHALL NOT become a second semantic or evidence capability. The Skill SHALL NOT own or expose Audit, Event Structuring, post-Feed entity/candidate processing, market analytics/state, confidence, watchlist, scoring, ranking, financial interpretation, Agent reasoning, narrative generation, or Agent orchestration.

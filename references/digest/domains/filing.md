@@ -6,7 +6,8 @@ Present validated `filing` evidence as a typed SEC filing record with its form,
 issuer or company identity, filing and acceptance provenance, subtype-specific
 holdings or ownership facts, typed comparisons, amendment state, and stated
 limitations. One filing contract owns all filing subtypes. The list below is a
-closed whitelist; it does not authorize facts outside the listed paths.
+closed whitelist enforced by deterministic preparation; it does not authorize
+facts outside the listed paths.
 
 ## Evidence Fields
 
@@ -96,14 +97,8 @@ For `filing_subtype = form4`, the additional closed whitelist is:
 - `payload.reporting_owners[].relationship.other`
 - `payload.reporting_owners[].relationship.officer_title`
 - `payload.reporting_owners[].relationship.other_text`
-- `payload.non_derivative_entries[]` and `payload.derivative_entries[]` entry paths:
-  `entry_kind`, `source_ordinal`, `entry_id`, `security_title`,
-  `post_transaction_amount`, `ownership_nature`, `derivative_terms`,
-  `underlying_security`, and `field_references[]`
-- `payload.non_derivative_entries[]` and `payload.derivative_entries[]` transaction-only paths:
-  `transaction_date`, `deemed_execution_date`, `transaction_coding`,
-  `timeliness`, `transaction_amount`, `price_per_share`, and
-  `acquisition_disposition_code`
+- `payload.non_derivative_entries[]`
+- `payload.derivative_entries[]`
 - `payload.footnotes[].id`
 - `payload.footnotes[].text`
 - `payload.remarks`
@@ -117,6 +112,7 @@ For `filing_subtype = form4`, the additional closed whitelist is:
 - `payload.non_derivative_entries[].transaction_coding.transaction_form_type`
 - `payload.non_derivative_entries[].transaction_coding.transaction_code`
 - `payload.non_derivative_entries[].transaction_coding.equity_swap_involved`
+- `payload.non_derivative_entries[].transaction_coding`
 - `payload.non_derivative_entries[].timeliness`
 - `payload.non_derivative_entries[].transaction_amount`
 - `payload.non_derivative_entries[].price_per_share`
@@ -124,10 +120,41 @@ For `filing_subtype = form4`, the additional closed whitelist is:
 - `payload.non_derivative_entries[].post_transaction_amount`
 - `payload.non_derivative_entries[].ownership_nature.direct_or_indirect`
 - `payload.non_derivative_entries[].ownership_nature.nature_of_ownership`
+- `payload.non_derivative_entries[].ownership_nature`
 - `payload.non_derivative_entries[].derivative_terms`
+- `payload.non_derivative_entries[].derivative_terms.exercise_date`
+- `payload.non_derivative_entries[].derivative_terms.expiration_date`
+- `payload.non_derivative_entries[].derivative_terms.conversion_or_exercise_price`
 - `payload.non_derivative_entries[].underlying_security`
+- `payload.non_derivative_entries[].underlying_security.title`
+- `payload.non_derivative_entries[].underlying_security.amount`
 - `payload.non_derivative_entries[].field_references[]`
-- the same entry paths under `payload.derivative_entries[]`
+- `payload.derivative_entries[].entry_kind`
+- `payload.derivative_entries[].source_ordinal`
+- `payload.derivative_entries[].entry_id`
+- `payload.derivative_entries[].security_title`
+- `payload.derivative_entries[].transaction_date`
+- `payload.derivative_entries[].deemed_execution_date`
+- `payload.derivative_entries[].transaction_coding`
+- `payload.derivative_entries[].transaction_coding.transaction_form_type`
+- `payload.derivative_entries[].transaction_coding.transaction_code`
+- `payload.derivative_entries[].transaction_coding.equity_swap_involved`
+- `payload.derivative_entries[].timeliness`
+- `payload.derivative_entries[].transaction_amount`
+- `payload.derivative_entries[].price_per_share`
+- `payload.derivative_entries[].acquisition_disposition_code`
+- `payload.derivative_entries[].post_transaction_amount`
+- `payload.derivative_entries[].ownership_nature`
+- `payload.derivative_entries[].ownership_nature.direct_or_indirect`
+- `payload.derivative_entries[].ownership_nature.nature_of_ownership`
+- `payload.derivative_entries[].derivative_terms`
+- `payload.derivative_entries[].derivative_terms.exercise_date`
+- `payload.derivative_entries[].derivative_terms.expiration_date`
+- `payload.derivative_entries[].derivative_terms.conversion_or_exercise_price`
+- `payload.derivative_entries[].underlying_security`
+- `payload.derivative_entries[].underlying_security.title`
+- `payload.derivative_entries[].underlying_security.amount`
+- `payload.derivative_entries[].field_references[]`
 
 For each Form 4 numeric object, present only its typed `value`, `unit`, and
 `footnote_ids` when present. Preserve field-reference and footnote links.
@@ -141,8 +168,10 @@ For `filing_subtype = beneficial_ownership`, the additional closed whitelist is:
 - `payload.current_snapshot.filed_at`
 - `payload.current_snapshot.accepted_at`
 - `payload.current_snapshot.document_url`
+- `payload.current_snapshot.issuer`
 - `payload.current_snapshot.issuer.cik`
 - `payload.current_snapshot.issuer.name`
+- `payload.current_snapshot.ownership_class`
 - `payload.current_snapshot.ownership_class.cusip`
 - `payload.current_snapshot.ownership_class.title`
 - `payload.current_snapshot.ownership_class.identity_basis`
@@ -156,8 +185,10 @@ For `filing_subtype = beneficial_ownership`, the additional closed whitelist is:
 - `payload.previous_snapshot.filed_at` (when present)
 - `payload.previous_snapshot.accepted_at` (when present)
 - `payload.previous_snapshot.document_url` (when present)
+- `payload.previous_snapshot.issuer` (when present)
 - `payload.previous_snapshot.issuer.cik` (when present)
 - `payload.previous_snapshot.issuer.name` (when present)
+- `payload.previous_snapshot.ownership_class` (when present)
 - `payload.previous_snapshot.ownership_class.cusip` (when present)
 - `payload.previous_snapshot.ownership_class.title` (when present)
 - `payload.previous_snapshot.ownership_class.identity_basis` (when present)

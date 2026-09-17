@@ -20,6 +20,8 @@ canonical five-artifact publication
         ↓
 canonical Feed consumption
         ↓
+deterministic non-persisted DigestContext preparation
+        ↓
 Host Agent evidence-preserving digest presentation
 ```
 
@@ -72,8 +74,10 @@ advancing continuity. Provider freshness uses declared `weekly`, `scheduled`,
 or `event_driven` contracts. Source times are never replaced by retrieval or
 generation times.
 
-The normal Skill entry is `scripts/skill/prepare-feed`; it retrieves only the
-canonical published Feed and has no local fallback. The Feed rejects unsupported
+The normal Skill entry is `scripts/skill/prepare-feed`; it retrieves and validates
+only the canonical published Feed, then emits one canonical v1 `DigestContext`
+for the Host Agent. The context is not persisted and has no independent evidence
+schema or authority; it has no local fallback. The Feed rejects unsupported
 payloads, intelligence fields, invalid provenance, invalid freshness, incomplete required coverage, and non-canonical identity.
 Accepted HTTP 401/403 blocked Providers may produce bounded degraded status;
 other incomplete required work is fatal. Publication installs immutable
@@ -92,6 +96,8 @@ or corrupt generations fail closed.
 
 - `src/follow_the_money/feed/` — Feed planning, normalization support,
   validation, snapshots, bundle publication, deployment, and remote consumption;
+- `src/follow_the_money/digest.py` — typed, deterministic, non-persisted
+  current-Feed projection for bounded Host-Agent consumption;
 - `src/follow_the_money/providers/` — Provider protocol, manifests, HTTP safety,
   locks, rates, and the eight adapters;
 - `src/follow_the_money/config/` — closed typed configuration;

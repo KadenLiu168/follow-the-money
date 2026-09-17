@@ -5,8 +5,9 @@
 Present validated `positioning` evidence as a typed report of the identified
 market, observation time, position, metrics, explicit comparison state, and
 explicit arithmetic derivation. Preserve units, unavailable reasons, and
-source provenance. The list below is a closed whitelist; it does not authorize
-facts outside the listed paths.
+source provenance. The list below is a closed whitelist enforced by
+deterministic preparation; it does not authorize facts outside the listed
+paths.
 
 ## Evidence Fields
 

@@ -2,9 +2,9 @@
 
 A credential-free, deterministic five-domain Evidence Feed for Host Agents.
 The repository provides an evidence-based information digest skill boundary:
-it collects, normalizes, validates, and publishes evidence; the Host Agent
-consumes the current Feed and produces an evidence-preserving information
-digest.
+it collects, normalizes, validates, and publishes evidence; the Skill prepares
+one non-persisted Feed-bound `DigestContext`; the Host Agent consumes that
+context and produces an evidence-preserving information digest.
 
 ## Capability boundary
 
@@ -16,7 +16,7 @@ publication, and canonical current-Feed consumption.
 The normal path is:
 
 ```text
-published Feed -> validation -> Host Agent summarization/formatting -> information digest
+validated Feed -> DigestContext -> Host Agent -> evidence-preserving Digest
 ```
 
 The Feed contains no financial interpretation, importance, ranking, regime,
@@ -74,6 +74,7 @@ config/                    closed Feed configuration and Provider activation
 providers/                 verified Provider manifests and deterministic fixtures
 schemas/                   Feed, manifest, and artifact JSON Schemas
 src/follow_the_money/feed  producer, validation, publication, and consumption
+src/follow_the_money/digest.py  deterministic non-persisted DigestContext preparation
 scripts/feed/              internal deterministic producer entry
 scripts/skill/             canonical published-Feed consumer entry
 feeds/                     current manifest-led Feed product
@@ -94,8 +95,10 @@ scripts/feed/follow-the-money-feed --dry-run
 
 The producer requires no API key or paid data credential. The normal Skill
 consumer retrieves `feeds/feed-manifest.json` from canonical `main`, then
-retrieves exactly the five manifest-declared artifacts. It performs no local,
-stale, partial, historical, or unvalidated fallback.
+retrieves exactly the five manifest-declared artifacts and emits one canonical
+v1 `DigestContext` to stdout. The context is not persisted and does not replace
+Feed authority or define an independent evidence schema. The consumer performs
+no local, stale, partial, historical, or unvalidated fallback.
 
 ## Exit codes
 

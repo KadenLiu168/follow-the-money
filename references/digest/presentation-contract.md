@@ -2,15 +2,17 @@
 
 This is static, Host-Agent-owned guidance for presenting the current validated
 published Evidence Feed. It is applied after
-`scripts/skill/prepare-feed` has succeeded. The Feed, its validation result,
-source provenance, freshness, coverage, degradation status, warnings, and
-limitations remain authoritative.
+`scripts/skill/prepare-feed` has succeeded and the command has emitted its
+non-persisted `DigestContext`. The Feed, its validation result, source
+provenance, freshness, coverage, degradation status, warnings, and limitations
+remain authoritative; the context is only a deterministic Feed-bound view.
 
 ## Input and Domain Selection
 
-Use only the current validated Feed and its current Feed window. Select exactly
-one domain contract from the item's already validated `payload.type`; do not
-select by title, Provider name, source text, or an inferred subtype. The active
+Use the current validated Feed through its prepared `DigestContext` and current
+Feed window. Deterministic preparation selects exactly one domain contract from
+the item's already validated `payload.type`; do not select by title, Provider
+name, source text, or an inferred subtype. The active
 domain contracts are:
 
 - [News](domains/news.md)
@@ -20,8 +22,9 @@ domain contracts are:
 - [Filing](domains/filing.md)
 
 Use the shared [compression contract](compression.md) for accounting in every
-domain. This selection is Host-Agent instruction only. It does not add a
-resolver, serialized Digest field, renderer, or runtime dispatch stage.
+domain. This selection is preparation-owned and is already reflected in the
+context. It does not add a resolver, serialized Digest field, renderer, or
+runtime dispatch stage.
 
 ## Global Presentation Responsibilities
 

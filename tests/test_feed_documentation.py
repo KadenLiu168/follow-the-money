@@ -38,13 +38,11 @@ def test_skill_generates_only_the_current_information_digest():
     assert (
         "generate the current evidence-based information digest from the published feed" in lowered
     )
-    assert (
-        "published feed -> validation -> host agent summarization/formatting -> evidence-based information digest"
-        in lowered
-    )
+    assert "validated feed -> digestcontext -> host agent -> evidence-preserving digest" in lowered
     assert "scripts/skill/prepare-feed" in lowered
     assert "references/feed-contract.md" in lowered
     assert "references/safety-boundary.md" in lowered
+    assert "non-persisted" in lowered
     for term in (
         "without requesting or accepting",
         "company",

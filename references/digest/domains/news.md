@@ -5,7 +5,8 @@
 Present validated `news` evidence as a factual account of the source document,
 its bounded title or snippet, and its source-semantic occurrence time when
 available. Preserve source identity and attribution. The list below is a
-closed whitelist; it does not authorize facts outside the listed paths.
+closed whitelist enforced by deterministic preparation; it does not authorize
+facts outside the listed paths.
 
 ## Evidence Fields
 

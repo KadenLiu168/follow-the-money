@@ -90,3 +90,11 @@ five declared artifacts. It uses temporary storage, makes no Provider request,
 and has no local or stale fallback. Healthy and accepted degraded bundles are
 returned with their provenance, warnings, freshness, coverage, and source
 availability limits intact.
+
+The Skill then projects that validated Feed once into canonical v1
+`DigestContext` JSON on stdout. The projection applies the closed domain field
+inventory and preserves Feed identity, provenance, freshness, coverage,
+warnings, and unavailable states. It is not persisted, published, checkpointed,
+cached, or defined by a standalone JSON Schema; Feed artifacts remain the sole
+evidence contract and Host-Agent summarization/formatting remains outside the
+repository runtime.

@@ -5,7 +5,8 @@
 Present validated `policy` evidence as a factual account of the issuing source,
 document title, announcement time, effective date, and explicitly supplied
 scope. Preserve the distinction between announcement and effect. The list below
-is a closed whitelist; it does not authorize facts outside the listed paths.
+is a closed whitelist enforced by deterministic preparation; it does not
+authorize facts outside the listed paths.
 
 ## Evidence Fields
 

@@ -1,8 +1,8 @@
 # Digest Compression Contract
 
 These rules apply once to all five Feed domains. Compression is editorial
-presentation owned by the Host Agent over the current validated Feed; it is not
-a deterministic Feed result.
+presentation owned by the Host Agent over the prepared `DigestContext` and its
+current validated Feed evidence; it is not a deterministic Feed result.
 
 ## Per-Domain Accounting
 

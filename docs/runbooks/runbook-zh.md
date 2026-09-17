@@ -26,6 +26,8 @@ required Provider 的 failed/incomplete 结果会产生 typed failure，不会�
 
 ## Consumer 边界
 
-Skill 使用 `scripts/skill/prepare-feed`，只获取 canonical manifest 及其五个
-artifact；不会调用 Provider、读取本地 state，或 fallback 到 stale/partial
+Skill 使用 `scripts/skill/prepare-feed` 获取并校验 canonical manifest 及其五个
+artifact，然后只在 stdout 输出一个绑定当前 Feed 的、非持久化 v1
+`DigestContext` 给 Host Agent。它不是发布 artifact、checkpoint、cache 或独立
+evidence schema；不会调用 Provider、读取本地 state，或 fallback 到 stale/partial
 product。

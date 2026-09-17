@@ -9,6 +9,11 @@ retrieves exactly the manifest-declared artifacts into temporary storage. It is
 credential-free, makes no Provider request or GitHub REST API request, and has
 no local, stale, legacy, partial, or unvalidated fallback.
 
+After Feed retrieval and validation succeed, the same invocation deterministically
+projects the validated Feed into one canonical v1 `DigestContext` for the Host
+Agent. The context is typed and non-persisted; it is not a published artifact,
+checkpoint, cache, Feed replacement, or independent evidence schema.
+
 ## Manifest and artifacts
 
 The manifest declares exactly one artifact for each domain, in this order:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Internal Skill entry: consume the canonical published Feed snapshot.
+# Internal Skill entry: prepare canonical DigestContext from the published Feed.
 set -euo pipefail
 
 repo_root="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -10,4 +10,4 @@ if [[ ! -x "$python" ]]; then
 fi
 
 cd "$repo_root"
-exec "$python" -m follow_the_money.feed.remote "$@"
+exec "$python" -m follow_the_money.digest "$@"

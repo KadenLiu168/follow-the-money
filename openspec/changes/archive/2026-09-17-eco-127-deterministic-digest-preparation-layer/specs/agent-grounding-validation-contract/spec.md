@@ -1,16 +1,4 @@
-# agent-grounding-validation-contract Specification
-
-## Purpose
-Define the runtime-neutral semantic conditions for Host-Agent evidence support and evidence-preserving digest emission.
-
-## Requirements
-
-### Requirement: Digest factual assertions require Feed semantic support
-A Host Agent SHALL present a digest factual assertion as grounded only when valid current Feed evidence semantically supports the proposition and the assertion does not exceed the evidence's provenance or authority. An evidence identifier by itself SHALL NOT establish semantic support.
-
-#### Scenario: Citation lacks semantic support
-- **WHEN** a digest assertion cites a valid Feed item that does not establish the asserted proposition
-- **THEN** the assertion is not grounded and SHALL NOT be emitted unchanged as a grounded fact
+## MODIFIED Requirements
 
 ### Requirement: Host Agent owns Feed support assessment and emission
 The Host Agent SHALL assess whether prepared validated Feed evidence supports each factual summary and SHALL own the operational decision to emit the evidence-preserving Digest. Deterministic `DigestContext` preparation SHALL enforce domain evidence eligibility and traceability but SHALL NOT assess natural-language entailment or approve a proposed assertion. The repository SHALL provide no Audit, Event, grounding-proof, entailment, retry, rewrite, or final-output validation runtime.
@@ -18,13 +6,6 @@ The Host Agent SHALL assess whether prepared validated Feed evidence supports ea
 #### Scenario: Current Feed is summarized
 - **WHEN** the Host Agent prepares a digest from one validated-Feed-bound `DigestContext`
 - **THEN** it assesses semantic support and emits only an admissible evidence-preserving presentation without invoking another repository capability
-
-### Requirement: Unsupported digest assertions require substantive handling
-An unsupported factual assertion SHALL NOT be presented as grounded. The Host Agent MAY omit it, narrow it to available Feed support, or accurately characterize source-stated uncertainty, but relabeling alone SHALL NOT establish grounding.
-
-#### Scenario: Assertion is narrowed
-- **WHEN** an unsupported assertion is materially changed to match sufficient Feed evidence
-- **THEN** the changed proposition may be reassessed as grounded
 
 ### Requirement: Feed grounding remains runtime-neutral
 This capability SHALL permit the typed, versioned Agent-facing `DigestContext` only as deterministic, non-persisted current-Feed consumption machinery. The context SHALL have no independent evidence schema or authority, and the repository SHALL NOT introduce a grounding schema, grounding validator, private Agent process, capability registry, orchestration, embedded model runtime, prompt pipeline, retry/rewrite loop, or shared state.

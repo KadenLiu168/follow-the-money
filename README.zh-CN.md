@@ -1,13 +1,13 @@
 # Follow the Money（追踪资金）
 
-面向 Host Agent 的确定性、免凭据五域 Evidence Feed，也是证据驱动信息摘要 Skill 的仓库边界。仓库负责证据采集、规范化、校验、身份、来源与发布；Host Agent 只消费当前 Feed，并生成 evidence-preserving information digest。
+面向 Host Agent 的确定性、免凭据五域 Evidence Feed，也是证据驱动信息摘要 Skill 的仓库边界。仓库负责证据采集、规范化、校验、身份、来源与发布；Skill 将当前 validated Feed 准备为一个非持久化的 `DigestContext`，Host Agent 消费它并生成 evidence-preserving information digest。
 
 ## 能力边界
 
 仓库只有一个能力：Evidence Feed。它负责 Provider 契约、固定 cutoff/window、provenance、freshness、coverage、degradation、deterministic identity、canonical serialization、原子发布和 canonical current-Feed consumption。
 
 ```text
-published Feed -> validation -> Host Agent summarization/formatting -> information digest
+validated Feed -> DigestContext -> Host Agent -> evidence-preserving Digest
 ```
 
 Feed 不包含金融解释、重要性、ranking、regime、market impact、prediction、recommendation 或交易结论。Host Agent 可以为了可读性进行 grouping、heading、ordering、consolidation 和 compression，但必须保持语义支持并披露 omission。
@@ -39,6 +39,7 @@ config/                    Feed 配置与 Provider activation
 providers/                 已验证 Provider manifest 与 deterministic fixtures
 schemas/                   Feed、manifest、artifact JSON Schema
 src/follow_the_money/feed  Feed producer、validation、publication、consumption
+src/follow_the_money/digest.py  非持久化、确定性的 DigestContext preparation
 scripts/feed/              内部 deterministic producer 入口
 scripts/skill/             canonical published-Feed consumer 入口
 feeds/                     当前 manifest-led Feed product
@@ -57,7 +58,7 @@ scripts/skill/prepare-feed
 scripts/feed/follow-the-money-feed --dry-run
 ```
 
-Producer 不需要 API key 或付费数据凭据。Normal Skill consumer 从 canonical `main` 获取 `feeds/feed-manifest.json`，再只获取 manifest 声明的五个 artifact；失败时不使用本地（local）、stale、partial、historical 或未校验 fallback。
+Producer 不需要 API key 或付费数据凭据。Normal Skill consumer 从 canonical `main` 获取 `feeds/feed-manifest.json`，再只获取 manifest 声明的五个 artifact，并在 stdout 输出一个 canonical v1 `DigestContext`；该 context 非持久化、不替代 Feed authority，也不是独立 evidence schema。失败时不使用本地（local）、stale、partial、historical 或未校验 fallback。
 
 ## 退出码
 

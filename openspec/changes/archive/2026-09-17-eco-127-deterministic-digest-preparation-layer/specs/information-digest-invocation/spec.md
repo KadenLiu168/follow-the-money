@@ -1,9 +1,4 @@
-# information-digest-invocation Specification
-
-## Purpose
-Define normal consumption of the current published Evidence Feed as a Host-Agent-owned information digest.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Normal invocation produces the current information digest
 Normal `/follow-the-money` invocation SHALL consume the current validated published Feed through the deterministic preparation layer and provide its one Feed-bound `DigestContext` to the Host Agent for direct production of an evidence-based information digest. It SHALL NOT request or accept a company, asset, topic, time range, research question, or other user-supplied scope, and it SHALL NOT read a historical Feed or checkpoint. “Current” or “new” SHALL mean that evidence belongs to the current Feed window; it SHALL NOT claim comparison with a prior publication unless that comparison is explicitly present in prepared validated Feed evidence.
@@ -26,39 +21,6 @@ The Digest preparation layer SHALL expose in `DigestContext` the validated Feed 
 #### Scenario: Degraded Feed is summarized
 - **WHEN** a context derived from a consumable degraded Feed is summarized
 - **THEN** the digest preserves and explains the applicable warnings, Provider availability, freshness, and coverage gaps
-
-### Requirement: Editorial transformations remain evidence preserving
-The Host Agent MAY group related Feed evidence across domains, derive editorial headings, order content for readability, consolidate repetition, and compress detail. Every factual summary SHALL remain semantically supported by the cited Feed evidence, and editorial grouping, heading, order, consolidation, or compression SHALL NOT be represented as a deterministic Feed result or as evidence of importance.
-
-#### Scenario: Related evidence is consolidated
-- **WHEN** multiple Feed items are represented by one consolidated update
-- **THEN** the update remains traceable to all supporting items and does not add facts or authority beyond their semantic support
-
-#### Scenario: Content is ordered for readability
-- **WHEN** the Host Agent changes presentation order or creates editorial groups
-- **THEN** the digest does not characterize that presentation as significance, priority, ranking, or another deterministic finding
-
-### Requirement: Compression coverage is transparent
-For every Feed domain, the digest SHALL report the domain’s total item count and account for every item as individually summarized, represented through a consolidated summary, or omitted. Any omission SHALL be disclosed as editorial compression and SHALL NOT be justified by an unsupported importance or relevance judgment. The accounting categories SHALL reconcile to the domain total.
-
-#### Scenario: All items are represented
-- **WHEN** every item in a domain is individually summarized or represented through consolidation
-- **THEN** the digest reports the domain total, the applicable representation counts, and zero omitted items
-
-#### Scenario: Items are omitted for compression
-- **WHEN** one or more Feed items are not represented in the digest body
-- **THEN** the digest reports the omitted count, reconciles all categories to the domain total, and discloses the omission without claiming that omitted items are unimportant or irrelevant
-
-### Requirement: Digest excludes financial judgment
-The digest SHALL NOT introduce or infer significance, anomaly, signal, causality, market regime, asset impact, price-in status, prediction, investment recommendation, or trading instruction. It MAY accurately summarize such wording only when it is itself part of the validated source evidence, provided the digest attributes the statement to that source and does not adopt or upgrade it as a Host-Agent or Skill conclusion.
-
-#### Scenario: Evidence could invite interpretation
-- **WHEN** validated Feed items contain facts from which a financial interpretation could be inferred
-- **THEN** the digest summarizes the supported facts without adding significance, anomaly, causality, market-impact, prediction, or investment conclusions
-
-#### Scenario: Source contains analytical language
-- **WHEN** a validated Feed item explicitly records a source’s analytical or predictive statement
-- **THEN** the digest may summarize it only with clear source attribution and without representing it as a Skill-verified or Host-Agent-derived conclusion
 
 ### Requirement: Digest invocation preserves the existing runtime boundary
 Normal Digest invocation SHALL retrieve and fail-closed validate only the canonical current published Feed under `feed-evidence-pipeline`, deterministically prepare one non-persisted Feed-bound `DigestContext`, and pass it to the Host Agent. Retrieval, validation, or preparation failure SHALL produce no context or digest and SHALL NOT trigger Provider collection, local or stale fallback, partial evidence output, historical input, another evidence capability, or any embedded LLM/model runtime. Evidence Feed SHALL remain the repository's sole semantic and evidence capability; Digest preparation SHALL remain bounded consumption machinery, and the information digest SHALL remain Host-Agent-owned output behavior rather than a Feed field or repository-generated narrative.

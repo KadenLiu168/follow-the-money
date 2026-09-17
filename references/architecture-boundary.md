@@ -5,7 +5,7 @@ for Host Agents. The only repository capability is the current five-domain
 Feed:
 
 ```text
-published Feed -> validation -> Host Agent evidence-preserving digest
+validated Feed -> DigestContext -> Host Agent -> evidence-preserving Digest
 ```
 
 The Feed producer owns collection, normalization, provenance, freshness,
@@ -22,6 +22,14 @@ headings, ordering, transparent consolidation/compression, semantic-support
 assessment, and user-facing presentation. Neither side may turn presentation
 choices into importance, causality, market impact, prediction, investment, or
 trading judgment.
+
+After canonical Feed consumption, the Skill deterministically projects one
+typed, versioned, non-persisted `DigestContext`. The context is a bounded view
+of the validated Feed, not a second evidence schema or authority; it is never
+published, cached, checkpointed, or used to replace Feed identity. Closed
+domain field selection and dispatch happen in this preparation step. The Host
+Agent owns representation, semantic-support assessment, summarization,
+editorial operations, compression accounting, and final formatting.
 
 The item-level `semantic_context` is a closed evidence projection attached only
 to newly acquired or replaced `news`, `macro_release`, and `policy` items. It

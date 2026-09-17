@@ -13,19 +13,21 @@ published five-domain Evidence Feed (`news`, `macro_release`, `policy`,
 ## Execution
 
 ```text
-published Feed -> validation -> Host Agent summarization/formatting -> evidence-based information digest
+validated Feed -> DigestContext -> Host Agent -> evidence-preserving Digest
 ```
 
 Run `scripts/skill/prepare-feed` under
 [the Feed contract](references/feed-contract.md), then apply
 [the safety boundary](references/safety-boundary.md) and the global [Digest
-presentation contract](references/digest/presentation-contract.md). Use only
-its validated current output. Apply the one domain contract selected by the
-item's validated `payload.type` and apply the shared compression contract from
-the presentation hierarchy. Preserve degraded status, warnings, provenance,
-freshness, coverage, and source-availability limits. On retrieval or
-validation failure, surface the exact stderr and stop. Never substitute local,
-stale, partial, historical, or unvalidated data.
+presentation contract](references/digest/presentation-contract.md). The
+command emits one canonical, non-persisted v1 `DigestContext` after the
+validated current Feed has been consumed. Preparation applies the one domain
+contract selected by the item's validated `payload.type` and the closed
+evidence-field rules; the Host Agent applies representation and the shared
+compression contract. Preserve degraded status, warnings, provenance,
+freshness, coverage, and source-availability limits. On retrieval, validation,
+or preparation failure, surface the exact stderr and stop. Never substitute
+local, stale, partial, historical, or unvalidated data.
 
 Generate the digest immediately without requesting or accepting a company,
 asset, topic, time range, research question, or other user-supplied scope.
@@ -45,8 +47,8 @@ The Host Agent may group related evidence across domains, derive editorial
 headings, order content for readability, consolidate repetition, and compress
 detail. These are presentation choices, not deterministic Feed results or
 evidence of importance, priority, ranking, or another analytical finding. Use
-the presentation hierarchy for field-level evidence, representation, and
-compression accounting. Every factual summary must remain semantically
+the presentation hierarchy for representation and compression accounting;
+closed field selection is already applied in `DigestContext`. Every factual summary must remain semantically
 supported by the cited Feed items. If a source item contains analytical or
 predictive language, summarize it only with clear source attribution and do
 not adopt it as a Host-Agent conclusion.

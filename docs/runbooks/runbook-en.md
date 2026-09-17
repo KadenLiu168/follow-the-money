@@ -33,6 +33,8 @@ invalid.
 
 ## Consumer boundary
 
-The Skill uses `scripts/skill/prepare-feed`, which retrieves the canonical
-manifest and its five artifacts only. It does not call Providers, use local
-state, or fall back to a stale/partial product.
+The Skill uses `scripts/skill/prepare-feed`, which retrieves and validates the
+canonical manifest and its five artifacts, then emits one non-persisted,
+Feed-bound v1 `DigestContext` for the Host Agent. The projection is not a
+published artifact or independent evidence schema. It does not call Providers,
+use local state, or fall back to a stale/partial product.

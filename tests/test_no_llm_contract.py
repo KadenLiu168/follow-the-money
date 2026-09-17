@@ -73,3 +73,10 @@ def test_feed_entry_help_is_the_only_producer_surface():
     assert proc.returncode == 0, proc.stderr
     assert "usage:" in proc.stdout
     assert "--dry-run" in proc.stdout
+
+
+def test_digest_preparation_has_no_model_prompt_renderer_or_persistence_surface():
+    digest = (REPO_ROOT / "src" / "follow_the_money" / "digest.py").read_text()
+    for forbidden in ("openai", "prompt", "renderer", "template", "orchestration", "checkpoint"):
+        assert forbidden not in digest.lower()
+    assert not list(REPO_ROOT.glob("**/*DigestContext*"))
