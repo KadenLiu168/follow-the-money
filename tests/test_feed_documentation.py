@@ -32,8 +32,9 @@ def test_normal_skill_caller_graph_is_canonical_main_remote_only():
     assert "scripts/feed/follow-the-money-feed locally" not in contract
 
 
-def test_skill_generates_only_the_current_information_digest():
+def test_skill_is_a_thin_current_feed_orchestration_boundary():
     lowered = SKILL.read_text(encoding="utf-8").lower()
+    normalized = " ".join(lowered.split())
     assert "disable-model-invocation: true" in lowered
     assert (
         "generate the current evidence-based information digest from the published feed" in lowered
@@ -42,6 +43,7 @@ def test_skill_generates_only_the_current_information_digest():
     assert "scripts/skill/prepare-feed" in lowered
     assert "references/feed-contract.md" in lowered
     assert "references/safety-boundary.md" in lowered
+    assert "references/digest/presentation-contract.md" in lowered
     assert "non-persisted" in lowered
     for term in (
         "without requesting or accepting",
@@ -50,14 +52,58 @@ def test_skill_generates_only_the_current_information_digest():
         "topic",
         "time range",
         "research question",
-        "historical",
-        "current feed window",
+        "surface the exact stderr and stop",
+        "never substitute local, stale, partial, historical, or unvalidated data",
+        "do not introduce or infer",
+        "financial analysis",
+        "investment recommendation",
+    ):
+        assert term in normalized
+
+    for duplicated_rule in (
+        "five-domain",
+        "feed data status and evidence cutoff",
+        "domain and provider coverage",
+        "current updates from the feed",
+        "source provenance and freshness",
+        "data-quality, unavailable-source, and compression limitations",
+        "payload.type",
+        "semantic_context",
+        "domain total",
+        "group related evidence",
+        "derive editorial headings",
+    ):
+        assert duplicated_rule not in normalized
+
+
+def test_feed_contract_owns_feed_details():
+    lowered = FEED_REFERENCE.read_text(encoding="utf-8").lower()
+
+    assert "manifest declares exactly one artifact for each domain" in lowered
+    assert all(domain in lowered for domain in DOMAINS)
+    for term in (
+        "evidence_cutoff_at",
+        "run_id",
+        "content_digest",
+        "source provenance",
+        "provider freshness",
+        "coverage",
+        "degraded",
+    ):
+        assert term in lowered
+
+
+def test_presentation_contract_owns_digest_output_requirements():
+    lowered = PRESENTATION_CONTRACT.read_text(encoding="utf-8").lower()
+
+    for term in (
         "feed data status",
-        "evidence cutoff",
+        "evidence_cutoff_at",
+        "provider coverage",
         "source provenance",
         "freshness",
-        "coverage",
-        "limitations",
+        "current-window updates",
+        "data-quality or unavailable-source limitations",
     ):
         assert term in lowered
 

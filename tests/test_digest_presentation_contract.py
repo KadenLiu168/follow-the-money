@@ -90,14 +90,24 @@ def test_global_compression_contract_owns_reconciliation_and_traceability():
     assert "irrelevant" in lowered
 
 
-def test_skill_delegates_field_presentation_to_global_contract():
-    lowered = _read(SKILL).lower()
+def test_presentation_hierarchy_owns_field_and_compression_guidance():
+    presentation = _read(PRESENTATION_CONTRACT).lower()
+    compression = _read(COMPRESSION_CONTRACT).lower()
+    skill = _read(SKILL).lower()
 
-    assert "references/digest/presentation-contract.md" in lowered
-    assert "validated" in lowered
-    assert "payload.type" in lowered
+    assert "payload.type" in presentation
+    assert "host agent owns evidence-preserving summarization and formatting" in presentation
+    assert "group related evidence" in presentation
+    assert (
+        "domain total = individually summarized + represented through consolidation + omitted"
+        in compression
+    )
+    for domain in DOMAIN_NAMES:
+        fields = _section(_read(DOMAINS_ROOT / f"{domain}.md"), "## Evidence Fields")
+        assert "closed" in fields.lower()
 
-    for domain_specific_rule in (
+    for duplicated_rule in (
+        "payload.type",
         "semantic_context",
         "form13f",
         "form4",
@@ -105,8 +115,16 @@ def test_skill_delegates_field_presentation_to_global_contract():
         "current_metrics",
         "delta_metrics",
         "affected_scope",
+        "closed evidence-field",
+        "feed data status",
+        "evidence_cutoff_at",
+        "group related evidence",
+        "derive editorial headings",
+        "domain total",
+        "individually summarized",
+        "represented through consolidation",
     ):
-        assert domain_specific_rule not in lowered
+        assert duplicated_rule not in skill
 
 
 def test_safety_vocabulary_is_present_without_affirmative_analytical_instructions():
