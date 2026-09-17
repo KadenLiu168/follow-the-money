@@ -149,3 +149,15 @@ def test_semantic_evidence_change_changes_identity():
     changed = deepcopy(feed)
     changed["items"][0]["payload"]["title"] = "different title"
     assert recompute_feed_identity(changed) != recompute_feed_identity(feed)
+
+
+def test_semantic_context_change_changes_feed_identity_but_not_source_item_id():
+    feed = _feed([_news()])
+    digest, run_id = recompute_feed_identity(feed)
+    changed = deepcopy(feed)
+    changed["items"][0]["semantic_context"]["extension"]["document"]["title"] = "changed"
+    changed_digest, changed_run_id = recompute_feed_identity(changed)
+
+    assert changed["items"][0]["id"] == feed["items"][0]["id"]
+    assert changed_digest != digest
+    assert changed_run_id != run_id

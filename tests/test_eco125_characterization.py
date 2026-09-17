@@ -105,6 +105,7 @@ def _v2_sec_adapter() -> SecEdgarAdapter:
 
 def test_sec_v2_payload_and_canonical_bytes_are_pinned_before_migration():
     item = _v2_sec_adapter().normalize(_sec_raw(), {})[0]
+    assert "semantic_context" not in item
 
     assert item["payload"] == {
         "type": "filing",
@@ -213,6 +214,7 @@ def test_cftc_v2_payloads_and_canonical_bytes_are_pinned_before_migration():
         },
         {},
     )
+    assert all("semantic_context" not in item for item in items)
 
     assert [item["payload"] for item in items] == [
         {

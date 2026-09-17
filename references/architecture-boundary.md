@@ -23,6 +23,12 @@ assessment, and user-facing presentation. Neither side may turn presentation
 choices into importance, causality, market impact, prediction, investment, or
 trading judgment.
 
+The item-level `semantic_context` is a closed evidence projection attached only
+to newly acquired or replaced `news`, `macro_release`, and `policy` items. It
+does not generate a Digest or add analytical meaning. Valid legacy v4
+omissions remain readable, and eligible contextless carried slices retain
+their original bytes; `filing` and `positioning` remain outside this field.
+
 There is no repository Agent orchestration, model/LLM runtime, private
 invocation path, Audit/Event capability, research engine, market analytics/state,
 watchlist, scoring/ranking, or standalone public CLI product.

@@ -23,6 +23,8 @@ from follow_the_money.providers.adapters import (
     NbsAdapter,
     PbocAdapter,
     SecEdgarAdapter,
+    SseAdapter,
+    SzseAdapter,
 )
 from follow_the_money.providers.http import FetchError, bounded_fetch
 from follow_the_money.providers.urls import UrlValidationError
@@ -104,6 +106,9 @@ def test_fed_normalize_valid_policy_items():
     items = adapter.normalize(FakeResponse(body), WINDOW)
     assert len(items) == 1
     assert items[0]["payload"]["type"] == "policy"
+    context = items[0]["semantic_context"]
+    assert context["extension"]["type"] == "policy"
+    assert context["extension"]["action"] == "monetary_policy_statement"
     assert items[0]["source"]["url"].startswith("https://www.federalreserve.gov/")
     assert items[0]["source"]["tier"] == "Tier 1"
 
@@ -256,6 +261,9 @@ def test_bls_normalize_valid_news():
     assert len(items) == 1
     assert items[0]["payload"]["type"] == "news"
     assert items[0]["source"]["url"].startswith("https://www.bls.gov/")
+    context = items[0]["semantic_context"]
+    assert context["extension"]["document"]["title"] == items[0]["payload"]["title"]
+    assert context["extension"]["type"] == "news"
 
 
 def test_bls_empty_window():
@@ -315,6 +323,7 @@ def test_nbs_html_index_is_supported():
     assert len(items) == 1
     assert items[0]["source"]["url"] == "https://www.stats.gov.cn/sj/zxfb/202608/t20260810_1.html"
     assert items[0]["payload"]["type"] == "news"
+    assert items[0]["semantic_context"]["extension"]["type"] == "news"
 
 
 @pytest.mark.parametrize(
@@ -361,6 +370,53 @@ def test_production_shaped_html_indexes_skip_invalid_candidates_and_keep_first_v
         "2026-08-11T00:00:00.000Z",
         "2026-08-11T00:00:00.000Z",
     ]
+    assert all("semantic_context" in item for item in items)
+
+
+@pytest.mark.parametrize(
+    ("adapter", "fixture", "base_url"),
+    [
+        (
+            NbsAdapter(),
+            "../providers/nbs/fixtures/releases.json",
+            "https://www.stats.gov.cn/sj/zxfb/index.html",
+        ),
+        (
+            SseAdapter(),
+            "../providers/sse/fixtures/notices.json",
+            "https://www.sse.com.cn/disclosure/announcement/general/",
+        ),
+        (
+            SzseAdapter(),
+            "../providers/szse/fixtures/notices.json",
+            "https://www.szse.cn/disclosure/notice/general/index.html",
+        ),
+    ],
+)
+def test_current_fixture_paths_attach_semantic_context(adapter, fixture, base_url):
+    response = FakeResponse((Path(__file__).parent / fixture).read_bytes())
+    response.url = base_url
+    items = adapter.normalize(response, WINDOW)
+    assert items
+    assert all("semantic_context" in item for item in items)
+    for item in items:
+        assert item["semantic_context"]["extension"]["type"] == item["payload"]["type"]
+
+
+def test_nbs_macro_fixture_attaches_indicator_and_nullable_optional_facts():
+    response = FakeResponse(
+        (Path(__file__).parent / "../providers/nbs/fixtures/releases.json").read_bytes()
+    )
+    response.url = "https://www.stats.gov.cn/sj/zxfb/index.html"
+    macro = next(
+        item
+        for item in NbsAdapter().normalize(response, WINDOW)
+        if item["payload"]["type"] == "macro_release"
+    )
+    context = macro["semantic_context"]
+    assert context["extension"]["indicator"]["id"] == macro["payload"]["series_id"]
+    assert context["extension"]["period"] == {"period": "2026-07"}
+    assert context["extension"]["revision"] is None
 
 
 def test_html_index_undecodable_response_remains_typed_fetch_failure():

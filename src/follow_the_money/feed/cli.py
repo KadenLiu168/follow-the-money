@@ -620,7 +620,7 @@ def run_feed(
 
         # Validate before publication.
         try:
-            validate_feed(feed)
+            validate_feed(feed, current_production=True)
             assert_feed_identity(feed)
         except SchemaError as exc:
             raise FeedExecutionError(str(exc)) from exc

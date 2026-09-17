@@ -40,6 +40,15 @@ CFTC positioning items may carry typed market identity, metrics, deltas, and an
 explicit arithmetic derivation. These remain evidence-only and do not express
 direction, impact, ranking, inferred holding delta, amendment linkage, or
 recommendations.
+`news`, `macro_release`, and `policy` items may also carry the closed
+`semantic_context` sibling. It provides source-supported subject, event or
+document facts, bounded numeric observations, macro period/revision facts, and
+policy date/scope facts for evidence-preserving presentation. It does not add
+ranking, sentiment, market impact, prediction, recommendation, or trading
+semantics, and `filing`/`positioning` items do not acquire it. The published v4
+consumer accepts valid legacy omissions; production admission requires context
+on new or replacement affected items and preserves an eligible contextless
+carried slice byte-for-byte.
 The Feed is deterministic, credential-free, and contains no Agent runtime.
 
 ## Freshness and degradation

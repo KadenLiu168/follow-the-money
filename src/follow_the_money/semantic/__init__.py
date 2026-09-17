@@ -1,5 +1,6 @@
-"""Small Producer-internal numeric fact boundary."""
+"""Small Producer semantic construction boundaries."""
 
+from .context import SemanticContext, SemanticEntity, SemanticEvent, SemanticNumericFact
 from .numeric import (
     DerivedNumericFact,
     MeasuredNumericFact,
@@ -18,6 +19,10 @@ __all__ = [
     "DerivedNumericFact",
     "MeasuredNumericFact",
     "NumericDerivation",
+    "SemanticContext",
+    "SemanticEntity",
+    "SemanticEvent",
+    "SemanticNumericFact",
     "add_canonical",
     "canonicalize_canonical",
     "canonicalize_numeric",

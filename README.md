@@ -52,6 +52,17 @@ items expose market-code identity, typed current/previous metrics, deltas, and
 an explicit net-position derivation; these fields are evidence only and do not
 express market impact or direction.
 
+Newly acquired or replaced `news`, `macro_release`, and `policy` items carry
+the closed item-level `semantic_context` field. It contains only
+source-supported subjects, event/document facts, bounded numeric observations,
+macro periods or revisions, and policy dates or affected scope. It does not
+rank evidence, state sentiment or market impact, make predictions, or provide
+recommendations. `filing` and `positioning` items do not carry this field.
+The v4 consumer still accepts a structurally valid legacy omission; a
+contextless prior slice may be carried byte-for-byte only with its existing
+carry-forward proof, while new or replacement affected items require valid
+context.
+
 A validated previous eight-domain bundle may enter only the explicit bounded
 migration path. Normal loading and remote consumption reject the previous
 major and never use removed-domain artifacts as current evidence.

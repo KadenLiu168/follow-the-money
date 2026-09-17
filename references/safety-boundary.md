@@ -11,6 +11,12 @@ consolidation must not exceed the supporting source authority. Unsupported
 assertions must be omitted, narrowed, or accurately qualified rather than
 presented as grounded facts.
 
+When present, `semantic_context` is another closed source-evidence projection,
+not an importance, sentiment, signal, market-impact, or recommendation field.
+Its subject, event/document, numeric, macro, and policy members may support a
+factual digest statement only within the retained source evidence and its
+declared limits.
+
 `ClaimAuditor` is not part of the current Feed-only runtime surface. No model,
 credential, prompt pipeline, automatic text rewrite, or trading execution path
 is present in the repository.

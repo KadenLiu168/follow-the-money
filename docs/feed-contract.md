@@ -28,6 +28,24 @@ for each domain. Each artifact contains only its schema version, bundle
 required. Artifact paths, byte sizes, hashes, item counts, and inventory order
 are validated before any artifact is consumed.
 
+### Item semantic context
+
+`news`, `macro_release`, and `policy` items may contain one closed,
+item-level `semantic_context` sibling. Its common envelope contains ordered
+entities, a source-semantic event time, and bounded numeric facts; its closed
+extension carries news document facts, macro indicator/period/observation and
+explicit same-period revision facts, or policy issuer/action/date/scope. The
+field is evidence-only and cannot express ranking, sentiment, signal,
+prediction, recommendation, market impact, or trading direction. `filing` and
+`positioning` items do not use it.
+
+Consumer validation accepts a structurally valid v4 omission for legacy items.
+Current Feed construction and `build_bundle` require valid context on every
+newly acquired or replacement item in the three affected domains. A complete
+contextless prior slice is the only production exception: it must retain its
+non-null `carried_forward_from_run_id` and is carried without rewriting its
+bytes, whether its existing freshness status is `valid_unchanged` or `stale`.
+
 The logical Feed retains:
 
 - one fixed half-open window `[window.start, evidence_cutoff_at)`;

@@ -17,7 +17,129 @@ from follow_the_money.feed.validate import (
     validate_numeric_token,
 )
 from follow_the_money.schema import SchemaError
+from follow_the_money.semantic.policy import build_policy_context
 from tests.test_feed_bundle import T0, _feed, _news, _ts
+
+
+def _news_context() -> dict:
+    return _news()["semantic_context"]
+
+
+def _positioning_item() -> dict:
+    return {
+        "id": "positioning-item",
+        "provider_id": "cftc",
+        "source": {
+            "id": "positioning-source",
+            "name": "CFTC",
+            "tier": "Tier 1",
+            "kind": "positioning",
+            "url": "https://publicreporting.cftc.gov/resource/6dca-aqww/cftc-v2-row.json",
+            "published_at": _ts(T0 - timedelta(hours=1)),
+            "knowledge_available_at": _ts(T0 - timedelta(hours=1)),
+        },
+        "payload": {
+            "type": "positioning",
+            "instrument_id": "GOLD",
+            "as_of": _ts(T0 - timedelta(days=1)),
+            "position": {"value": "1", "unit": "contracts"},
+            "raw_metadata": {},
+        },
+    }
+
+
+def _macro_context() -> dict:
+    return {
+        "version": 1,
+        "entities": [{"role": "subject", "name": "国家统计局", "type": "organization"}],
+        "event": {
+            "category": "official_statistical_release",
+            "occurred_at": _ts(T0 - timedelta(hours=1)),
+        },
+        "numeric_facts": [
+            {
+                "metric": "observation",
+                "role": "actual",
+                "value": None,
+                "unit": "percent",
+                "unknown_reason": "missing",
+            },
+            {
+                "metric": "observation",
+                "role": "consensus",
+                "value": None,
+                "unit": "percent",
+                "unknown_reason": "missing",
+            },
+            {
+                "metric": "observation",
+                "role": "previous",
+                "value": None,
+                "unit": "percent",
+                "unknown_reason": "missing",
+            },
+        ],
+        "extension": {
+            "type": "macro_release",
+            "indicator": {
+                "id": "cn_industrial_production_yoy",
+                "name": "Industrial Production Year-over-Year",
+            },
+            "period": None,
+            "revision": None,
+        },
+    }
+
+
+def _macro_item() -> dict:
+    item = {
+        "id": "macro-item",
+        "provider_id": "nbs",
+        "source": {
+            "id": "macro-source",
+            "name": "NBS",
+            "tier": "Tier 1",
+            "kind": "macro_release",
+            "url": "https://www.stats.gov.cn/sj/zxfb/202608/t20260811_1890123.html",
+            "published_at": _ts(T0 - timedelta(hours=1)),
+            "knowledge_available_at": _ts(T0 - timedelta(hours=1)),
+        },
+        "payload": {
+            "type": "macro_release",
+            "series_id": "cn_industrial_production_yoy",
+            "released_at": _ts(T0 - timedelta(hours=1)),
+            "observation_period": None,
+            "actual": {"value": None, "unit": "percent", "unknown_reason": "missing"},
+            "consensus": {"value": None, "unit": "percent", "unknown_reason": "missing"},
+            "previous": {"value": None, "unit": "percent", "unknown_reason": "missing"},
+            "raw_metadata": {},
+        },
+    }
+    item["semantic_context"] = _macro_context()
+    return item
+
+
+def _policy_item() -> dict:
+    return {
+        "id": "policy-item",
+        "provider_id": "federal_reserve",
+        "source": {
+            "id": "policy-source",
+            "name": "Federal Reserve",
+            "tier": "Tier 1",
+            "kind": "policy",
+            "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260811a.htm",
+            "published_at": _ts(T0 - timedelta(hours=1)),
+            "knowledge_available_at": _ts(T0 - timedelta(hours=1)),
+        },
+        "payload": {
+            "type": "policy",
+            "title": "Federal Reserve issues FOMC statement",
+            "announced_at": _ts(T0 - timedelta(hours=1)),
+            "effective_at": None,
+            "raw_metadata": {},
+        },
+    }
 
 
 def test_valid_empty_and_populated_five_domain_feeds_pass():
@@ -29,6 +151,236 @@ def test_valid_empty_and_populated_five_domain_feeds_pass():
     populated = _feed([_news()])
     validate_feed(populated)
     assert build_bundle(populated).artifacts["news"]["items"] == populated["items"]
+
+
+def test_present_news_context_must_match_payload_domain_and_facts():
+    feed = _feed([_news()])
+    validate_feed(feed)
+
+    mismatched = deepcopy(feed)
+    mismatched["items"][0]["semantic_context"]["extension"]["type"] = "policy"
+    mismatched["content_digest"], mismatched["run_id"] = recompute_feed_identity(mismatched)
+    with pytest.raises(SchemaError):
+        validate_feed(mismatched)
+
+
+def test_filing_and_positioning_context_are_rejected():
+    positioning = _feed([_positioning_item()])
+    positioning["items"][0]["semantic_context"] = _news_context()
+    positioning["content_digest"], positioning["run_id"] = recompute_feed_identity(positioning)
+    with pytest.raises(SchemaError):
+        validate_feed(positioning)
+
+
+def test_schema_closes_present_context_and_accepts_null_macro_period():
+    macro = _feed([_macro_item()])
+    validate_feed(macro)
+
+    for mutation in (
+        lambda context: context.update({"unknown": True}),
+        lambda context: context["event"].update({"impact": "bullish"}),
+        lambda context: context["numeric_facts"][0].update({"value": "01"}),
+        lambda context: context["extension"].update({"type": "news"}),
+    ):
+        invalid = deepcopy(macro)
+        mutation(invalid["items"][0]["semantic_context"])
+        invalid["content_digest"], invalid["run_id"] = recompute_feed_identity(invalid)
+        with pytest.raises(SchemaError):
+            validate_feed(invalid)
+
+
+def test_cross_field_context_validation_rejects_payload_time_title_and_order_drift():
+    feed = _feed([_news()])
+    validate_feed(feed)
+
+    for mutation in (
+        lambda context: context["event"].update({"occurred_at": _ts(T0)}),
+        lambda context: context["extension"]["document"].update({"title": "other"}),
+        lambda context: context["entities"].append(
+            {"role": "reference", "name": "CPI", "type": "indicator"}
+        ),
+    ):
+        invalid = deepcopy(feed)
+        mutation(invalid["items"][0]["semantic_context"])
+        invalid["content_digest"], invalid["run_id"] = recompute_feed_identity(invalid)
+        with pytest.raises(SchemaError):
+            validate_feed(invalid)
+
+
+def test_present_news_context_matches_the_closed_provider_mapping():
+    feed = _feed([_news()])
+    for mutation in (
+        lambda context: context["event"].update({"category": "monetary_policy"}),
+        lambda context: context["entities"].insert(
+            0, {"role": "reference", "name": "Invented", "type": "asset"}
+        ),
+        lambda context: context["numeric_facts"].append(
+            {
+                "metric": "invented",
+                "role": "actual",
+                "value": "1",
+                "unit": "percent",
+                "unknown_reason": None,
+            }
+        ),
+    ):
+        invalid = deepcopy(feed)
+        mutation(invalid["items"][0]["semantic_context"])
+        invalid["content_digest"], invalid["run_id"] = recompute_feed_identity(invalid)
+        with pytest.raises(SchemaError, match=r"provider mapping|semantic[_ ]context"):
+            validate_feed(invalid)
+
+
+def test_cross_field_macro_context_matches_series_period_and_numeric_facts():
+    feed = _feed([_macro_item()])
+    validate_feed(feed)
+
+    for mutation in (
+        lambda context: context["extension"]["indicator"].update({"id": "wrong"}),
+        lambda context: context["numeric_facts"][0].update({"unit": "index"}),
+        lambda context: context["event"].update({"occurred_at": _ts(T0)}),
+    ):
+        invalid = deepcopy(feed)
+        mutation(invalid["items"][0]["semantic_context"])
+        invalid["content_digest"], invalid["run_id"] = recompute_feed_identity(invalid)
+        with pytest.raises(SchemaError):
+            validate_feed(invalid)
+
+
+def test_present_macro_context_matches_the_closed_provider_mapping():
+    feed = _feed([_macro_item()])
+    for mutation in (
+        lambda context: context["event"].update({"category": "monetary_policy"}),
+        lambda context: context["entities"][0].update({"name": "Other subject"}),
+        lambda context: context["numeric_facts"].append(
+            {
+                "metric": "invented",
+                "role": "actual",
+                "value": "1",
+                "unit": "percent",
+                "unknown_reason": None,
+            }
+        ),
+    ):
+        invalid = deepcopy(feed)
+        mutation(invalid["items"][0]["semantic_context"])
+        invalid["content_digest"], invalid["run_id"] = recompute_feed_identity(invalid)
+        with pytest.raises(SchemaError, match=r"provider mapping|semantic[_ ]context"):
+            validate_feed(invalid)
+
+
+def test_cross_field_policy_context_matches_issuer_and_effective_date():
+    feed = _feed([_policy_item()])
+    feed["items"][0]["semantic_context"] = {
+        "version": 1,
+        "entities": [{"role": "issuer", "name": "Federal Reserve", "type": "organization"}],
+        "event": {"category": "monetary_policy", "occurred_at": _ts(T0 - timedelta(hours=1))},
+        "numeric_facts": [],
+        "extension": {
+            "type": "policy",
+            "policy_type": "monetary_policy",
+            "action": "monetary_policy_statement",
+            "effective_at": None,
+            "affected_scope": [],
+        },
+    }
+    validate_feed(feed)
+
+    for mutation in (
+        lambda context: context["entities"][0].update({"name": "Other issuer"}),
+        lambda context: context["extension"].update({"effective_at": _ts(T0)}),
+    ):
+        invalid = deepcopy(feed)
+        mutation(invalid["items"][0]["semantic_context"])
+        invalid["content_digest"], invalid["run_id"] = recompute_feed_identity(invalid)
+        with pytest.raises(SchemaError):
+            validate_feed(invalid)
+
+
+def test_present_policy_context_matches_the_closed_provider_mapping():
+    feed = _feed([_policy_item()])
+    item = feed["items"][0]
+    item["semantic_context"] = build_policy_context(
+        item["provider_id"], item["payload"], item["source"]
+    ).to_dict()
+    for mutation in (
+        lambda context: context["event"].update({"category": "official_policy_announcement"}),
+        lambda context: context["extension"].update({"policy_type": "official_policy"}),
+        lambda context: context["extension"]["affected_scope"].append("invented scope"),
+        lambda context: context["numeric_facts"].append(
+            {
+                "metric": "invented",
+                "role": "actual",
+                "value": "1",
+                "unit": "percent",
+                "unknown_reason": None,
+            }
+        ),
+    ):
+        invalid = deepcopy(feed)
+        mutation(invalid["items"][0]["semantic_context"])
+        invalid["content_digest"], invalid["run_id"] = recompute_feed_identity(invalid)
+        with pytest.raises(SchemaError, match=r"provider mapping|semantic[_ ]context"):
+            validate_feed(invalid)
+
+
+def test_current_production_requires_context_for_new_items_but_allows_valid_unchanged_carry():
+    current = _feed([_news()])
+    current["items"][0].pop("semantic_context")
+    with pytest.raises(SchemaError, match="require semantic_context"):
+        validate_feed(current, current_production=True)
+
+    carried = deepcopy(current)
+    bls_outcome = next(
+        outcome for outcome in carried["provider_outcomes"] if outcome["provider_id"] == "bls"
+    )
+    contract = next(
+        contract for contract in carried["provider_contracts"] if contract["provider_id"] == "bls"
+    )
+    bls_outcome["freshness"] = {
+        "cadence": "event_driven",
+        "status": "valid_unchanged",
+        "origin_contract_hash": contract["hash"],
+        "carried_forward_from_run_id": "legacy-run",
+    }
+    carried["content_digest"], carried["run_id"] = recompute_feed_identity(carried)
+    validate_feed(carried, current_production=True)
+
+    stale = deepcopy(current)
+    stale_outcome = next(
+        outcome for outcome in stale["provider_outcomes"] if outcome["provider_id"] == "bls"
+    )
+    stale_contract = next(
+        contract for contract in stale["provider_contracts"] if contract["provider_id"] == "bls"
+    )
+    stale_contract["snapshot"]["freshness"] = {
+        "cadence": "scheduled",
+        "reference_time": "source_updated_at",
+        "valid_for_seconds": 1,
+    }
+    stale_contract["hash"] = canonical_digest(stale_contract["snapshot"])
+    stale_outcome["freshness"] = {
+        "cadence": "scheduled",
+        "status": "stale",
+        "origin_contract_hash": stale_contract["hash"],
+        "carried_forward_from_run_id": "legacy-run",
+    }
+    stale["content_digest"], stale["run_id"] = recompute_feed_identity(stale)
+    validate_feed(stale, current_production=True)
+
+    replaced = deepcopy(carried)
+    replaced["items"][0]["semantic_context"] = _news_context()
+    replaced["content_digest"], replaced["run_id"] = recompute_feed_identity(replaced)
+    validate_feed(replaced, current_production=True)
+
+
+def test_current_production_rejects_partial_contextless_fallback():
+    first = _news("first")
+    second = _news("second", T0 - timedelta(minutes=30))
+    second.pop("semantic_context")
+    feed = _feed([first, second])
+    with pytest.raises(SchemaError, match="mix items with and without semantic_context"):
+        validate_feed(feed, current_production=True)
 
 
 def test_v4_rejects_removed_payload_types_and_fields():

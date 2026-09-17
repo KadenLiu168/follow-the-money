@@ -40,6 +40,14 @@ The digest must contain:
 4. Source provenance and freshness
 5. Data-quality, unavailable-source, and compression limitations
 
+The validated `news`, `macro_release`, and `policy` items may include the
+closed `semantic_context` field. Treat it as source-supported evidence for
+subjects, event/document facts, numeric observations, macro periods or
+revisions, and policy dates or scope; do not turn it into ranking, sentiment,
+market impact, prediction, recommendation, or trading language. Legacy v4
+items may omit the field, while `filing` and `positioning` items do not acquire
+it through this contract.
+
 For every Feed domain, report its total item count and reconcile every item as
 individually summarized, represented through a consolidated summary, or
 omitted. Disclose omissions as editorial compression; never justify them by

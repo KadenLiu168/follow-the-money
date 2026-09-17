@@ -28,6 +28,8 @@ filing
 
 SEC EDGAR v4 的 filing item 区分完整的 `form13f` current-state evidence、有界 current-window `form4`/`4/A` ownership evidence，以及有界结构化 `SCHEDULE 13D`/`13G` beneficial-ownership evidence。Form 4 保留 issuer、reporting owner、transaction/holding、post-state 和 footnote 数据；beneficial-ownership 保留来源支持的 issuer/class identity、reporting positions、typed ownership facts 和保守 comparison states。Form 4 和 beneficial-ownership evidence 都不推断 delta、amendment lineage、intent、control 或 market impact，并继续保留 SEC v1-v3 的有界读取兼容。
 
+新采集或替换的 `news`、`macro_release` 和 `policy` item 携带闭合的 item-level `semantic_context`。它只表达来源支持的 subject、event/document facts、有界 numeric observations、macro period/revision 以及 policy date/affected scope；不表达 ranking、sentiment、market impact、prediction 或 recommendation。`filing` 和 `positioning` 不携带该字段。v4 consumer 仍接受结构有效的 legacy omission；无 context 的旧 slice 只有在已有 carry-forward proof 时才能按原 bytes carry-forward，而新采集或替换的受影响 item 必须有有效 context。
+
 上一版八域 bundle 只能进入显式 bounded migration path；正常加载和远程消费拒绝上一 major，也不会把 removed-domain artifact 当作当前证据。
 
 ## 目录结构

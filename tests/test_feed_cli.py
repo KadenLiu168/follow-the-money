@@ -181,6 +181,37 @@ class _OutcomeAdapter:
         return self.items
 
 
+class _SemanticConstructionFailureAdapter(_OutcomeAdapter):
+    def normalize(self, raw, window):
+        from follow_the_money.schema import SchemaError
+
+        raise SchemaError("semantic_context mapping failed")
+
+
+def test_semantic_construction_failure_uses_existing_provider_failure_boundary(tmp_path):
+    cfg = _source_complete_cfg()
+    planned = _planned_provider_ids(cfg)
+    registry = {provider_id: _OutcomeAdapter() for provider_id in planned}
+    registry["nbs"] = _SemanticConstructionFailureAdapter()
+
+    result = run_feed(
+        output_root=str(tmp_path / "out"),
+        cutoff=_cutoff(),
+        providers_fn=lambda: registry,
+        enabled_provider_ids=planned,
+    )
+
+    assert result.status == "failure"
+    assert result.feed is not None
+    outcome = next(
+        item for item in result.feed["provider_outcomes"] if item["provider_id"] == "nbs"
+    )
+    assert outcome["state"] == "failed"
+    assert outcome["availability"] == "failed"
+    assert "semantic_context mapping failed" in outcome["error"]
+    assert not (tmp_path / "out" / "feed-manifest.json").exists()
+
+
 def _source_complete_cfg():
     cfg = load_config(
         REPO_ROOT / "config" / "config.yaml",
@@ -495,7 +526,7 @@ def test_failed_or_dry_run_outcomes_do_not_advance_checkpoint(tmp_path, monkeypa
         monkeypatch.setattr(
             feed_cli,
             "validate_feed",
-            lambda _feed: (_ for _ in ()).throw(SchemaError("invalid candidate")),
+            lambda _feed, **_kwargs: (_ for _ in ()).throw(SchemaError("invalid candidate")),
         )
     else:
         from follow_the_money.feed.publish import PublishError
@@ -539,12 +570,14 @@ def test_failed_or_dry_run_outcomes_do_not_advance_checkpoint(tmp_path, monkeypa
 
 
 def _accepted_item(provider_id: str, item_id: str) -> dict:
+    from follow_the_money.semantic.policy import build_policy_context
+
     source_url = (
         f"https://www.sec.gov/Archives/edgar/data/0001067983/{item_id}"
         if provider_id == "sec_edgar"
         else f"https://www.federalreserve.gov/newsevents/pressreleases/{item_id}.htm"
     )
-    return {
+    item = {
         "id": item_id,
         "provider_id": provider_id,
         "source": {
@@ -574,6 +607,11 @@ def _accepted_item(provider_id: str, item_id: str) -> dict:
             }
         ),
     }
+    if provider_id == "federal_reserve":
+        item["semantic_context"] = build_policy_context(
+            provider_id, item["payload"], item["source"]
+        ).to_dict()
+    return item
 
 
 def test_failed_provider_and_successful_provider_fail_with_both_causes(tmp_path, monkeypatch):

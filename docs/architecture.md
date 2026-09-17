@@ -12,6 +12,8 @@ fixed-cutoff collection
         ↓
 normalization + provenance + freshness
         ↓
+item semantic context for news/macro/policy
+        ↓
 coverage/degradation + deterministic identity
         ↓
 canonical five-artifact publication
@@ -44,6 +46,15 @@ issuer `form4`/`4/A` event set, and bounded structured watched-filer
 `SCHEDULE 13D`/`13G` events. Historical ownership documents remain nested
 comparison evidence rather than accumulated top-level events. No Provider is
 selected dynamically and no removed domain is reconstructed from another source.
+
+After existing normalized payload and source construction, the current
+Federal Reserve/PBOC policy, BLS/NBS/SSE/SZSE news, and NBS macro paths attach
+the closed `semantic_context` sibling. This mapping is deterministic and
+Provider-local; it performs no fetch, reclassification, entity inference, or
+separate orchestration. New/replacement affected items require context in
+production. Legacy v4 omissions remain readable and a proven contextless
+carried slice remains byte-identical, including when its carry status becomes
+`stale`.
 
 ## Trust boundaries
 

@@ -11,6 +11,9 @@ from typing import Any
 
 from ..canonical import canonical_bytes, canonical_sha256, load_canonical_json
 from ..schema import SchemaError, validate_against
+from ..semantic.macro import build_macro_context
+from ..semantic.news import build_news_context
+from ..semantic.policy import build_policy_context
 from .dedupe import deterministic_item_order, item_total_order_key
 from .validate import assert_feed_identity, recompute_feed_identity, validate_feed
 
@@ -115,7 +118,7 @@ def _manifest_from_feed(feed: dict[str, Any], artifacts: list[dict[str, Any]]) -
 def split_feed(feed: dict[str, Any]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     """Split one validated logical Feed into the fixed typed artifact set."""
     try:
-        validate_feed(feed)
+        validate_feed(feed, current_production=True)
         assert_feed_identity(feed)
     except (SchemaError, TypeError, ValueError) as exc:
         raise BundleError(f"cannot split invalid Feed: {exc}") from exc
@@ -461,6 +464,24 @@ def migrate_feed(
             raise BundleError("retained Feed evidence belongs to a removed Provider")
         if payload.get("type") not in target_contracts[provider_id].get("payload_types", ()):
             raise BundleError("retained Feed evidence is outside its target Provider contract")
+        if "semantic_context" not in item:
+            try:
+                if payload.get("type") == "news":
+                    item["semantic_context"] = build_news_context(
+                        provider_id, payload, item["source"]
+                    ).to_dict()
+                elif payload.get("type") == "macro_release":
+                    item["semantic_context"] = build_macro_context(
+                        provider_id, payload, {}
+                    ).to_dict()
+                elif payload.get("type") == "policy":
+                    item["semantic_context"] = build_policy_context(
+                        provider_id, payload, item["source"]
+                    ).to_dict()
+            except (SchemaError, TypeError, ValueError) as exc:
+                raise BundleError(
+                    f"cannot construct semantic_context for migrated item {item.get('id')!r}"
+                ) from exc
         lineage = item.get("source_lineage")
         if isinstance(lineage, list):
             item["source_lineage"] = [

@@ -23,6 +23,7 @@ from follow_the_money.feed.bundle import (
 from follow_the_money.feed.publish import publish_bundle
 from follow_the_money.feed.validate import recompute_feed_identity, validate_feed
 from follow_the_money.schema import SchemaError, validate_against
+from follow_the_money.semantic.news import build_news_context
 
 T0 = datetime(2026, 8, 11, 0, 20, tzinfo=UTC)
 PROVIDERS = (
@@ -89,7 +90,7 @@ def _ts(value: datetime) -> str:
 
 
 def _news(item_id: str = "item-1", at: datetime = T0 - timedelta(hours=1)) -> dict:
-    return {
+    item = {
         "id": item_id,
         "provider_id": "bls",
         "source": {
@@ -109,6 +110,8 @@ def _news(item_id: str = "item-1", at: datetime = T0 - timedelta(hours=1)) -> di
             "raw_metadata": {},
         },
     }
+    item["semantic_context"] = build_news_context("bls", item["payload"], item["source"]).to_dict()
+    return item
 
 
 def _coverage_groups(provider_id: str) -> list[str]:
@@ -279,8 +282,40 @@ def test_split_emits_exactly_five_domains_and_reconstructs_identity(tmp_path: Pa
     _write_bundle(tmp_path, bundle)
     reconstructed = validate_bundle(tmp_path)
     assert reconstructed["items"] == feed["items"]
+    assert reconstructed["items"][0]["semantic_context"]["extension"]["type"] == "news"
     assert reconstructed["content_digest"] == feed["content_digest"]
     assert reconstructed["run_id"] == feed["run_id"]
+
+
+@pytest.mark.parametrize("status", ["valid_unchanged", "stale"])
+def test_contextless_legacy_carry_preserves_item_bytes_and_remains_readable(tmp_path: Path, status):
+    feed = _feed([_news()])
+    legacy_item = feed["items"][0]
+    legacy_item.pop("semantic_context")
+    outcome = next(item for item in feed["provider_outcomes"] if item["provider_id"] == "bls")
+    contract = next(item for item in feed["provider_contracts"] if item["provider_id"] == "bls")
+    cadence = {"valid_unchanged": "event_driven", "stale": "scheduled"}[status]
+    if status == "stale":
+        contract["snapshot"]["freshness"] = {
+            "cadence": cadence,
+            "reference_time": "source_updated_at",
+            "valid_for_seconds": 1,
+        }
+        contract["hash"] = canonical_digest(contract["snapshot"])
+    outcome["freshness"] = {
+        "cadence": cadence,
+        "status": status,
+        "origin_contract_hash": contract["hash"],
+        "carried_forward_from_run_id": "legacy-run",
+    }
+    feed["content_digest"], feed["run_id"] = recompute_feed_identity(feed)
+    original_item_bytes = canonical_bytes(legacy_item)
+
+    bundle = build_bundle(feed)
+    assert "semantic_context" not in bundle.artifacts["news"]["items"][0]
+    assert canonical_bytes(bundle.artifacts["news"]["items"][0]) == original_item_bytes
+    _write_bundle(tmp_path, bundle)
+    assert validate_bundle(tmp_path)["items"][0] == legacy_item
 
 
 def test_manifest_prevalidation_returns_ordered_inventory(tmp_path: Path):
@@ -449,3 +484,22 @@ def test_migration_projects_removed_payload_and_recomputes_identity(tmp_path: Pa
     assert "market-item" not in {item["id"] for item in migrated["items"]}
     assert migrated["run_id"] != old["run_id"]
     assert migrated["content_digest"] != old["content_digest"]
+
+
+def test_v3_migration_enriches_contextless_affected_items_for_production():
+    current = _feed([_news()])
+    old = deepcopy(current)
+    old["schema_version"] = 3
+    old["calendar_horizon_end"] = _ts(T0 + timedelta(hours=26))
+    old["items"][0].pop("semantic_context")
+    old["content_digest"], old["run_id"] = recompute_feed_identity(old)
+
+    migrated = migrate_feed(
+        old,
+        target_feed_config=current["feed_config"],
+        target_provider_contracts=current["provider_contracts"],
+        target_feed_schema=current["feed_schema"],
+    )
+
+    assert "semantic_context" in migrated["items"][0]
+    build_bundle(migrated)

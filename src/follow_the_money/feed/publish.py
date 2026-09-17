@@ -289,7 +289,7 @@ def publish_bundle(
                 key=item_total_order_key,
             )
             candidate_feed = reconstruct_feed(bundle.manifest, candidate_items)
-            validate_feed(candidate_feed)
+            validate_feed(candidate_feed, current_production=True)
             assert_feed_identity(candidate_feed)
         except (BundleError, OSError, SchemaError, TypeError, ValueError) as inner:
             raise PublishError(f"candidate Feed bundle is invalid: {inner}") from exc

@@ -29,6 +29,9 @@ from zoneinfo import ZoneInfo
 
 from ..config.model import ProviderEntry
 from ..schema import SchemaError
+from ..semantic.macro import build_macro_context
+from ..semantic.news import build_news_context
+from ..semantic.policy import build_policy_context
 from .base import Provider, ProviderRegistry
 from .cftc_cot import compare_reports, publication_boundary, select_report_dates
 from .http import (
@@ -121,6 +124,25 @@ class BaseAdapter(Provider):
             "knowledge_available_at": _normalize_timestamp(knowledge),
         }
 
+    def _attach_semantic_context(
+        self, item: dict[str, Any], *, source_record: Mapping[str, Any] | None = None
+    ) -> dict[str, Any]:
+        payload = item.get("payload")
+        source = item.get("source")
+        if not isinstance(payload, Mapping) or not isinstance(source, Mapping):
+            raise SchemaError("normalized item cannot construct semantic context")
+        payload_type = payload.get("type")
+        if payload_type == "news":
+            context = build_news_context(self.provider_id, payload, source)
+        elif payload_type == "macro_release":
+            context = build_macro_context(self.provider_id, payload, source_record or {})
+        elif payload_type == "policy":
+            context = build_policy_context(self.provider_id, payload, source)
+        else:
+            return item
+        item["semantic_context"] = context.to_dict()
+        return item
+
     def _rss_items(
         self,
         raw: Any,
@@ -165,14 +187,13 @@ class BaseAdapter(Provider):
             else:
                 payload["announced_at"] = published_iso
             payload["raw_metadata"] = {}
-            items.append(
-                {
-                    "id": stable_item_id(self.provider_id, entry.get("id", link)),
-                    "provider_id": self.provider_id,
-                    "source": source,
-                    "payload": payload,
-                }
-            )
+            item = {
+                "id": stable_item_id(self.provider_id, entry.get("id", link)),
+                "provider_id": self.provider_id,
+                "source": source,
+                "payload": payload,
+            }
+            items.append(self._attach_semantic_context(item))
         return items
 
     def _json_body(self, raw: Any) -> Any:
@@ -1123,19 +1144,18 @@ class PbocAdapter(BaseAdapter):
                 published_at=published,
                 knowledge=published,
             )
-            items.append(
-                {
-                    "id": stable_item_id(self.provider_id, url),
-                    "provider_id": self.provider_id,
-                    "source": source,
-                    "payload": {
-                        "type": "policy",
-                        "title": title[:300],
-                        "announced_at": published,
-                        "raw_metadata": {},
-                    },
-                }
-            )
+            item = {
+                "id": stable_item_id(self.provider_id, url),
+                "provider_id": self.provider_id,
+                "source": source,
+                "payload": {
+                    "type": "policy",
+                    "title": title[:300],
+                    "announced_at": published,
+                    "raw_metadata": {},
+                },
+            }
+            items.append(self._attach_semantic_context(item))
         return items
 
 
@@ -1208,14 +1228,13 @@ class NbsAdapter(BaseAdapter):
                     "occurred_at": released,
                     "raw_metadata": {},
                 }
-            items.append(
-                {
-                    "id": stable_item_id(self.provider_id, url),
-                    "provider_id": self.provider_id,
-                    "source": source,
-                    "payload": payload,
-                }
-            )
+            item = {
+                "id": stable_item_id(self.provider_id, url),
+                "provider_id": self.provider_id,
+                "source": source,
+                "payload": payload,
+            }
+            items.append(self._attach_semantic_context(item, source_record=entry))
         return items
 
 
@@ -1246,20 +1265,19 @@ class SseAdapter(BaseAdapter):
                 published_at=published,
                 knowledge=published,
             )
-            items.append(
-                {
-                    "id": stable_item_id(self.provider_id, url),
-                    "provider_id": self.provider_id,
-                    "source": source,
-                    "payload": {
-                        "type": "news",
-                        "title": title[:300],
-                        "snippet": entry.get("snippet", "")[:1000],
-                        "occurred_at": published,
-                        "raw_metadata": {},
-                    },
-                }
-            )
+            item = {
+                "id": stable_item_id(self.provider_id, url),
+                "provider_id": self.provider_id,
+                "source": source,
+                "payload": {
+                    "type": "news",
+                    "title": title[:300],
+                    "snippet": entry.get("snippet", "")[:1000],
+                    "occurred_at": published,
+                    "raw_metadata": {},
+                },
+            }
+            items.append(self._attach_semantic_context(item))
         return items
 
 
@@ -1290,20 +1308,19 @@ class SzseAdapter(BaseAdapter):
                 published_at=published,
                 knowledge=published,
             )
-            items.append(
-                {
-                    "id": stable_item_id(self.provider_id, url),
-                    "provider_id": self.provider_id,
-                    "source": source,
-                    "payload": {
-                        "type": "news",
-                        "title": title[:300],
-                        "snippet": entry.get("snippet", "")[:1000],
-                        "occurred_at": published,
-                        "raw_metadata": {},
-                    },
-                }
-            )
+            item = {
+                "id": stable_item_id(self.provider_id, url),
+                "provider_id": self.provider_id,
+                "source": source,
+                "payload": {
+                    "type": "news",
+                    "title": title[:300],
+                    "snippet": entry.get("snippet", "")[:1000],
+                    "occurred_at": published,
+                    "raw_metadata": {},
+                },
+            }
+            items.append(self._attach_semantic_context(item))
         return items
 
 

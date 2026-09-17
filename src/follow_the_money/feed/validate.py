@@ -43,6 +43,10 @@ from follow_the_money.semantic import (  # pyright: ignore[reportMissingImports]
 from follow_the_money.semantic import (
     validate_numeric_token as _validate_numeric_token,
 )
+from follow_the_money.semantic.context import SemanticContext
+from follow_the_money.semantic.macro import build_macro_context
+from follow_the_money.semantic.news import build_news_context
+from follow_the_money.semantic.policy import build_policy_context
 
 from ..canonical import canonical_digest
 from ..config.model import REQUIRED_COVERAGE_GROUPS, FreshnessContract
@@ -136,7 +140,12 @@ def validate_canonical_numeric(value: str, *, where: str) -> None:
     _validate_canonical_numeric(value, where=where)
 
 
-def validate_feed(feed: Mapping[str, Any], *, allow_previous: bool = False) -> None:
+def validate_feed(
+    feed: Mapping[str, Any],
+    *,
+    allow_previous: bool = False,
+    current_production: bool = False,
+) -> None:
     """Full semantic validation of the current Feed object.
 
     The previous major is accepted only by explicit bounded migration callers.
@@ -153,6 +162,7 @@ def validate_feed(feed: Mapping[str, Any], *, allow_previous: bool = False) -> N
     if schema_version == SUPPORTED_FEED_MAJOR:
         _validate_five_domain_surface(feed)
         _validate_versioned_semantics(feed)
+        _validate_semantic_contexts(feed, current_production=current_production)
     _validate_freshness_outcomes(feed)
 
     window = feed["window"]
@@ -2312,6 +2322,171 @@ def _validate_numerics(items: list[Any], *, legacy: bool = False) -> None:
                     validate_canonical_numeric(
                         str(obs["volume"]), where=f"{where}.observations[].volume"
                     )
+
+
+def _validate_context_order(context: Mapping[str, Any], *, where: str) -> None:
+    entities = context.get("entities")
+    if not isinstance(entities, list) or not all(
+        isinstance(entity, Mapping) for entity in entities
+    ):
+        raise SchemaError(f"{where}.entities must be an array of objects")
+    entity_keys = [
+        (entity.get("role"), entity.get("name"), entity.get("type")) for entity in entities
+    ]
+    if entity_keys != sorted(entity_keys) or len(entity_keys) != len(set(entity_keys)):
+        raise SchemaError(f"{where}.entities must be unique and in total order")
+    facts = context.get("numeric_facts")
+    if not isinstance(facts, list) or not all(isinstance(fact, Mapping) for fact in facts):
+        raise SchemaError(f"{where}.numeric_facts must be an array of objects")
+    fact_keys = [(fact.get("metric"), fact.get("role")) for fact in facts]
+    if fact_keys != sorted(fact_keys) or len(fact_keys) != len(set(fact_keys)):
+        raise SchemaError(f"{where}.numeric_facts must be unique and in total order")
+    extension = context.get("extension")
+    if not isinstance(extension, Mapping):
+        raise SchemaError(f"{where}.extension must be an object")
+    if extension.get("type") == "policy":
+        scopes = extension.get("affected_scope")
+        if not isinstance(scopes, list) or not all(isinstance(scope, str) for scope in scopes):
+            raise SchemaError(f"{where}.extension.affected_scope must be an array of strings")
+        if scopes != sorted(set(scopes)):
+            raise SchemaError(f"{where}.extension.affected_scope must be unique and in total order")
+
+
+def _validate_news_context(
+    item: Mapping[str, Any], context: Mapping[str, Any], *, where: str
+) -> None:
+    try:
+        expected = build_news_context(item["provider_id"], item["payload"], item["source"])
+    except (SchemaError, TypeError, ValueError) as exc:
+        raise SchemaError(f"{where}: Provider-local news mapping is unavailable") from exc
+    if expected.to_dict() != context:
+        raise SchemaError(f"{where}: semantic context does not match the closed Provider mapping")
+
+
+def _macro_source_record(context: Mapping[str, Any]) -> dict[str, Any]:
+    revision = context["extension"].get("revision")
+    if revision is None:
+        return {}
+    period = context["extension"].get("period")
+    period_value = period.get("period") if isinstance(period, Mapping) else None
+    return {
+        "revision": {
+            "period": period_value,
+            "previous": revision["previous"]["value"],
+            "revised": revision["revised"]["value"],
+            "unit": revision["previous"]["unit"],
+        }
+    }
+
+
+def _validate_macro_context(
+    item: Mapping[str, Any], context: Mapping[str, Any], *, where: str
+) -> None:
+    try:
+        expected = build_macro_context(
+            item["provider_id"], item["payload"], _macro_source_record(context)
+        )
+    except (SchemaError, TypeError, ValueError) as exc:
+        raise SchemaError(f"{where}: Provider-local macro mapping is unavailable") from exc
+    if expected.to_dict() != context:
+        raise SchemaError(f"{where}: semantic context does not match the closed Provider mapping")
+
+
+def _validate_policy_context(
+    item: Mapping[str, Any], context: Mapping[str, Any], *, where: str
+) -> None:
+    try:
+        expected = build_policy_context(item["provider_id"], item["payload"], item["source"])
+    except (SchemaError, TypeError, ValueError) as exc:
+        raise SchemaError(f"{where}: Provider-local policy mapping is unavailable") from exc
+    if expected.to_dict() != context:
+        raise SchemaError(f"{where}: semantic context does not match the closed Provider mapping")
+
+
+def _reject_forbidden_context_members(value: Any, *, where: str) -> None:
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            if key in _FORBIDDEN_INTELLIGENCE_KEYS:
+                raise SchemaError(f"{where}: forbidden analytical member {key!r}")
+            _reject_forbidden_context_members(nested, where=f"{where}.{key}")
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            _reject_forbidden_context_members(nested, where=f"{where}[{index}]")
+
+
+def _validate_semantic_contexts(feed: Mapping[str, Any], *, current_production: bool) -> None:
+    context_types = {"news", "macro_release", "policy"}
+    affected_items_by_provider: dict[str, list[Mapping[str, Any]]] = {}
+    for item in feed.get("items", []):
+        if not isinstance(item, Mapping):
+            continue
+        payload = item.get("payload")
+        if not isinstance(payload, Mapping):
+            continue
+        payload_type = payload.get("type")
+        context = item.get("semantic_context")
+        if payload_type not in context_types:
+            if context is not None:
+                raise SchemaError("semantic_context is outside the News/Macro/Policy boundary")
+            continue
+        provider_id = item.get("provider_id")
+        if isinstance(provider_id, str):
+            affected_items_by_provider.setdefault(provider_id, []).append(item)
+        if context is None:
+            continue
+        where = f"items[{item.get('id')!r}].semantic_context"
+        if not isinstance(context, Mapping):
+            raise SchemaError(f"{where}: context must be an object")
+        _reject_forbidden_context_members(context, where=where)
+        parsed = SemanticContext.from_dict(context)
+        if parsed.to_dict() != dict(context):
+            raise SchemaError(f"{where}: context arrays/text are not canonical")
+        _validate_context_order(context, where=where)
+        extension_type = context["extension"]["type"]
+        if extension_type != payload_type:
+            raise SchemaError(f"{where}: extension type does not match payload type")
+        if payload_type == "news":
+            _validate_news_context(item, context, where=where)
+        elif payload_type == "macro_release":
+            _validate_macro_context(item, context, where=where)
+        else:
+            _validate_policy_context(item, context, where=where)
+
+    if not current_production:
+        return
+    outcomes = {
+        outcome.get("provider_id"): outcome
+        for outcome in feed.get("provider_outcomes", [])
+        if isinstance(outcome, Mapping)
+    }
+    for provider_id, items in affected_items_by_provider.items():
+        missing_context = [item for item in items if "semantic_context" not in item]
+        if not missing_context:
+            continue
+        if len(missing_context) != len(items):
+            raise SchemaError(
+                "current production cannot mix items with and without semantic_context"
+            )
+        outcome = outcomes.get(provider_id)
+        freshness = outcome.get("freshness") if isinstance(outcome, Mapping) else None
+        carried = (
+            freshness.get("carried_forward_from_run_id") if isinstance(freshness, Mapping) else None
+        )
+        if not (
+            isinstance(outcome, Mapping)
+            and outcome.get("state") == "healthy"
+            and outcome.get("availability") == "success"
+            and _is_true(outcome.get("succeeded"))
+            and not _is_true(outcome.get("partial"))
+            and not _is_true(outcome.get("failed"))
+            and isinstance(freshness, Mapping)
+            and freshness.get("status") in {"valid_unchanged", "stale"}
+            and isinstance(carried, str)
+            and carried
+        ):
+            raise SchemaError(
+                f"items for Provider {provider_id!r} require semantic_context in current production"
+            )
 
 
 def _validate_calendar_horizon(feed: Mapping[str, Any]) -> None:
