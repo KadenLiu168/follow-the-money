@@ -239,7 +239,7 @@ def _validated_inventory_paths(
         if domain in seen:
             raise BundleError(f"duplicate Feed artifact domain: {domain}")
         seen.add(domain)
-        expected = _artifact_relative_path_for_version(domain, manifest["run_id"], int(version))
+        expected = _artifact_relative_path_for_version(domain, manifest["run_id"], version)
         paths.append(_validated_artifact_relative_path(entry["path"], expected))
     if seen != set(domains):
         raise BundleError("Feed manifest inventory is incomplete")
@@ -277,7 +277,7 @@ def _validate_inventory(
     for entry, relative in zip(manifest["artifacts"], paths, strict=True):
         domain = entry["domain"]
         expected = _artifact_relative_path_for_version(
-            domain, manifest["run_id"], int(manifest["schema_version"])
+            domain, manifest["run_id"], manifest["schema_version"]
         )
         path = _safe_artifact_path(root, relative, expected)
         result.append((domain, path, entry))
@@ -518,6 +518,7 @@ def migrate_feed(
             if freshness.get("status") in {"fresh", "valid_unchanged", "stale"}:
                 freshness["origin_contract_hash"] = target_hashes[provider_id]
             outcome["freshness"] = freshness
+        empty_valid = target_contracts[provider_id].get("empty_valid_for_window")
         if (
             outcome.get("availability") == "blocked"
             and outcome.get("upstream_http_status") in {401, 403}
@@ -527,8 +528,7 @@ def migrate_feed(
         ):
             blocked_ids.add(provider_id)
         elif outcome.get("state") == "healthy" or (
-            outcome.get("state") == "empty"
-            and target_contracts[provider_id].get("empty_valid_for_window") is True
+            outcome.get("state") == "empty" and isinstance(empty_valid, bool) and empty_valid
         ):
             complete_ids.add(provider_id)
         else:

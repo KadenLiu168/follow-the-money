@@ -17,7 +17,7 @@ from urllib.parse import urljoin, urlsplit
 
 from ..config.model import FetchRule, ProviderEntry
 from .http import FetchError, _parse_retry_after, _validate_fetch_url
-from .rate import RateRegistry, RateStateError, eligibility_delay, refill_tokens
+from .rate import RateRegistry, RateStateError, ScopeState, eligibility_delay, refill_tokens
 
 MAX_REDIRECT_HOPS = 5
 
@@ -27,6 +27,23 @@ def _host_key(url: str) -> str:
     host = (parts.hostname or "").rstrip(".").lower()
     port = parts.port or 443
     return f"{host}:{port}"
+
+
+def _settle_rate_state(
+    rate: RateRegistry | None,
+    state: ScopeState | None,
+    *,
+    dispatched: bool,
+    reconciled: bool,
+    now: Callable[[], datetime],
+) -> bool:
+    if rate is None or state is None or reconciled:
+        return reconciled
+    if dispatched:
+        rate.reconcile(state, now=now)
+    else:
+        rate.refund(state, now=now)
+    return True
 
 
 class ManagedProviderClient:
@@ -100,7 +117,10 @@ class ManagedProviderClient:
                 timeout=timeout,
                 rules=self.provider.fetch_hosts if hop == 0 else self.provider.redirect_hosts,
             )
-            status = int(getattr(response, "status_code", 0))
+            try:
+                status = int(getattr(response, "status_code", 0))
+            except (OverflowError, TypeError, ValueError) as exc:
+                raise FetchError("response status is invalid", response_observed=True) from exc
             if not follow_redirects or status not in {301, 302, 303, 307, 308}:
                 self._set_response_url(response, current_url)
                 return response
@@ -181,9 +201,13 @@ class ManagedProviderClient:
             except RateStateError:
                 raise
             except Exception as exc:  # transport errors are typed once
-                if state is not None and self.rate is not None:
-                    self.rate.reconcile(state, now=self.now_fn)
-                    reconciled = True
+                reconciled = _settle_rate_state(
+                    self.rate,
+                    state,
+                    dispatched=True,
+                    reconciled=reconciled,
+                    now=self.now_fn,
+                )
                 if isinstance(exc, FetchError):
                     exc.response_observed = True
                     exc.acquisition_progress = self.successful_resource_observed
@@ -226,22 +250,26 @@ class ManagedProviderClient:
         except RateStateError:
             raise
         except FetchError as exc:
-            if state is not None and self.rate is not None and not reconciled:
-                # Errors raised before dispatch (URL/deadline/gate) refund the
-                # provisional debit; post-dispatch errors reconcile exactly
-                # once. Response errors are reconciled at the return boundary.
-                if dispatched:
-                    self.rate.reconcile(state, now=self.now_fn)
-                else:
-                    self.rate.refund(state, now=self.now_fn)
+            # Errors raised before dispatch (URL/deadline/gate) refund the
+            # provisional debit; post-dispatch errors reconcile exactly once.
+            # Response errors are reconciled at the return boundary.
+            _settle_rate_state(
+                self.rate,
+                state,
+                dispatched=dispatched,
+                reconciled=reconciled,
+                now=self.now_fn,
+            )
             exc.acquisition_progress = self.successful_resource_observed
             raise
         except Exception:
-            if state is not None and self.rate is not None and not reconciled:
-                if dispatched:
-                    self.rate.reconcile(state, now=self.now_fn)
-                else:
-                    self.rate.refund(state, now=self.now_fn)
+            _settle_rate_state(
+                self.rate,
+                state,
+                dispatched=dispatched,
+                reconciled=reconciled,
+                now=self.now_fn,
+            )
             raise
         finally:
             if host_acquired:

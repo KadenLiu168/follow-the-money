@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -115,7 +116,11 @@ def _news(item_id: str = "item-1", at: datetime = T0 - timedelta(hours=1)) -> di
 
 
 def _coverage_groups(provider_id: str) -> list[str]:
-    return sorted(row["group"] for row in COVERAGE if provider_id in row["members"])
+    return sorted(
+        cast(str, row["group"])
+        for row in COVERAGE
+        if provider_id in cast(list[str], row["members"])
+    )
 
 
 def _feed(items: list[dict] | None = None) -> dict:
@@ -124,7 +129,7 @@ def _feed(items: list[dict] | None = None) -> dict:
     outcomes = []
     for provider_id in PROVIDERS:
         cadence = "weekly" if provider_id == "cftc" else "event_driven"
-        freshness = {
+        freshness: dict[str, str | int] = {
             "cadence": cadence,
             "reference_time": "data_as_of" if cadence == "weekly" else "checked_at",
         }

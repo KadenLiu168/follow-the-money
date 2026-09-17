@@ -56,7 +56,10 @@ def _fsync_dir(path: Path) -> None:
 
 
 def _same_device(a: Path, b: Path) -> bool:
-    return os.stat(a).st_dev == os.stat(b).st_dev
+    try:
+        return os.stat(a).st_dev == os.stat(b).st_dev
+    except OSError as exc:
+        raise PublishError(f"cannot inspect staging paths: {exc}") from exc
 
 
 def _stage_bytes(parent: Path, data: bytes) -> Path:
@@ -73,15 +76,14 @@ def _stage_bytes(parent: Path, data: bytes) -> Path:
         finally:
             os.close(fd)
         _fsync_file(tmp)
+        if not _same_device(tmp, parent):
+            raise PublishError("staging file on a different device than parent")
     except BaseException:
         try:
             tmp.unlink()
         except FileNotFoundError:
             pass
         raise
-    if not _same_device(tmp, parent):
-        tmp.unlink()
-        raise PublishError("staging file on a different device than parent")
     return tmp
 
 

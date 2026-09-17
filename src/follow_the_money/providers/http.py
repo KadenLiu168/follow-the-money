@@ -188,7 +188,7 @@ def _validate_fetch_url(url: str, rules: Sequence[Any], *, where: str) -> None:
         host_match = normalized_host == rule_host or (
             bool(rule.allow_subdomains) and normalized_host.endswith(f".{rule_host}")
         )
-        if host_match and effective_port in tuple(int(p) for p in rule.allowed_ports):
+        if host_match and effective_port in rule.allowed_ports:
             return
     raise FetchError(f"{where} outside manifest host allowlist")
 
@@ -198,7 +198,10 @@ def _parse_retry_after(value: Any, *, now_fn: Callable[[], datetime] | None = No
         return None
     text = str(value).strip()
     if text.isdigit():
-        return int(text)
+        try:
+            return int(text)
+        except ValueError:
+            return None
     try:
         parsed = parsedate_to_datetime(text)
     except (TypeError, ValueError, OverflowError):
@@ -206,7 +209,11 @@ def _parse_retry_after(value: Any, *, now_fn: Callable[[], datetime] | None = No
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     clock = now_fn or (lambda: datetime.now(UTC))
-    return max(0, int((parsed.astimezone(UTC) - clock().astimezone(UTC)).total_seconds()))
+    try:
+        seconds = int((parsed.astimezone(UTC) - clock().astimezone(UTC)).total_seconds())
+    except (OverflowError, TypeError, ValueError):
+        return None
+    return max(0, seconds)
 
 
 def safe_parse_rss(body: bytes, *, charset: str = "utf-8") -> Any:

@@ -848,7 +848,10 @@ def _sanitize_diagnostic_text(value: str) -> str:
 
 
 def _read_diagnostic_status(path: Path) -> dict[str, Any]:
-    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("diagnostic status is not readable") from exc
     if not isinstance(raw, dict) or raw.get("status") not in {"failure", "degraded"}:
         raise ValueError("diagnostic status is not renderable")
 
