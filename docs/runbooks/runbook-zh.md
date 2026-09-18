@@ -24,6 +24,16 @@ required Provider 的 failed/incomplete 结果会产生 typed failure，不会�
 不要手工编辑 Feed identity、artifact hash、checkpoint、rate state 或 lease。
 上一版八域 product 必须先经过显式 bounded migration；mixed generation 无效。
 
+## 恢复运行
+
+当生产 runtime state 被污染（例如 registry 的 `root_identity` 来自非 Runner
+机器）时，恢复走 git 层 restore commit：`.feed-state/` 从受信基线 commit
+原样恢复、无效的 `feeds/` product 直接删除——绝不就地手工编辑，也绝不删除
+重建 bootstrap。其后一次手动 workflow dispatch 即为正常 armed run
+（`prepare` → `collect` → `finalize`）：窗口规划从恢复的 checkpoint 出发，
+checkpoint 间隔超过配置上限时采用 bounded 72h bootstrap 回看，并把未覆盖
+区间作为显式 coverage gap 记录。
+
 ## Consumer 边界
 
 Skill 使用 `scripts/skill/prepare-feed` 获取并校验 canonical manifest 及其五个

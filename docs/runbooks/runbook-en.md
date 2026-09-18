@@ -31,6 +31,18 @@ fixtures for testing. A previous eight-domain product must use the explicit
 bounded migration path before it can become current; mixed generations are
 invalid.
 
+## Recovery runs
+
+When production runtime state is contaminated (for example, a registry
+`root_identity` from a non-runner machine), recovery is a git-level restore
+commit: `.feed-state/` is restored verbatim from the trusted baseline commit
+and an invalid `feeds/` product is deleted — never hand-edited in place and
+never re-bootstrapped. The next manually dispatched workflow run is a normal
+armed run (`prepare` → `collect` → `finalize`); it plans from the restored
+checkpoint, and a checkpoint gap beyond the configured maximum uses the bounded
+72-hour bootstrap lookback while recording the uncovered interval as an
+explicit coverage gap.
+
 ## Consumer boundary
 
 The Skill uses `scripts/skill/prepare-feed`, which retrieves and validates the
