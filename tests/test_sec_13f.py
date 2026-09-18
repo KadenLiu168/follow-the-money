@@ -80,6 +80,94 @@ def xml(rows, *, header=True):
     ).encode()
 
 
+def prefixed_table(rows, *, prefix="ns1"):
+    values = []
+    for row in rows:
+        values.append(
+            f"<{prefix}:infoTable>"
+            f"<{prefix}:nameOfIssuer>{row.get('issuer', 'Issuer')}</{prefix}:nameOfIssuer>"
+            f"<{prefix}:titleOfClass>{row.get('title', 'Class')}</{prefix}:titleOfClass>"
+            f"<{prefix}:cusip>{row['cusip']}</{prefix}:cusip>"
+            f"<{prefix}:value>{row['value']}</{prefix}:value>"
+            f"<{prefix}:shrsOrPrnAmt><{prefix}:sshPrnamt>{row['amount']}</{prefix}:sshPrnamt>"
+            f"<{prefix}:sshPrnamtType>SH</{prefix}:sshPrnamtType>"
+            f"</{prefix}:shrsOrPrnAmt></{prefix}:infoTable>"
+        )
+    return (
+        f'<{prefix}:informationTable xmlns:{prefix}="http://www.sec.gov/edgar/document/thirteenf/informationtable">'
+        + "".join(values)
+        + f"</{prefix}:informationTable>"
+    )
+
+
+# Synthetic production-shaped regression derived from the namespace shape observed in SEC 13F
+# complete submissions (a prefixed INFORMATION TABLE document published alongside a
+# default-namespace primary document); it is not an official filing copy.
+_PRODUCTION_SHAPED_SUBMISSION = b"""<SEC-DOCUMENT>0000000001-23-000001.txt : 20230103
+<SEC-HEADER>0000000001-23-000001.hdr.sgml : 20230103
+<ACCEPTANCE-DATETIME>20230103160000
+ACCESSION NUMBER:\t\t0000000001-23-000001
+CONFORMED SUBMISSION TYPE:\t13F-HR
+PUBLIC DOCUMENT COUNT:\t\t2
+CONFORMED PERIOD OF REPORT:\t20221231
+FILED AS OF DATE:\t\t20230103
+
+FILER:
+
+\tCOMPANY DATA:
+\t\tCOMPANY CONFORMED NAME:\t\t\tExample Manager LP
+\t\tCENTRAL INDEX KEY:\t\t\t0000000001
+\t\tFISCAL YEAR END:\t\t\t1231
+
+<DOCUMENT>
+<TYPE>13F-HR
+<SEQUENCE>1
+<FILENAME>primary_doc.xml
+<XML>
+<?xml version="1.0" encoding="UTF-8"?>
+<edgarSubmission xmlns="http://www.sec.gov/edgar/thirteenffiler">
+<headerData><filerInfo><filer><credentials><cik>0000000001</cik></credentials></filer>
+<periodOfReport>12-31-2022</periodOfReport></filerInfo></headerData>
+<formData><coverPage><reportCalendarOrQuarter>12-31-2022</reportCalendarOrQuarter></coverPage></formData>
+</edgarSubmission>
+</XML>
+</DOCUMENT>
+
+<DOCUMENT>
+<TYPE>INFORMATION TABLE
+<SEQUENCE>2
+<FILENAME>form13fInfoTable.xml
+<XML>
+<?xml version="1.0" encoding="UTF-8"?>
+<ns1:informationTable xmlns:ns1="http://www.sec.gov/edgar/document/thirteenf/informationtable">
+<ns1:infoTable>
+<ns1:nameOfIssuer>APPLE INC</ns1:nameOfIssuer>
+<ns1:titleOfClass>COM</ns1:titleOfClass>
+<ns1:cusip>037833100</ns1:cusip>
+<ns1:figi>BBG000B9XRY4</ns1:figi>
+<ns1:value>1234567</ns1:value>
+<ns1:shrsOrPrnAmt>
+<ns1:sshPrnamt>1234</ns1:sshPrnamt>
+<ns1:sshPrnamtType>SH</ns1:sshPrnamtType>
+</ns1:shrsOrPrnAmt>
+</ns1:infoTable>
+<ns1:infoTable>
+<ns1:nameOfIssuer>MICROSOFT CORP</ns1:nameOfIssuer>
+<ns1:titleOfClass>COM</ns1:titleOfClass>
+<ns1:cusip>594918104</ns1:cusip>
+<ns1:value>3400</ns1:value>
+<ns1:shrsOrPrnAmt>
+<ns1:sshPrnamt>12</ns1:sshPrnamt>
+<ns1:sshPrnamtType>SH</ns1:sshPrnamtType>
+</ns1:shrsOrPrnAmt>
+</ns1:infoTable>
+</ns1:informationTable>
+</XML>
+</DOCUMENT>
+</SEC-DOCUMENT>
+"""
+
+
 def test_selection_uses_acceptance_cutoff_exact_form_and_distinct_report_period():
     raw = submissions(
         [
@@ -327,6 +415,119 @@ def test_conflicting_authority_and_ambiguous_or_malformed_tables_fail_closed():
         parse_complete_submission(
             b"<XML><informationTable><infoTable>", candidate(), source_url="https://www.sec.gov/a"
         )
+
+
+def test_production_shaped_prefixed_information_table_parses():
+    filing = parse_complete_submission(
+        _PRODUCTION_SHAPED_SUBMISSION,
+        candidate(),
+        source_url="https://www.sec.gov/Archives/edgar/data/1/000000000123000001/0000000001-23-000001.txt",
+    )
+    assert filing.value_normalization == {
+        "source_unit": "usd",
+        "formula_id": "usd_divided_by_1000",
+    }
+    assert [row["security"]["cusip"] for row in filing.holdings] == ["037833100", "594918104"]
+    assert filing.holdings[0]["security"]["issuer_name"] == "APPLE INC"
+    assert filing.holdings[0]["security"]["figi"] == "BBG000B9XRY4"
+    assert filing.holdings[0]["reported_amount"]["value"] == "1234"
+    assert filing.holdings[0]["reported_value_usd_thousands"]["value"] == "1234.567"
+
+
+def test_arbitrary_prefix_with_companion_document_selects_only_information_table():
+    rows = [
+        {
+            "cusip": "037833100",
+            "amount": "1234",
+            "value": "1234567",
+            "issuer": "APPLE INC",
+            "title": "COM",
+        },
+        {
+            "cusip": "594918104",
+            "amount": "12",
+            "value": "3400",
+            "issuer": "MICROSOFT CORP",
+            "title": "COM",
+        },
+    ]
+    body = (
+        '<SEC-DOCUMENT>\n<XML>\n<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<edgarSubmission xmlns="http://www.sec.gov/edgar/thirteenffiler">'
+        "<headerData><filerInfo><filer><credentials><cik>0000000001</cik></credentials></filer>"
+        "<periodOfReport>12-31-2022</periodOfReport></filerInfo></headerData>"
+        "</edgarSubmission>\n</XML>\n"
+        f"<XML>\n{prefixed_table(rows, prefix='sec')}\n</XML>\n</SEC-DOCUMENT>"
+    ).encode()
+    filing = parse_complete_submission(
+        body,
+        candidate(),
+        source_url="https://www.sec.gov/Archives/edgar/data/1/000000000123000001/0000000001-23-000001.txt",
+    )
+    assert [row["security"]["cusip"] for row in filing.holdings] == ["037833100", "594918104"]
+    assert filing.holdings[0]["security"]["issuer_name"] == "APPLE INC"
+    assert filing.holdings[0]["reported_amount"]["value"] == "1234"
+    assert filing.holdings[0]["reported_value_usd_thousands"]["value"] == "1234.567"
+
+
+def test_two_information_tables_in_any_namespace_form_still_fail_closed():
+    rows = [{"cusip": "037833100", "amount": "1234", "value": "1234567"}]
+    tables = (
+        "<XML>" + prefixed_table(rows, prefix="ns1") + "</XML>",
+        "<XML>" + prefixed_table(rows, prefix="sec") + "</XML>",
+        xml(rows, header=False).decode(),
+    )
+    for second in tables[1:]:
+        with pytest.raises(SchemaError, match="exactly one"):
+            parse_complete_submission(
+                (tables[0] + second).encode(), candidate(), source_url="https://www.sec.gov/a"
+            )
+
+
+def test_malformed_prefixed_information_table_keeps_malformed_classification():
+    with pytest.raises(SchemaError, match="malformed"):
+        parse_complete_submission(
+            b"<XML><ns1:informationTable><ns1:infoTable>",
+            candidate(),
+            source_url="https://www.sec.gov/a",
+        )
+
+
+def test_standalone_prefixed_information_table_parses_without_wrapper_or_header():
+    filing = parse_complete_submission(
+        prefixed_table(
+            [
+                {
+                    "cusip": "037833100",
+                    "amount": "1234",
+                    "value": "1234567",
+                    "issuer": "APPLE INC",
+                    "title": "COM",
+                }
+            ],
+            prefix="x",
+        ).encode(),
+        candidate(),
+        source_url="https://www.sec.gov/a",
+    )
+    assert filing.holdings[0]["security"]["cusip"] == "037833100"
+    assert filing.holdings[0]["security"]["issuer_name"] == "APPLE INC"
+    assert filing.holdings[0]["reported_amount"]["value"] == "1234"
+    assert filing.holdings[0]["reported_value_usd_thousands"]["value"] == "1234.567"
+
+
+def test_standalone_no_namespace_information_table_still_parses():
+    filing = parse_complete_submission(
+        b"<informationTable><infoTable>"
+        b"<nameOfIssuer>APPLE INC</nameOfIssuer><titleOfClass>COM</titleOfClass>"
+        b"<cusip>037833100</cusip><value>1234567</value>"
+        b"<shrsOrPrnAmt><sshPrnamt>1234</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt>"
+        b"</infoTable></informationTable>",
+        candidate(),
+        source_url="https://www.sec.gov/a",
+    )
+    assert filing.holdings[0]["security"]["cusip"] == "037833100"
+    assert filing.holdings[0]["reported_amount"]["value"] == "1234"
 
 
 def test_comparison_uses_amount_and_is_order_independent():

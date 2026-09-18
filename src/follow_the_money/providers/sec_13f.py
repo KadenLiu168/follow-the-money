@@ -200,18 +200,22 @@ def select_filings(
 def _extract_document(body: bytes | str) -> ET.Element:
     text = body.decode("utf-8") if isinstance(body, bytes) else str(body)
     documents = re.findall(r"<XML\s*>(.*?)</XML\s*>", text, flags=re.IGNORECASE | re.DOTALL)
-    if not documents and re.search(r"<\s*informationTable(?:\s|>)", text, flags=re.IGNORECASE):
+    if not documents:
         documents = [text]
-    tables: list[str] = []
+    tables: list[ET.Element] = []
     for document in documents:
-        if re.search(r"<\s*informationTable(?:\s|>)", document, flags=re.IGNORECASE):
-            tables.append(document.strip())
+        candidate = document.strip()
+        try:
+            root = ET.fromstring(candidate)
+        except ET.ParseError as exc:
+            if re.search(r"informationTable", candidate, flags=re.IGNORECASE):
+                raise SchemaError("SEC INFORMATION TABLE XML is malformed") from exc
+            continue
+        if root.tag.rsplit("}", 1)[-1] == "informationTable":
+            tables.append(root)
     if len(tables) != 1:
         raise SchemaError("SEC submission must contain exactly one INFORMATION TABLE XML document")
-    try:
-        return ET.fromstring(tables[0])
-    except ET.ParseError as exc:
-        raise SchemaError("SEC INFORMATION TABLE XML is malformed") from exc
+    return tables[0]
 
 
 def _header_value(text: str, label: str) -> str | None:
