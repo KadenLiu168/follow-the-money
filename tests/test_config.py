@@ -390,3 +390,56 @@ def test_config_snapshot_has_no_runtime_root_or_removed_surface():
     from follow_the_money.canonical import canonical_digest
 
     assert canonical_digest(changed) != canonical_digest(snapshot)
+
+
+VERIFIED_WATCHED_CIKS = (
+    "0000949509",
+    "0001061768",
+    "0001067983",
+    "0001135730",
+    "0001167483",
+    "0001336528",
+    "0001649339",
+    "0001697748",
+)
+
+
+def test_shipped_watched_company_ciks_are_exact_and_runtime_ordered():
+    """Pin the shipped watched-CIK set and its runtime-derived CIK ordering.
+
+    The exact set is the verified SEC identity set documented in
+    `references/provider-source-verification.md`. `config/config.yaml` is
+    deliberately not in CIK order, so a snapshot that matches the checked-in
+    order instead of normalized-CIK order fails this regression.
+    """
+    cfg = _load()
+    from follow_the_money.feed.cli import _feed_config_snapshot
+
+    checked_in = [company.cik for company in cfg.watched_companies]
+    assert set(checked_in) == set(VERIFIED_WATCHED_CIKS)
+    assert checked_in != sorted(checked_in)
+
+    snapshot = _feed_config_snapshot(cfg)["snapshot"]
+    assert [company["cik"] for company in snapshot["watched_companies"]] == sorted(
+        VERIFIED_WATCHED_CIKS
+    )
+
+
+def test_watched_company_cik_selection_is_fail_closed(tmp_path: Path):
+    for mutation, message in (
+        (lambda value: value["watched_companies"][0].update({"cik": "1067983"}), "normalized"),
+        (
+            lambda value: value["watched_companies"].append(
+                {"cik": "0001067983", "name": "Duplicate", "tickers": []}
+            ),
+            "duplicate",
+        ),
+    ):
+        case_root = tmp_path / message
+        case_root.mkdir()
+        config, providers, manifests = _copy_contracts(case_root)
+        value = _yaml(config)
+        mutation(value)
+        _write(config, value)
+        with pytest.raises(ConfigError, match=message):
+            _load(config, providers, manifests)

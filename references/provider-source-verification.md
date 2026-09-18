@@ -74,6 +74,47 @@ the actual reported token and performs only exact unit conversion, aggregation,
 and subtraction. No magnitude-based correction is permitted even if a filer
 appears to have reported the wrong scale.
 
+## SEC 13F watched-company CIK identities
+
+### Official authority inspected
+
+- Agency: Securities and Exchange Commission, EDGAR submissions API.
+- Listing template: `https://data.sec.gov/submissions/CIK<10-digit-CIK>.json`.
+- All eight `watched_companies` entries in `config/config.yaml` were requested
+  from that template on 2026-09-18, credential-free, with an identifying
+  `User-Agent`. Every request returned HTTP 200 and the `name` recorded below.
+
+### Verified watched-company identities
+
+| Configuration label | Verified CIK | SEC submissions API `name` | Prior CIK | Prior CIK resolution, 2026-09-18 |
+| --- | --- | --- | --- | --- |
+| Berkshire Hathaway | `0001067983` | `BERKSHIRE HATHAWAY INC` | unchanged | n/a |
+| Pershing Square Capital | `0001336528` | `Pershing Square Capital Management, L.P.` | unchanged | n/a |
+| Scion Asset Management | `0001649339` | `Scion Asset Management, LLC` | `0001539579` | HTTP 200, `Bien Janet Lynn` (unrelated) |
+| Baupost Group | `0001061768` | `BAUPOST GROUP LLC/MA` | `0001535213` | HTTP 200, `Littel Christopher J.` (unrelated) |
+| Oaktree Capital Management | `0000949509` | `OAKTREE CAPITAL MANAGEMENT LP` | `0000926522` | HTTP 404 |
+| ARK Investment Management | `0001697748` | `ARK Investment Management LLC` | `0001499575` | HTTP 200, `Scorpion-Remmel Trust 2010` (unrelated) |
+| Tiger Global Management | `0001167483` | `TIGER GLOBAL MANAGEMENT LLC` | `0001160822` | HTTP 404 |
+| Coatue Management | `0001135730` | `COATUE MANAGEMENT LLC` | `0001098249` | HTTP 200, `ANNUITYNET INSURANCE AGENCY, INC.` (unrelated) |
+
+### Contract consequences
+
+- A CIK is an identity, not a label: six of the eight previously shipped values
+  were not the intended filer. SEC v4 acquires watched companies in sorted-CIK
+  order, so the first HTTP 404 (`0000926522`) failed the complete SEC slice and,
+  under complete-slice fail-closed semantics, made `us_company_filings`
+  deficient and the Feed unpublishable.
+- The configuration `name` is a presentation label; only the CIK set is
+  verified identity. Labels such as `Berkshire Hathaway` intentionally differ
+  from the API name `BERKSHIRE HATHAWAY INC`.
+- The verified CIK set above is the exact set asserted by the shipped
+  watched-CIK exact-set regression. A silent CIK change fails that regression
+  instead of silently drifting an acquisition target.
+- `_parse_watched_companies` rejects non-ten-digit and duplicate CIKs at static
+  resolution before Provider work or persistent mutation. The checked-in list
+  order is not CIK order; the embedded Feed configuration snapshot and
+  acquisition sort by normalized CIK at runtime.
+
 ## SEC Form 4 ownership XML and archive locator
 
 ### Official authority and bounded contract

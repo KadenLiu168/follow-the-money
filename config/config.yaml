@@ -44,12 +44,12 @@ source_families:
 watched_companies:
   - {cik: "0001067983", name: "Berkshire Hathaway", tickers: [BRK.A, BRK.B]}
   - {cik: "0001336528", name: "Pershing Square Capital", tickers: []}
-  - {cik: "0001539579", name: "Scion Asset Management", tickers: []}
-  - {cik: "0001535213", name: "Baupost Group", tickers: []}
-  - {cik: "0000926522", name: "Oaktree Capital Management", tickers: []}
-  - {cik: "0001499575", name: "ARK Investment Management", tickers: []}
-  - {cik: "0001160822", name: "Tiger Global Management", tickers: []}
-  - {cik: "0001098249", name: "Coatue Management", tickers: []}
+  - {cik: "0001649339", name: "Scion Asset Management", tickers: []}
+  - {cik: "0001061768", name: "Baupost Group", tickers: []}
+  - {cik: "0000949509", name: "Oaktree Capital Management", tickers: []}
+  - {cik: "0001697748", name: "ARK Investment Management", tickers: []}
+  - {cik: "0001167483", name: "Tiger Global Management", tickers: []}
+  - {cik: "0001135730", name: "Coatue Management", tickers: []}
 
 watched_form4_issuers:
   - {cik: "0001067983", name: "Berkshire Hathaway"}

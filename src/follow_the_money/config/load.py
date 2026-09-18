@@ -295,6 +295,8 @@ def _parse_watched_companies(raw: Any) -> tuple[WatchCompany, ...]:
             where=where,
         )
         cik = _as_nonempty_str(data["cik"], f"{where}.cik")
+        if not re.fullmatch(r"\d{10}", cik):
+            raise ConfigError(f"{where}.cik must be a normalized ten-digit CIK")
         name = _as_nonempty_str(data["name"], f"{where}.name")
         tickers = data["tickers"]
         if not isinstance(tickers, list) or any(
