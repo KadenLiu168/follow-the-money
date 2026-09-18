@@ -19,4 +19,4 @@
 
 ## 5. CI verification on GitHub
 
-- [ ] 5.1 Push to `main`, confirm the new `CI Quality Gate` run passes all steps (`classify_generated_state`, `Validate GitHub Actions semantics`, `Clean install`, `Credential-free test suite`, `Validate workflows and entry points`), and confirm the log no longer contains `fatal: Not a valid object name f7095a5`
+- [x] 5.1 Push to `main`, confirm the new `CI Quality Gate` run passes all steps (`classify_generated_state`, `Validate GitHub Actions semantics`, `Clean install`, `Credential-free test suite`, `Validate workflows and entry points`), and confirm the log no longer contains `fatal: Not a valid object name f7095a5`
