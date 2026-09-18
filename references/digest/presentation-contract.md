@@ -47,6 +47,51 @@ source-authored analytical or predictive statement to that source; do not
 present it as a Feed, Skill, or Host-Agent conclusion. A citation by itself is
 not semantic support.
 
+## Content-First Presentation Hierarchy
+
+Content-first is a semantic priority between the content and audit surfaces,
+not a ranking of Feed items. For a valid healthy Feed with presentable
+current-window updates, those updates are the primary substantive surface: the
+Digest first makes the available current Feed content readable. The secondary
+audit surface remains complete and includes Feed data status,
+`evidence_cutoff_at`, domain and Provider coverage, freshness, warnings,
+degradation, source availability, reconciliation, consolidation traceability,
+omission disclosure, and limitations. A healthy Digest must not lead with a
+full status, coverage, or reconciliation report as an audit-first preamble.
+
+This semantic priority does not prescribe fixed headings, heading levels,
+section order, visual style, or fixed Markdown structure. It does not make one
+item more important, significant, ranked, relevant, or analytical than
+another, and it does not add an analysis or relevance filter. Statement-local
+provenance or attribution remains sufficiently close to the factual statement,
+source-authored analysis, or consolidated summary that it supports; global
+Provider, coverage, and reconciliation metadata may remain in the secondary
+audit surface.
+
+A valid but degraded usable Feed may include a concise data-limitation caveat
+before affected content only when it materially affects interpretation. The
+caveat is narrow, does not replace the complete audit context, and must not
+present the Feed as healthy. Complete status, coverage, freshness, warnings,
+availability, degradation, and limitation information remains visible in the
+secondary audit surface.
+
+When there are zero presentable current-window updates in a valid Feed, the
+primary message accurately states that the current Feed window has no
+presentable updates. It creates no content from historical, external, inferred,
+or fabricated material. The message is followed by status, evidence cutoff,
+coverage, Provider or source availability, and applicable limitations that
+distinguish an empty window from collection or Provider problems.
+
+Content-first priority applies only after the Feed has been validated and
+prepared. It does not alter or bypass the existing fail-closed behavior: a
+retrieval, validation, or preparation failure still produces no normal Digest.
+
+Content-first changes presentation priority only. The shared compression
+contract remains mandatory: per-domain reconciliation, traceability to every
+supporting item in a consolidation, and omission disclosure remain visible
+audit information, without using importance or relevance as the presentation
+or omission rationale.
+
 ## Missing Evidence
 
 Null, explicitly unavailable, absent, and legacy-omitted values remain missing.
