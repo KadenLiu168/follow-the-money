@@ -573,7 +573,7 @@ def _accepted_item(provider_id: str, item_id: str) -> dict:
     from follow_the_money.semantic.policy import build_policy_context
 
     source_url = (
-        f"https://www.sec.gov/Archives/edgar/data/0001067983/{item_id}"
+        f"https://www.sec.gov/Archives/edgar/data/1067983/{item_id}"
         if provider_id == "sec_edgar"
         else f"https://www.federalreserve.gov/newsevents/pressreleases/{item_id}.htm"
     )

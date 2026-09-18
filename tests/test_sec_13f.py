@@ -281,7 +281,7 @@ def test_information_table_aggregates_rows_and_normalizes_dollars_exactly():
             ]
         ),
         candidate(),
-        source_url="https://www.sec.gov/Archives/edgar/data/0000000001/000000000123000001/0000000001-23-000001.txt",
+        source_url="https://www.sec.gov/Archives/edgar/data/1/000000000123000001/0000000001-23-000001.txt",
     )
     assert current.value_normalization == {
         "source_unit": "usd",

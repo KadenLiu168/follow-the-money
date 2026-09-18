@@ -99,7 +99,7 @@ def _form4_item() -> dict:
         "accession_number": "0000000001-23-000002",
         "filed_at": "2023-01-04T00:00:00.000Z",
         "accepted_at": "2023-01-04T12:00:00.000Z",
-        "document_url": "https://www.sec.gov/Archives/edgar/data/0000000001/form4.xml",
+        "document_url": "https://www.sec.gov/Archives/edgar/data/1/form4.xml",
         "issuer": {"cik": "0000000001", "name": "Issuer", "trading_symbol": "EXM"},
         "reporting_owners": [
             {
@@ -200,7 +200,7 @@ def _beneficial_ownership_item() -> dict:
         "schedule_family": "13D",
         "filed_at": "2023-01-05T00:00:00.000Z",
         "accepted_at": "2023-01-05T12:00:00.000Z",
-        "document_url": "https://www.sec.gov/Archives/edgar/data/0000000001/schedule.xml",
+        "document_url": "https://www.sec.gov/Archives/edgar/data/1/schedule.xml",
         "issuer": {"cik": "0000000001", "name": "Issuer"},
         "ownership_class": {"cusip": None, "title": "Common", "identity_basis": "class_title"},
         "reporting_positions": [position],

@@ -224,7 +224,7 @@ def test_v4_legacy_sec_and_cftc_items_remain_readable():
             "name": "SEC",
             "tier": "Tier 1",
             "kind": "filing",
-            "url": "https://www.sec.gov/Archives/edgar/data/0001067983/legacy.txt",
+            "url": "https://www.sec.gov/Archives/edgar/data/1067983/legacy.txt",
             "published_at": _ts(T0 - timedelta(hours=1)),
             "knowledge_available_at": _ts(T0 - timedelta(hours=1)),
         },

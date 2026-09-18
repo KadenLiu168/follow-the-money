@@ -20,6 +20,7 @@ from typing import Any
 from ..schema import SchemaError
 from ..semantic import MeasuredNumericFact, derive_subtraction
 from .sec_13f import _iso, _timestamp
+from .urls import sec_archive_cik
 
 SUPPORTED_FORMS = frozenset({"SCHEDULE 13D", "SCHEDULE 13D/A", "SCHEDULE 13G", "SCHEDULE 13G/A"})
 SUPPORTED_SCHEMA_FORMAT = "edgarSubmission"
@@ -507,7 +508,7 @@ def derive_beneficial_ownership_xml_url(
     if not _XML_BASENAME.fullmatch(basename):
         raise SchemaError("SEC Schedule 13D/G primary document must be an XML basename")
     return (
-        f"https://www.sec.gov/Archives/edgar/data/{filer_cik}/"
+        f"https://www.sec.gov/Archives/edgar/data/{sec_archive_cik(filer_cik)}/"
         f"{accession_number.replace('-', '')}/{basename}"
     )
 
@@ -544,7 +545,7 @@ def derive_beneficial_ownership_historical_url(
     ):
         raise SchemaError("SEC Schedule 13D/G historical locator extension is invalid")
     return (
-        f"https://www.sec.gov/Archives/edgar/data/{filer_cik}/"
+        f"https://www.sec.gov/Archives/edgar/data/{sec_archive_cik(filer_cik)}/"
         f"{accession_number.replace('-', '')}/{basename}"
     )
 

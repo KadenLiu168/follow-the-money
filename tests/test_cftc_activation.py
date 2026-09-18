@@ -41,6 +41,7 @@ from follow_the_money.providers.adapters import (
     build_registry,
 )
 from follow_the_money.providers.http import FetchError
+from follow_the_money.providers.urls import sec_archive_cik
 from follow_the_money.schema import SchemaError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -610,14 +611,28 @@ def test_sec_v4_beneficial_ownership_validator_binds_provenance_and_legacy_refs(
             "accession_number": "0001067983-26-000007",
             "accepted_at": "2026-08-01T10:00:00.000Z",
             "document_url": (
-                "https://www.sec.gov/Archives/edgar/data/0001067983/000106798326000007/legacy.htm"
+                "https://www.sec.gov/Archives/edgar/data/1067983/000106798326000007/legacy.htm"
             ),
         },
     }
     validate_feed(changed)
     changed_item = next(value for value in changed["items"] if value["id"] == item["id"])
     changed_item["payload"]["comparison"]["previous"]["document_url"] = (
-        "https://www.sec.gov/Archives/edgar/data/0000000000/000106798326000007/legacy.htm"
+        "https://www.sec.gov/Archives/edgar/data/0/000106798326000007/legacy.htm"
     )
+    with pytest.raises(SchemaError):
+        validate_feed(changed)
+
+    # A padded Archive CIK is the redirecting alias, not the canonical locator the
+    # producer derives, so the validator rejects it on the current document too.
+    changed = deepcopy(result.feed)
+    changed_item = next(value for value in changed["items"] if value["id"] == item["id"])
+    filer = changed_item["payload"]["company"]
+    canonical_url = changed_item["payload"]["document_url"]
+    padded_url = canonical_url.replace(f"/data/{sec_archive_cik(filer)}/", f"/data/{filer}/")
+    assert padded_url != canonical_url
+    changed_item["payload"]["document_url"] = padded_url
+    changed_item["payload"]["current_snapshot"]["document_url"] = padded_url
+    changed_item["source"]["url"] = padded_url
     with pytest.raises(SchemaError):
         validate_feed(changed)

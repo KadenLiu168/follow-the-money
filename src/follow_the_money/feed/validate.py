@@ -52,6 +52,7 @@ from ..canonical import canonical_digest
 from ..config.model import REQUIRED_COVERAGE_GROUPS, FreshnessContract
 from ..providers.http import stable_item_id
 from ..providers.sec_form4 import FORM4_SCHEMA_VERSION
+from ..providers.urls import sec_archive_cik
 from ..schema import SchemaError, validate_against
 from .freshness import FreshnessError, evaluate_freshness
 
@@ -72,6 +73,12 @@ REQUIRED_PROVIDER_IDS = frozenset(
     }
 )
 SUPPORTED_PAYLOAD_TYPES = frozenset({"news", "macro_release", "policy", "positioning", "filing"})
+
+#: SEC Archive paths carry the unpadded integer CIK, the canonical form the
+#: producers derive with ``providers.urls.sec_archive_cik``. Used where the
+#: locator is checked for canonical shape; where the filer/issuer CIK is known
+#: the regex is built from the helper itself.
+_SEC_ARCHIVE_CIK_PATTERN = r"(?:0|[1-9][0-9]{0,9})"
 
 #: Top-level semantic projection members. Execution-audit metadata
 #: (``collection_started_at``, ``collection_completed_at``, ``generated_at``,
@@ -843,7 +850,7 @@ def _validate_sec_v3_item(
     source_url = source.get("url")
     expected_accession_path = accession.replace("-", "")
     if not isinstance(source_url, str) or not re.fullmatch(
-        rf"https://www\.sec\.gov/Archives/edgar/data/{re.escape(company)}/"
+        rf"https://www\.sec\.gov/Archives/edgar/data/{re.escape(sec_archive_cik(company))}/"
         rf"{re.escape(expected_accession_path)}/[A-Za-z0-9][A-Za-z0-9_.-]*\.xml",
         source_url,
     ):
@@ -1243,7 +1250,8 @@ def _validate_bo_snapshot(snapshot: Any, *, where: str, label: str) -> tuple[str
         raise SchemaError(f"{where}: previous snapshot must not carry comparison data")
     document_url = snapshot.get("document_url")
     if not isinstance(document_url, str) or not re.fullmatch(
-        rf"https://www\.sec\.gov/Archives/edgar/data/\d{{10}}/{accession.replace('-', '')}/[A-Za-z0-9][A-Za-z0-9_.-]*\.xml",
+        rf"https://www\.sec\.gov/Archives/edgar/data/{_SEC_ARCHIVE_CIK_PATTERN}/"
+        rf"{accession.replace('-', '')}/[A-Za-z0-9][A-Za-z0-9_.-]*\.xml",
         document_url,
     ):
         raise SchemaError(f"{where}.document_url is not an official raw XML URL")
@@ -1460,6 +1468,7 @@ def _validate_sec_v4_item(
         or filer not in watched_filers
     ):
         raise SchemaError(f"{where}: beneficial-ownership filer is outside watched filers")
+    archive_filer = sec_archive_cik(filer)
     accession = payload.get("accession_number")
     if not isinstance(accession, str) or item.get("id") != stable_item_id("sec_edgar", accession):
         raise SchemaError(f"{where}: beneficial-ownership item identity is invalid")
@@ -1478,7 +1487,7 @@ def _validate_sec_v4_item(
     current_document_url = current_snapshot.get("document_url")
     if (
         not isinstance(current_document_url, str)
-        or f"/{filer}/{accession.replace('-', '')}/" not in current_document_url
+        or f"/{archive_filer}/{accession.replace('-', '')}/" not in current_document_url
     ):
         raise SchemaError(f"{where}: current document URL identity is invalid")
     if (
@@ -1535,7 +1544,7 @@ def _validate_sec_v4_item(
                 >= accepted_dt
                 or not isinstance(reference_url, str)
                 or not re.fullmatch(
-                    rf"https://www\.sec\.gov/Archives/edgar/data/{re.escape(filer)}/{reference_accession.replace('-', '')}/[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:xml|htm|html|txt)",
+                    rf"https://www\.sec\.gov/Archives/edgar/data/{re.escape(archive_filer)}/{reference_accession.replace('-', '')}/[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:xml|htm|html|txt)",
                     reference_url,
                     flags=re.IGNORECASE,
                 )
@@ -1563,7 +1572,8 @@ def _validate_sec_v4_item(
         previous_document_url = previous.get("document_url")
         if (
             not isinstance(previous_document_url, str)
-            or f"/{filer}/{previous_accession.replace('-', '')}/" not in previous_document_url
+            or f"/{archive_filer}/{previous_accession.replace('-', '')}/"
+            not in previous_document_url
         ):
             raise SchemaError(f"{where}: previous document URL identity is invalid")
         if (

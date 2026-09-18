@@ -11,6 +11,7 @@ from follow_the_money.config.model import FreshnessContract, WatchCompany
 from follow_the_money.feed import cli as feed_cli
 from follow_the_money.feed.plan import ProviderOutcome
 from follow_the_money.feed.snapshot import select_provider_slices
+from follow_the_money.providers.urls import sec_archive_cik
 from tests.test_feed_cli import (
     _cutoff,
     _OutcomeAdapter,
@@ -24,6 +25,7 @@ T0 = datetime(2026, 8, 11, 0, 20, tzinfo=UTC)
 
 def _sec_slice_item(letter: str, *, revision: str) -> dict:
     cik = f"000000000{ord(letter) - ord('A') + 1}"
+    archive_cik = sec_archive_cik(cik)
     accession = f"{cik}-26-{revision}-{letter}"
     return {
         "id": f"sec-edgar-{cik}",
@@ -33,7 +35,7 @@ def _sec_slice_item(letter: str, *, revision: str) -> dict:
             "name": "SEC EDGAR",
             "tier": "Tier 1",
             "kind": "filing",
-            "url": f"https://www.sec.gov/Archives/edgar/data/{cik}/{letter}.txt",
+            "url": f"https://www.sec.gov/Archives/edgar/data/{archive_cik}/{letter}.txt",
             "published_at": "2026-08-10T00:10:00Z",
             "knowledge_available_at": "2026-08-10T00:10:00Z",
         },

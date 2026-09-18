@@ -13,6 +13,10 @@ Design section 2 (source-link policy):
   (case-sensitive substring match). Residual ``%HH`` after that single
   decode is rejected as ambiguous double-encoding.
 - Only the validated credential-free canonical URL is hashed/retained.
+
+Public source-locator helpers: :func:`canonicalize_url` (provider-bound URL
+validation) and :func:`sec_archive_cik` (the SEC Archive-path CIK form, which
+differs from the padded submissions-API CIK form).
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ from collections.abc import Sequence
 from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 
 from ..config.model import SourceLinkRule
+from ..schema import SchemaError
 
 _PERCENT_ESCAPE = re.compile(r"%[0-9A-Fa-f]{2}")
 _BARE_PERCENT = re.compile(r"%(?![0-9A-Fa-f]{2})")
@@ -48,6 +53,24 @@ _CREDENTIAL_QUERY_NAMES = {
 
 class UrlValidationError(ValueError):
     """Source URL failed provider-bound validation."""
+
+
+_NORMALIZED_SEC_CIK = re.compile(r"[0-9]{10}")
+
+
+def sec_archive_cik(cik: str) -> str:
+    """Return the unpadded integer CIK used in SEC Archive URL paths.
+
+    SEC EDGAR uses two canonical CIK representations in its verified locators:
+    the submissions API is ten-digit zero-padded
+    (``data.sec.gov/submissions/CIK<ten-digit>.json``) while an Archive path is
+    the unpadded integer (``www.sec.gov/Archives/edgar/data/<integer>/...``). The
+    input contract is the normalized ten-digit CIK; anything else fails closed
+    before any Archive URL is emitted.
+    """
+    if not isinstance(cik, str) or _NORMALIZED_SEC_CIK.fullmatch(cik) is None:
+        raise SchemaError("SEC CIK must be a normalized ten-digit decimal string")
+    return cik.lstrip("0") or "0"
 
 
 def _looks_like_ip(host: str) -> bool:

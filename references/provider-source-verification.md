@@ -122,7 +122,12 @@ appears to have reported the wrong scale.
 - Submissions listing endpoint template:
   `https://data.sec.gov/submissions/CIK<10-digit-CIK>.json`.
 - Raw filing archive root:
-  `https://www.sec.gov/Archives/edgar/data/<CIK>/<accession-without-dashes>/`.
+  `https://www.sec.gov/Archives/edgar/data/<unpadded-integer-CIK>/<accession-without-dashes>/`.
+  The verified locator forms carry two distinct canonical CIK
+  representations: the submissions endpoint is ten-digit zero-padded while
+  every Archive path uses the unpadded integer. Archive URLs are emitted in
+  the unpadded canonical form, which is the locator the padded form
+  301-redirects to.
 - Observed 2026-09-16 from Berkshire Hathaway Form 4 accession
   `0001728451-26-000003`: the raw ownership XML is an unnamespaced
   `ownershipDocument` with a `<schemaVersion>X0609</schemaVersion>` child,
@@ -187,7 +192,7 @@ and the Producer does not broaden support to unverified filing variants.
   forms include `xslSCHEDULE_13G_X01/<basename>.xml` and
   `xslSCHEDULE_13G_X02/<basename>.xml`; no other prefix is implicitly allowed.
 - Raw filing documents are derived from the official archive root
-  `https://www.sec.gov/Archives/edgar/data/<CIK>/<accession-without-dashes>/`.
+  `https://www.sec.gov/Archives/edgar/data/<unpadded-integer-CIK>/<accession-without-dashes>/`.
   The checked-in Schedule 13D/G documents are explicitly production-shaped
   fixtures, not downloaded filing copies; their values and namespaces do not
   claim live provenance.

@@ -67,7 +67,7 @@ def _sec_raw() -> dict[str, object]:
     return {
         "submissions": {"cik": "0000000001", "name": "Example Manager", "tickers": ["EXM"]},
         "current": current,
-        "current_url": "https://www.sec.gov/Archives/edgar/data/0000000001/current.txt",
+        "current_url": "https://www.sec.gov/Archives/edgar/data/1/current.txt",
         "current_body": with_header(
             xml(
                 [
@@ -79,7 +79,7 @@ def _sec_raw() -> dict[str, object]:
             current,
         ),
         "previous": previous,
-        "previous_url": "https://www.sec.gov/Archives/edgar/data/0000000001/previous.txt",
+        "previous_url": "https://www.sec.gov/Archives/edgar/data/1/previous.txt",
         "previous_body": with_header(
             xml(
                 [

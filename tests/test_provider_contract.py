@@ -19,7 +19,12 @@ from follow_the_money.providers.rate import (
     RateStateError,
     refill_tokens,
 )
-from follow_the_money.providers.urls import UrlValidationError, canonicalize_url
+from follow_the_money.providers.urls import (
+    UrlValidationError,
+    canonicalize_url,
+    sec_archive_cik,
+)
+from follow_the_money.schema import SchemaError
 
 
 def _rules() -> list[SourceLinkRule]:
@@ -213,6 +218,30 @@ def test_stable_query_order():
 def test_idna_host_normalized():
     url = canonicalize_url("https://bücher.example.com/x", rules=_rules())
     assert url.startswith("https://xn--bcher-kva.example.com/")
+
+
+def test_sec_archive_cik_is_unpadded_integer():
+    assert sec_archive_cik("0001067983") == "1067983"
+    assert sec_archive_cik("0000000001") == "1"
+    assert sec_archive_cik("0000000000") == "0"
+
+
+@pytest.mark.parametrize(
+    "cik",
+    [
+        "1067983",
+        "00010679831",
+        "00010679 3",
+        "000106798a",
+        "",
+        "٠٠٠٠٠٠٠٠٠١",
+        1067983,
+        None,
+    ],
+)
+def test_sec_archive_cik_rejects_malformed_input(cik):
+    with pytest.raises(SchemaError):
+        sec_archive_cik(cik)
 
 
 # ---------------------------------------------------------------------------

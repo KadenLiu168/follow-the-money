@@ -44,7 +44,7 @@ def _sec_raw() -> dict[str, object]:
     return {
         "submissions": {"cik": "0000000001", "name": "Example Manager", "tickers": ["EXM"]},
         "current": current,
-        "current_url": "https://www.sec.gov/Archives/edgar/data/0000000001/current.txt",
+        "current_url": "https://www.sec.gov/Archives/edgar/data/1/current.txt",
         "current_body": _with_submission_header(
             xml(
                 [
@@ -68,7 +68,7 @@ def _sec_raw() -> dict[str, object]:
             current,
         ),
         "previous": previous,
-        "previous_url": "https://www.sec.gov/Archives/edgar/data/0000000001/previous.txt",
+        "previous_url": "https://www.sec.gov/Archives/edgar/data/1/previous.txt",
         "previous_body": _with_submission_header(
             xml(
                 [
@@ -124,7 +124,7 @@ def test_sec_v2_payload_and_canonical_bytes_are_pinned_before_migration():
             "previous_report_period": "2022-09-30",
             "previous_accepted_at": "2023-01-05T12:00:00Z",
             "previous_filed_at": "2023-01-04T00:00:00.000Z",
-            "previous_source_url": "https://www.sec.gov/Archives/edgar/data/0000000001/previous.txt",
+            "previous_source_url": "https://www.sec.gov/Archives/edgar/data/1/previous.txt",
             "previous_value_normalization": {
                 "source_unit": "usd",
                 "formula_id": "usd_divided_by_1000",
@@ -192,7 +192,7 @@ def test_sec_v2_payload_and_canonical_bytes_are_pinned_before_migration():
         ],
     }
     assert canonical_bytes(item) == (
-        b'{"id":"item_c23c34679461f3c9fa5059f445582d6e","payload":{"accepted_at":"2023-02-02T12:00:00Z","accession_number":"0000000001-23-000010","company":"0000000001","company_identity":{"cik":"0000000001","name":"Example Manager","tickers":["EXM"]},"comparison":{"previous_accepted_at":"2023-01-05T12:00:00Z","previous_accession_number":"0000000001-23-000009","previous_filed_at":"2023-01-04T00:00:00.000Z","previous_report_period":"2022-09-30","previous_source_url":"https://www.sec.gov/Archives/edgar/data/0000000001/previous.txt","previous_value_normalization":{"formula_id":"usd_divided_by_1000","source_unit":"usd"},"reason":null,"status":"available"},"filed_at":"2023-02-01T00:00:00.000Z","form":"13F-HR","holdings":[{"change_type":"increased","current":{"reported_amount":{"unit":"shares","value":"12"},"reported_value_usd_thousands":{"unit":"usd_thousands","value":"90"}},"delta":{"reported_amount":{"unit":"shares","value":"2"},"reported_value_usd_thousands":{"unit":"usd_thousands","value":"10"}},"previous":{"reported_amount":{"unit":"shares","value":"10"},"reported_value_usd_thousands":{"unit":"usd_thousands","value":"80"}},"security":{"amount_type":"SH","cusip":"111111111","figi":null,"issuer_name":"Alpha","put_call":null,"title_of_class":"Common"}},{"change_type":"no_longer_reported","current":null,"delta":null,"previous":{"reported_amount":{"unit":"shares","value":"7"},"reported_value_usd_thousands":{"unit":"usd_thousands","value":"70"}},"security":{"amount_type":"SH","cusip":"222222222","figi":null,"issuer_name":"Beta","put_call":null,"title_of_class":"Common"}},{"change_type":"new","current":{"reported_amount":{"unit":"shares","value":"3"},"reported_value_usd_thousands":{"unit":"usd_thousands","value":"30"}},"delta":null,"previous":null,"security":{"amount_type":"SH","cusip":"333333333","figi":null,"issuer_name":"Gamma","put_call":null,"title_of_class":"Common"}}],"raw_metadata":{},"report_period":"2022-12-31","type":"filing","value_normalization":{"formula_id":"usd_divided_by_1000","source_unit":"usd"}},"provider_id":"sec_edgar","source":{"id":"sec-item_c23c34679461f3c9fa5059f445582d6e","kind":"filing","knowledge_available_at":"2023-02-02T12:00:00.000Z","name":"SEC EDGAR","published_at":"2023-02-02T12:00:00.000Z","tier":"Tier 1","url":"https://www.sec.gov/Archives/edgar/data/0000000001/current.txt"}}'
+        b'{"id":"item_c23c34679461f3c9fa5059f445582d6e","payload":{"accepted_at":"2023-02-02T12:00:00Z","accession_number":"0000000001-23-000010","company":"0000000001","company_identity":{"cik":"0000000001","name":"Example Manager","tickers":["EXM"]},"comparison":{"previous_accepted_at":"2023-01-05T12:00:00Z","previous_accession_number":"0000000001-23-000009","previous_filed_at":"2023-01-04T00:00:00.000Z","previous_report_period":"2022-09-30","previous_source_url":"https://www.sec.gov/Archives/edgar/data/1/previous.txt","previous_value_normalization":{"formula_id":"usd_divided_by_1000","source_unit":"usd"},"reason":null,"status":"available"},"filed_at":"2023-02-01T00:00:00.000Z","form":"13F-HR","holdings":[{"change_type":"increased","current":{"reported_amount":{"unit":"shares","value":"12"},"reported_value_usd_thousands":{"unit":"usd_thousands","value":"90"}},"delta":{"reported_amount":{"unit":"shares","value":"2"},"reported_value_usd_thousands":{"unit":"usd_thousands","value":"10"}},"previous":{"reported_amount":{"unit":"shares","value":"10"},"reported_value_usd_thousands":{"unit":"usd_thousands","value":"80"}},"security":{"amount_type":"SH","cusip":"111111111","figi":null,"issuer_name":"Alpha","put_call":null,"title_of_class":"Common"}},{"change_type":"no_longer_reported","current":null,"delta":null,"previous":{"reported_amount":{"unit":"shares","value":"7"},"reported_value_usd_thousands":{"unit":"usd_thousands","value":"70"}},"security":{"amount_type":"SH","cusip":"222222222","figi":null,"issuer_name":"Beta","put_call":null,"title_of_class":"Common"}},{"change_type":"new","current":{"reported_amount":{"unit":"shares","value":"3"},"reported_value_usd_thousands":{"unit":"usd_thousands","value":"30"}},"delta":null,"previous":null,"security":{"amount_type":"SH","cusip":"333333333","figi":null,"issuer_name":"Gamma","put_call":null,"title_of_class":"Common"}}],"raw_metadata":{},"report_period":"2022-12-31","type":"filing","value_normalization":{"formula_id":"usd_divided_by_1000","source_unit":"usd"}},"provider_id":"sec_edgar","source":{"id":"sec-item_c23c34679461f3c9fa5059f445582d6e","kind":"filing","knowledge_available_at":"2023-02-02T12:00:00.000Z","name":"SEC EDGAR","published_at":"2023-02-02T12:00:00.000Z","tier":"Tier 1","url":"https://www.sec.gov/Archives/edgar/data/1/current.txt"}}'
     )
 
 

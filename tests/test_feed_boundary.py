@@ -475,7 +475,7 @@ def _sec_v2_item():
             "name": "SEC EDGAR",
             "tier": "Tier 1",
             "kind": "filing",
-            "url": "https://www.sec.gov/Archives/edgar/data/0000000001/a/a.txt",
+            "url": "https://www.sec.gov/Archives/edgar/data/1/a/a.txt",
             "published_at": _ts(T0 - timedelta(hours=1)),
             "knowledge_available_at": _ts(T0 - timedelta(hours=1)),
         },

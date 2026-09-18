@@ -62,7 +62,7 @@ from .sec_form4 import (
     parse_form4_document,
     select_form4_filings,
 )
-from .urls import UrlValidationError
+from .urls import UrlValidationError, sec_archive_cik
 
 
 class BaseAdapter(Provider):
@@ -284,7 +284,7 @@ class SecEdgarAdapter(BaseAdapter):
             raise ValueError("SEC semantic units are not the closed contract")
 
     def _complete_url(self, candidate: Any) -> str:
-        cik = str(candidate.cik).zfill(10)
+        cik = sec_archive_cik(str(candidate.cik).zfill(10))
         accession = candidate.accession_number
         return self._validate_url(
             f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession.replace('-', '')}/{accession}.txt"
@@ -438,7 +438,8 @@ class SecEdgarAdapter(BaseAdapter):
             if not _in_half_open_window(date, window, date_only=True):
                 continue
             url = (
-                f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession.replace('-', '')}/{doc}"
+                f"https://www.sec.gov/Archives/edgar/data/{sec_archive_cik(str(cik).zfill(10))}/"
+                f"{accession.replace('-', '')}/{doc}"
                 if doc
                 else f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type=13F"
             )

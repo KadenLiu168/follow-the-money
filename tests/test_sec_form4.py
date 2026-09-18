@@ -157,7 +157,7 @@ def test_form4_selector_rejects_invalid_selected_report_date():
 def test_form4_raw_locator_strips_verified_xsl_presentation_prefix():
     assert derive_form4_xml_url(
         "0001067983", "0001067983-26-000002", "xslF345X06/primary_doc.xml"
-    ) == ("https://www.sec.gov/Archives/edgar/data/0001067983/000106798326000002/primary_doc.xml")
+    ) == ("https://www.sec.gov/Archives/edgar/data/1067983/000106798326000002/primary_doc.xml")
 
 
 def test_form4_parser_binds_source_url_and_observed_xml_shape_to_the_selected_document():
@@ -339,6 +339,21 @@ def _v3_form4_feed(accession: str = "0001067983-26-000002", form: str = "4") -> 
     outcome["freshness"]["origin_contract_hash"] = contract["hash"]
     feed["content_digest"], feed["run_id"] = recompute_feed_identity(feed)
     return feed
+
+
+def test_form4_feed_rejects_the_padded_archive_cik_alias():
+    feed = _v3_form4_feed()
+    validate_feed(feed)
+    canonical_url = feed["items"][0]["source"]["url"]
+    assert canonical_url.startswith("https://www.sec.gov/Archives/edgar/data/1067983/")
+
+    padded = deepcopy(feed)
+    padded_url = canonical_url.replace("/data/1067983/", "/data/0001067983/")
+    assert padded_url != canonical_url
+    padded["items"][0]["source"]["url"] = padded_url
+
+    with pytest.raises(SchemaError, match="official raw XML URL"):
+        validate_feed(padded)
 
 
 def test_form4_feed_semantics_are_bounded_to_window_url_owners_and_subtype():

@@ -20,6 +20,7 @@ from ..schema import SchemaError
 from ..semantic import MeasuredNumericFact
 from .http import stable_item_id
 from .sec_13f import _iso, _timestamp
+from .urls import sec_archive_cik
 
 FORM4_SCHEMA_VERSION = "X0609"
 MAX_FORM4_FILINGS_PER_WINDOW = 20
@@ -222,7 +223,7 @@ def derive_form4_xml_url(issuer_cik: str, accession_number: str, primary_documen
     if any(marker in primary_document for marker in ("://", "@", "?", "#")):
         raise SchemaError("SEC Form 4 primary document locator contains a URL component")
     return (
-        f"https://www.sec.gov/Archives/edgar/data/{issuer_cik}/"
+        f"https://www.sec.gov/Archives/edgar/data/{sec_archive_cik(issuer_cik)}/"
         f"{accession_number.replace('-', '')}/{basename}"
     )
 
