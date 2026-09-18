@@ -29,5 +29,5 @@
 
 ## 5. Operational recovery (post-merge)
 
-- [ ] 5.1 Push the change; confirm the CI path-exclusion applies to the restore commit's changed paths
-- [ ] 5.2 Dispatch `generate-feed` once (armed run: prepare → collect → finalize); apply the D5 gate — verify the pushed product is v4 five-domain with a cutoff advancing from the 2026-09-08 baseline, the plan recorded the bounded 72-hour window with the explicit coverage-gap warning for `[2026-09-08T04:50:10.689Z, window.start)`, and `.feed-state/` retains the real state until finalize advances the checkpoint; if collect fails, triage it as a new independent Provider/runtime issue
+- [x] 5.1 Push the change; confirm the CI path-exclusion applies to the restore commit's changed paths
+- [x] 5.2 Dispatch `generate-feed` once (armed run: prepare → collect → finalize); apply the D5 gate — verify the pushed product is v4 five-domain with a cutoff advancing from the 2026-09-08 baseline, the plan recorded the bounded 72-hour window with the explicit coverage-gap warning for `[2026-09-08T04:50:10.689Z, window.start)`, and `.feed-state/` retains the real state until finalize advances the checkpoint; if collect fails, triage it as a new independent Provider/runtime issue
