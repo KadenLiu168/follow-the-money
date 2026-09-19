@@ -7,6 +7,7 @@ import copy
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Any
 
@@ -14,12 +15,64 @@ from .canonical import canonical_bytes
 from .config.model import SUPPORTED_FEED_PAYLOAD_TYPES
 from .feed.remote import FeedRemoteError, consume_published_feed
 
-CONTEXT_VERSION = 1
+CONTEXT_VERSION = 2
 DOMAIN_ORDER = SUPPORTED_FEED_PAYLOAD_TYPES
+SCOPE_ORDER: tuple[str, ...] = (
+    "news",
+    "macro_release",
+    "policy",
+    "cftc",
+    "form13f",
+    "form4",
+    "beneficial_ownership",
+)
+SCOPE_DOMAIN: Mapping[str, str] = MappingProxyType(
+    {
+        "news": "news",
+        "macro_release": "macro_release",
+        "policy": "policy",
+        "cftc": "positioning",
+        "form13f": "filing",
+        "form4": "filing",
+        "beneficial_ownership": "filing",
+    }
+)
+DOMAIN_UNIT_TYPE: Mapping[str, str] = MappingProxyType(
+    {
+        "news": "news_publication",
+        "macro_release": "macro_release",
+        "policy": "policy_document",
+        "positioning": "positioning_report",
+        "filing": "sec_filing",
+    }
+)
+UNIT_TYPES = frozenset(DOMAIN_UNIT_TYPE.values())
+# Feed domain -> (event-time kind, path of the closed current-membership authority).
+MEMBERSHIP_AUTHORITY: Mapping[str, tuple[str, tuple[str, ...]]] = MappingProxyType(
+    {
+        "news": ("published_at", ("source", "published_at")),
+        "macro_release": ("released_at", ("payload", "released_at")),
+        "policy": ("announced_at", ("payload", "announced_at")),
+        "filing": ("accepted_at", ("payload", "accepted_at")),
+    }
+)
+FILING_SUBTYPES = frozenset({"form13f", "form4", "beneficial_ownership"})
+DOMAIN_STATES = frozenset(
+    {
+        "current_updates_available",
+        "no_current_update",
+        "carried_reference_state",
+        "stale_reference_state",
+        "current_membership_unproven",
+        "provider_unavailable",
+        "domain_empty",
+    }
+)
+LIMITATION_CODES: tuple[str, ...] = ("provider_unavailable", "coverage_gap")
 
 
 class DigestPreparationError(ValueError):
-    """A validated Feed could not be projected into the v1 DigestContext."""
+    """A validated Feed could not be prepared into the v2 DigestContext."""
 
 
 def _freeze(value: Any) -> Any:
@@ -62,16 +115,29 @@ def _copy_required(value: Any, key: str, where: str) -> Any:
     return copy.deepcopy(source[key])
 
 
+def _timestamp(value: Any, where: str) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise DigestPreparationError(f"{where}: missing timestamp")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise DigestPreparationError(f"{where}: invalid timestamp {value!r}") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise DigestPreparationError(f"{where}: timestamp must carry a timezone")
+    return parsed.astimezone(UTC)
+
+
+def _nested(value: Any, path: Sequence[str]) -> Any:
+    current = value
+    for key in path:
+        if not isinstance(current, Mapping) or key not in current:
+            return None
+        current = current[key]
+    return current
+
+
 def _unique_paths(paths: Sequence[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(paths))
-
-
-FRESHNESS_FIELDS = (
-    "cadence",
-    "status",
-    "origin_contract_hash",
-    "carried_forward_from_run_id",
-)
 
 
 COMMON_PATHS = (
@@ -128,53 +194,7 @@ SEMANTIC_POLICY_PATHS = (
     "semantic_context.extension.effective_at",
     "semantic_context.extension.affected_scope[]",
 )
-POSITIONING_PATHS = (
-    "payload.type",
-    "payload.instrument_id",
-    "payload.as_of",
-    "payload.position.value",
-    "payload.position.unit",
-    "payload.position.unknown_reason",
-    "payload.market_identity.cftc_contract_market_code",
-    "payload.market_identity.contract_market_name",
-    *(
-        f"payload.current_metrics.{name}.{field}"
-        for name in (
-            "net_noncommercial",
-            "noncommercial_long",
-            "noncommercial_short",
-            "noncommercial_spreading",
-            "open_interest",
-        )
-        for field in ("value", "unit", "unknown_reason")
-    ),
-    *(
-        f"payload.previous_metrics.{name}.{field}"
-        for name in (
-            "net_noncommercial",
-            "noncommercial_long",
-            "noncommercial_short",
-            "noncommercial_spreading",
-            "open_interest",
-        )
-        for field in ("value", "unit", "unknown_reason")
-    ),
-    *(
-        f"payload.delta_metrics.{name}.{field}"
-        for name in (
-            "net_noncommercial",
-            "noncommercial_long",
-            "noncommercial_short",
-            "noncommercial_spreading",
-            "open_interest",
-        )
-        for field in ("value", "unit", "unknown_reason")
-    ),
-    "payload.comparison.status",
-    "payload.comparison.previous_as_of",
-    "payload.comparison.reason",
-    "payload.derivations.net_noncommercial.formula_id",
-)
+POSITIONING_PATHS = ("payload.as_of",)
 FILING_COMMON_PATHS = (
     "payload.type",
     "payload.filing_subtype",
@@ -388,7 +408,7 @@ ELIGIBLE_PATHS: Mapping[str, tuple[str, ...]] = MappingProxyType(
             + SEMANTIC_PATHS
             + SEMANTIC_POLICY_PATHS
         ),
-        "positioning": _unique_paths(COMMON_PATHS + POSITIONING_PATHS),
+        "positioning": _unique_paths(POSITIONING_PATHS),
         "filing": _unique_paths(
             COMMON_PATHS
             + FILING_COMMON_PATHS
@@ -505,46 +525,21 @@ def _project_source(item: Mapping[str, Any]) -> dict[str, Any]:
     return projected
 
 
-def _project_lineage(item: Mapping[str, Any]) -> list[dict[str, Any]] | None:
+def _project_lineage(item: Mapping[str, Any]) -> tuple[dict[str, Any], ...] | None:
     if "source_lineage" not in item:
         return None
-    return [
+    return tuple(
         _copy_keys(
             entry,
             ("id", "provider_id", "source_id", "original_publisher", "syndication_origin"),
             "item.source_lineage[]",
         )
         for entry in _sequence(item["source_lineage"], "item.source_lineage")
-    ]
-
-
-def _project_freshness(value: Any) -> dict[str, Any]:
-    freshness = _mapping(value, "provider_outcomes[].freshness")
-    return {
-        field: _copy_required(freshness, field, "provider_outcomes[].freshness")
-        for field in FRESHNESS_FIELDS
-    }
+    )
 
 
 def _numeric(value: Any, where: str) -> dict[str, Any]:
     return _copy_keys(value, ("value", "unit", "unknown_reason"), where)
-
-
-def _metrics(value: Any, where: str) -> dict[str, Any] | None:
-    if value is None:
-        return None
-    metrics = _mapping(value, where)
-    return {
-        name: _numeric(metrics[name], f"{where}.{name}")
-        for name in (
-            "net_noncommercial",
-            "noncommercial_long",
-            "noncommercial_short",
-            "noncommercial_spreading",
-            "open_interest",
-        )
-        if name in metrics
-    }
 
 
 def _project_semantic_payload(payload: Mapping[str, Any], domain: str) -> dict[str, Any]:
@@ -565,38 +560,6 @@ def _project_semantic_payload(payload: Mapping[str, Any], domain: str) -> dict[s
             payload, ("type", "title", "announced_at", "effective_at"), "item.payload"
         )
     raise DigestPreparationError(f"unsupported semantic payload domain: {domain!r}")
-
-
-def _project_positioning(payload: Mapping[str, Any]) -> dict[str, Any]:
-    result = _copy_keys(payload, ("type", "instrument_id", "as_of"), "item.payload")
-    if "position" in payload:
-        result["position"] = _numeric(payload["position"], "item.payload.position")
-    if "market_identity" in payload:
-        result["market_identity"] = _copy_keys(
-            payload["market_identity"],
-            ("cftc_contract_market_code", "contract_market_name"),
-            "item.payload.market_identity",
-        )
-    for name in ("current_metrics", "previous_metrics", "delta_metrics"):
-        if name in payload:
-            result[name] = _metrics(payload[name], f"item.payload.{name}")
-    if "comparison" in payload:
-        result["comparison"] = _copy_keys(
-            payload["comparison"],
-            ("status", "previous_as_of", "reason"),
-            "item.payload.comparison",
-        )
-    if "derivations" in payload:
-        derivations = _mapping(payload["derivations"], "item.payload.derivations")
-        if "net_noncommercial" in derivations:
-            result["derivations"] = {
-                "net_noncommercial": _copy_keys(
-                    derivations["net_noncommercial"],
-                    ("formula_id",),
-                    "item.payload.derivations.net_noncommercial",
-                )
-            }
-    return result
 
 
 def _form4_numeric(value: Any, where: str) -> dict[str, Any]:
@@ -952,41 +915,6 @@ def _project_filing(payload: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _project_item(item: Any) -> DigestItem:
-    item_map = _mapping(item, "items[]")
-    payload = _mapping(_copy_required(item_map, "payload", "items[]"), "items[].payload")
-    domain = payload.get("type")
-    if domain not in DOMAIN_ORDER:
-        raise DigestPreparationError(f"items[].payload.type: unsupported domain {domain!r}")
-    projected = {
-        "id": _copy_required(item_map, "id", "items[]"),
-        "provider_id": _copy_required(item_map, "provider_id", "items[]"),
-        "source": _project_source(item_map),
-        "payload": (
-            _project_filing(payload)
-            if domain == "filing"
-            else _project_positioning(payload)
-            if domain == "positioning"
-            else _project_semantic_payload(payload, domain)
-        ),
-    }
-    lineage = _project_lineage(item_map)
-    if lineage is not None:
-        projected["source_lineage"] = lineage
-    if domain in {"news", "macro_release", "policy"} and "semantic_context" in item_map:
-        projected["semantic_context"] = _project_semantic_context(
-            item_map["semantic_context"], domain
-        )
-    return DigestItem(
-        id=projected["id"],
-        provider_id=projected["provider_id"],
-        source=projected["source"],
-        payload=projected["payload"],
-        source_lineage=projected.get("source_lineage"),
-        semantic_context=projected.get("semantic_context"),
-    )
-
-
 @dataclass(frozen=True, slots=True)
 class DigestFeedBinding:
     schema_version: int
@@ -1009,123 +937,166 @@ class DigestFeedBinding:
 
 
 @dataclass(frozen=True, slots=True)
-class DigestStatus:
-    status: str
-    warnings: tuple[str, ...]
-    coverage_gap: Mapping[str, Any] | None
+class DigestEventTime:
+    kind: str
+    value: str
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "warnings", tuple(self.warnings))
-        object.__setattr__(
-            self, "coverage_gap", None if self.coverage_gap is None else _freeze(self.coverage_gap)
-        )
-
-    @property
-    def pipeline_status(self) -> str:
-        return self.status
+        if self.kind not in {kind for kind, _ in MEMBERSHIP_AUTHORITY.values()}:
+            raise DigestPreparationError(f"unsupported event-time kind: {self.kind!r}")
 
     def to_mapping(self) -> dict[str, Any]:
-        return {
-            "status": self.status,
-            "warnings": list(self.warnings),
-            "coverage_gap": _thaw(self.coverage_gap),
-        }
+        return {"kind": self.kind, "value": self.value}
 
 
 @dataclass(frozen=True, slots=True)
-class DigestProvider:
-    provider_id: str
-    state: str
-    attempted: int
-    fetched: int
-    succeeded: bool
-    empty: bool
-    partial: bool
-    failed: bool
-    skipped: bool
-    accepted: int
-    rejected: int
-    availability: str
-    availability_reason: str | None
-    upstream_http_status: int | None
-    affected_coverage_groups: tuple[str, ...]
-    freshness: Mapping[str, Any]
+class DigestUnitTrace:
+    feed_item_ids: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "affected_coverage_groups", tuple(self.affected_coverage_groups))
-        object.__setattr__(self, "freshness", _freeze(self.freshness))
+        object.__setattr__(self, "feed_item_ids", tuple(self.feed_item_ids))
+        if not self.feed_item_ids:
+            raise DigestPreparationError("a DigestUpdateUnit requires at least one Feed item trace")
 
     def to_mapping(self) -> dict[str, Any]:
-        return {
-            "provider_id": self.provider_id,
-            "state": self.state,
-            "attempted": self.attempted,
-            "fetched": self.fetched,
-            "succeeded": self.succeeded,
-            "empty": self.empty,
-            "partial": self.partial,
-            "failed": self.failed,
-            "skipped": self.skipped,
-            "accepted": self.accepted,
-            "rejected": self.rejected,
-            "availability": self.availability,
-            "availability_reason": self.availability_reason,
-            "upstream_http_status": self.upstream_http_status,
-            "affected_coverage_groups": list(self.affected_coverage_groups),
-            "freshness": _thaw(self.freshness),
-        }
+        return {"feed_item_ids": list(self.feed_item_ids)}
 
 
 @dataclass(frozen=True, slots=True)
-class DigestItem:
-    id: str
+class DigestUpdateUnit:
+    unit_id: str
+    domain: str
+    unit_type: str
     provider_id: str
     source: Mapping[str, Any]
-    payload: Mapping[str, Any]
+    event_time: DigestEventTime
+    evidence: Mapping[str, Any]
+    trace: DigestUnitTrace
     source_lineage: tuple[Mapping[str, Any], ...] | None = None
-    semantic_context: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
+        if self.domain not in DOMAIN_ORDER:
+            raise DigestPreparationError(f"unsupported unit domain: {self.domain!r}")
+        if self.unit_type != DOMAIN_UNIT_TYPE[self.domain]:
+            raise DigestPreparationError(
+                f"unit type {self.unit_type!r} does not belong to domain {self.domain!r}"
+            )
+        if self.unit_type not in UNIT_TYPES:
+            raise DigestPreparationError(f"unsupported unit type: {self.unit_type!r}")
         object.__setattr__(self, "source", _freeze(self.source))
-        object.__setattr__(self, "payload", _freeze(self.payload))
+        object.__setattr__(self, "evidence", _freeze(self.evidence))
         if self.source_lineage is not None:
             object.__setattr__(
                 self, "source_lineage", tuple(_freeze(row) for row in self.source_lineage)
             )
-        if self.semantic_context is not None:
-            object.__setattr__(self, "semantic_context", _freeze(self.semantic_context))
 
     def to_mapping(self) -> dict[str, Any]:
         result: dict[str, Any] = {
-            "id": self.id,
+            "unit_id": self.unit_id,
+            "domain": self.domain,
+            "unit_type": self.unit_type,
             "provider_id": self.provider_id,
             "source": _thaw(self.source),
-            "payload": _thaw(self.payload),
+            "event_time": self.event_time.to_mapping(),
+            "evidence": _thaw(self.evidence),
+            "trace": self.trace.to_mapping(),
         }
         if self.source_lineage is not None:
             result["source_lineage"] = _thaw(self.source_lineage)
-        if self.semantic_context is not None:
-            result["semantic_context"] = _thaw(self.semantic_context)
         return result
 
 
 @dataclass(frozen=True, slots=True)
-class DigestDomain:
+class DigestDomainStatus:
     domain: str
-    items: tuple[DigestItem, ...]
+    scope: str
+    state: str
+    data_as_of: str | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "items", tuple(self.items))
+        if self.scope not in SCOPE_ORDER:
+            raise DigestPreparationError(f"unsupported status scope: {self.scope!r}")
+        if SCOPE_DOMAIN[self.scope] != self.domain:
+            raise DigestPreparationError(
+                f"status scope {self.scope!r} does not belong to domain {self.domain!r}"
+            )
+        if self.state not in DOMAIN_STATES:
+            raise DigestPreparationError(f"unsupported domain state: {self.state!r}")
 
-    @property
-    def total(self) -> int:
-        return len(self.items)
+    def to_mapping(self) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "domain": self.domain,
+            "scope": self.scope,
+            "state": self.state,
+        }
+        if self.data_as_of is not None:
+            result["data_as_of"] = self.data_as_of
+        return result
+
+
+@dataclass(frozen=True, slots=True)
+class DigestLimitation:
+    code: str
+    provider_id: str | None = None
+    affected_coverage_groups: tuple[str, ...] = ()
+    uncovered_start: str | None = None
+    uncovered_end: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.code not in LIMITATION_CODES:
+            raise DigestPreparationError(f"unsupported limitation code: {self.code!r}")
+        object.__setattr__(
+            self, "affected_coverage_groups", tuple(sorted(self.affected_coverage_groups))
+        )
+        if self.code == "provider_unavailable":
+            if self.provider_id is None:
+                raise DigestPreparationError("provider_unavailable requires a Provider ID")
+            if self.uncovered_start is not None or self.uncovered_end is not None:
+                raise DigestPreparationError("provider_unavailable carries no coverage bounds")
+        else:
+            if self.uncovered_start is None or self.uncovered_end is None:
+                raise DigestPreparationError("coverage_gap requires its Feed bounds")
+            if self.provider_id is not None or self.affected_coverage_groups:
+                raise DigestPreparationError("coverage_gap carries no Provider identity")
+
+    def to_mapping(self) -> dict[str, Any]:
+        if self.code == "provider_unavailable":
+            return {
+                "code": self.code,
+                "provider_id": self.provider_id,
+                "affected_coverage_groups": list(self.affected_coverage_groups),
+            }
+        return {
+            "code": self.code,
+            "uncovered_start": self.uncovered_start,
+            "uncovered_end": self.uncovered_end,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class DigestContent:
+    updates: tuple[DigestUpdateUnit, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "updates", tuple(self.updates))
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {"updates": [unit.to_mapping() for unit in self.updates]}
+
+
+@dataclass(frozen=True, slots=True)
+class DigestStatus:
+    domains: tuple[DigestDomainStatus, ...]
+    limitations: tuple[DigestLimitation, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "domains", tuple(self.domains))
+        object.__setattr__(self, "limitations", tuple(self.limitations))
 
     def to_mapping(self) -> dict[str, Any]:
         return {
-            "domain": self.domain,
-            "total": self.total,
-            "items": [item.to_mapping() for item in self.items],
+            "domains": [domain.to_mapping() for domain in self.domains],
+            "limitations": [limitation.to_mapping() for limitation in self.limitations],
         }
 
 
@@ -1133,25 +1104,21 @@ class DigestDomain:
 class DigestContext:
     context_version: int
     feed: DigestFeedBinding
+    content: DigestContent
     status: DigestStatus
-    providers: tuple[DigestProvider, ...]
-    domains: tuple[DigestDomain, ...]
 
     def __post_init__(self) -> None:
         if self.context_version != CONTEXT_VERSION:
             raise DigestPreparationError(
                 f"unsupported DigestContext version: {self.context_version!r}"
             )
-        object.__setattr__(self, "providers", tuple(self.providers))
-        object.__setattr__(self, "domains", tuple(self.domains))
 
     def to_mapping(self) -> dict[str, Any]:
         return {
             "context_version": self.context_version,
             "feed": self.feed.to_mapping(),
+            "content": self.content.to_mapping(),
             "status": self.status.to_mapping(),
-            "providers": [provider.to_mapping() for provider in self.providers],
-            "domains": [domain.to_mapping() for domain in self.domains],
         }
 
     def canonical_bytes(self) -> bytes:
@@ -1161,65 +1128,175 @@ class DigestContext:
         return self.to_mapping()
 
 
-def _project_provider(value: Any) -> DigestProvider:
-    outcome = _mapping(value, "provider_outcomes[]")
-    required = (
-        "provider_id",
-        "state",
-        "attempted",
-        "fetched",
-        "succeeded",
-        "empty",
-        "partial",
-        "failed",
-        "skipped",
-        "accepted",
-        "rejected",
-        "availability",
-        "availability_reason",
-        "upstream_http_status",
-        "affected_coverage_groups",
-        "freshness",
+def _membership_state(
+    item: Mapping[str, Any], domain: str, window_start: datetime, window_end: datetime
+) -> tuple[str, str | None]:
+    """Classify one item as current, explicitly old, or unproven-current."""
+    _, path = MEMBERSHIP_AUTHORITY[domain]
+    value = _nested(item, path)
+    where = f"items[].{'.'.join(path)}"
+    if not isinstance(value, str) or not value:
+        return "unproven", None
+    try:
+        moment = _timestamp(value, where)
+    except DigestPreparationError:
+        return "unproven", None
+    if moment < window_start:
+        return "old", value
+    if moment >= window_end:
+        return "unproven", value
+    return "current", value
+
+
+def _build_unit(
+    item: Mapping[str, Any], payload: Mapping[str, Any], domain: str, event_value: str
+) -> DigestUpdateUnit:
+    kind, _ = MEMBERSHIP_AUTHORITY[domain]
+    evidence: dict[str, Any] = {"payload": _project_payload(payload, domain)}
+    if domain in {"news", "macro_release", "policy"} and "semantic_context" in item:
+        evidence["semantic_context"] = _project_semantic_context(item["semantic_context"], domain)
+    item_id = _copy_required(item, "id", "items[]")
+    return DigestUpdateUnit(
+        unit_id=f"{DOMAIN_UNIT_TYPE[domain]}:{item_id}",
+        domain=domain,
+        unit_type=DOMAIN_UNIT_TYPE[domain],
+        provider_id=_copy_required(item, "provider_id", "items[]"),
+        source=_project_source(item),
+        source_lineage=_project_lineage(item),
+        event_time=DigestEventTime(kind=kind, value=event_value),
+        evidence=evidence,
+        trace=DigestUnitTrace(feed_item_ids=(item_id,)),
     )
-    missing = [key for key in required if key not in outcome]
-    if missing:
-        raise DigestPreparationError(f"provider_outcomes[]: missing validated fields {missing!r}")
-    return DigestProvider(
-        provider_id=outcome["provider_id"],
-        state=outcome["state"],
-        attempted=outcome["attempted"],
-        fetched=outcome["fetched"],
-        succeeded=outcome["succeeded"],
-        empty=outcome["empty"],
-        partial=outcome["partial"],
-        failed=outcome["failed"],
-        skipped=outcome["skipped"],
-        accepted=outcome["accepted"],
-        rejected=outcome["rejected"],
-        availability=outcome["availability"],
-        availability_reason=outcome["availability_reason"],
-        upstream_http_status=outcome["upstream_http_status"],
-        affected_coverage_groups=tuple(outcome["affected_coverage_groups"]),
-        freshness=_project_freshness(outcome["freshness"]),
+
+
+def _project_payload(payload: Mapping[str, Any], domain: str) -> dict[str, Any]:
+    if domain == "filing":
+        return _project_filing(payload)
+    return _project_semantic_payload(payload, domain)
+
+
+def _filing_scope(payload: Mapping[str, Any]) -> str | None:
+    subtype = payload.get("filing_subtype")
+    if subtype is None:
+        return None
+    if subtype not in FILING_SUBTYPES:
+        raise DigestPreparationError(f"unsupported filing subtype: {subtype!r}")
+    return subtype
+
+
+def _aggregate_states(states: Sequence[str]) -> str:
+    if "current" in states:
+        return "current_updates_available"
+    if "unproven" in states:
+        return "current_membership_unproven"
+    if "old" in states:
+        return "no_current_update"
+    return "domain_empty"
+
+
+def _common_data_as_of(items: Sequence[Mapping[str, Any]]) -> str | None:
+    values = set()
+    for item in items:
+        payload = item.get("payload")
+        value = payload.get("as_of") if isinstance(payload, Mapping) else None
+        values.add(value)
+    if len(values) != 1:
+        return None
+    (value,) = values
+    return value if isinstance(value, str) and value else None
+
+
+def _positioning_status(
+    items: Sequence[Mapping[str, Any]], outcomes: Mapping[str, Mapping[str, Any]]
+) -> DigestDomainStatus:
+    if not items:
+        return DigestDomainStatus(domain="positioning", scope="cftc", state="domain_empty")
+    provider_ids = sorted({_copy_required(item, "provider_id", "items[]") for item in items})
+    if len(provider_ids) != 1:
+        raise DigestPreparationError("positioning slice spans multiple Providers")
+    outcome = outcomes.get(provider_ids[0])
+    if outcome is None:
+        raise DigestPreparationError(
+            f"positioning Provider {provider_ids[0]!r} has no validated outcome"
+        )
+    freshness = _mapping(
+        _copy_required(outcome, "freshness", "provider_outcomes[]"),
+        "provider_outcomes[].freshness",
     )
+    if freshness.get("carried_forward_from_run_id") is not None:
+        state = "carried_reference_state"
+    elif freshness.get("status") == "stale":
+        state = "stale_reference_state"
+    else:
+        state = "current_membership_unproven"
+    return DigestDomainStatus(
+        domain="positioning",
+        scope="cftc",
+        state=state,
+        data_as_of=_common_data_as_of(items),
+    )
+
+
+def _limitations(
+    outcomes: Sequence[Mapping[str, Any]], pipeline: Mapping[str, Any]
+) -> list[DigestLimitation]:
+    limitations: list[DigestLimitation] = []
+    blocked = sorted(
+        (outcome for outcome in outcomes if outcome.get("availability") == "blocked"),
+        key=lambda outcome: str(outcome.get("provider_id")),
+    )
+    for outcome in blocked:
+        limitations.append(
+            DigestLimitation(
+                code="provider_unavailable",
+                provider_id=_copy_required(outcome, "provider_id", "provider_outcomes[]"),
+                affected_coverage_groups=tuple(
+                    _sequence(
+                        _copy_required(outcome, "affected_coverage_groups", "provider_outcomes[]"),
+                        "provider_outcomes[].affected_coverage_groups",
+                    )
+                ),
+            )
+        )
+    gap = pipeline.get("coverage_gap")
+    if gap is not None:
+        limitations.append(
+            DigestLimitation(
+                code="coverage_gap",
+                uncovered_start=_copy_required(
+                    gap, "uncovered_start", "Feed.pipeline.coverage_gap"
+                ),
+                uncovered_end=_copy_required(gap, "uncovered_end", "Feed.pipeline.coverage_gap"),
+            )
+        )
+    return limitations
 
 
 def _project_validated_feed(
     feed: Mapping[str, Any], *, context_version: int = CONTEXT_VERSION
 ) -> DigestContext:
-    """Project one already validated current Feed without re-validating it."""
+    """Prepare one already validated current Feed without re-validating it."""
     try:
         if context_version != CONTEXT_VERSION:
             raise DigestPreparationError(f"unsupported DigestContext version: {context_version!r}")
         feed_map = _mapping(feed, "Feed")
         window = _mapping(_copy_required(feed_map, "window", "Feed"), "Feed.window")
+        window_start = _timestamp(window.get("start"), "Feed.window.start")
+        window_end = _timestamp(window.get("end"), "Feed.window.end")
         pipeline = _mapping(_copy_required(feed_map, "pipeline", "Feed"), "Feed.pipeline")
-        warnings = _sequence(
-            _copy_required(pipeline, "warnings", "Feed.pipeline"), "Feed.pipeline.warnings"
-        )
+        if pipeline.get("status") not in {"healthy", "degraded"}:
+            raise DigestPreparationError(
+                f"Feed.pipeline.status: not a consumable Feed: {pipeline.get('status')!r}"
+            )
         outcomes = _sequence(
             _copy_required(feed_map, "provider_outcomes", "Feed"), "Feed.provider_outcomes"
         )
+        outcome_by_provider = {
+            _copy_required(outcome, "provider_id", "provider_outcomes[]"): _mapping(
+                outcome, "provider_outcomes[]"
+            )
+            for outcome in outcomes
+        }
         items = _sequence(_copy_required(feed_map, "items", "Feed"), "Feed.items")
         binding = DigestFeedBinding(
             schema_version=feed_map["schema_version"],
@@ -1228,36 +1305,47 @@ def _project_validated_feed(
             window=window,
             evidence_cutoff_at=feed_map["evidence_cutoff_at"],
         )
-        coverage_gap = pipeline.get("coverage_gap")
-        status = DigestStatus(
-            status=pipeline["status"],
-            warnings=tuple(warnings),
-            coverage_gap=coverage_gap,
-        )
-        providers = tuple(_project_provider(outcome) for outcome in outcomes)
-        projected_by_domain: dict[str, list[DigestItem]] = {domain: [] for domain in DOMAIN_ORDER}
+        updates: list[DigestUpdateUnit] = []
+        scope_states: dict[str, list[str]] = {scope: [] for scope in SCOPE_ORDER}
+        positioning_items: list[Mapping[str, Any]] = []
         for item in items:
-            projected = _project_item(item)
-            projected_by_domain[projected.payload["type"]].append(projected)
+            item_map = _mapping(item, "items[]")
+            payload = _mapping(_copy_required(item_map, "payload", "items[]"), "items[].payload")
+            domain = payload.get("type")
+            if domain not in DOMAIN_ORDER:
+                raise DigestPreparationError(f"items[].payload.type: unsupported domain {domain!r}")
+            if domain == "positioning":
+                positioning_items.append(item_map)
+                continue
+            state, event_value = _membership_state(item_map, domain, window_start, window_end)
+            scope = _filing_scope(payload) if domain == "filing" else domain
+            if scope is not None:
+                scope_states[scope].append(state)
+            if state == "current":
+                assert isinstance(event_value, str)
+                updates.append(_build_unit(item_map, payload, domain, event_value))
         domains = tuple(
-            DigestDomain(domain=domain, items=tuple(projected_by_domain[domain]))
-            for domain in DOMAIN_ORDER
-        )
-        if sum(domain.total for domain in domains) != len(items):
-            raise DigestPreparationError(
-                "projected domain totals do not account for every Feed item"
+            _positioning_status(positioning_items, outcome_by_provider)
+            if scope == "cftc"
+            else DigestDomainStatus(
+                domain=SCOPE_DOMAIN[scope],
+                scope=scope,
+                state=_aggregate_states(scope_states[scope]),
             )
+            for scope in SCOPE_ORDER
+        )
         return DigestContext(
             context_version=context_version,
             feed=binding,
-            status=status,
-            providers=providers,
-            domains=domains,
+            content=DigestContent(updates=tuple(updates)),
+            status=DigestStatus(
+                domains=domains, limitations=tuple(_limitations(outcomes, pipeline))
+            ),
         )
     except DigestPreparationError:
         raise
     except (KeyError, TypeError, ValueError) as exc:
-        raise DigestPreparationError(f"cannot project validated Feed: {exc}") from exc
+        raise DigestPreparationError(f"cannot prepare validated Feed: {exc}") from exc
 
 
 def prepare_digest_context(*, context_version: int = CONTEXT_VERSION) -> DigestContext:
@@ -1281,8 +1369,6 @@ def main(argv: list[str] | None = None) -> int:
     except (FeedRemoteError, DigestPreparationError) as exc:
         print(f"prepare-feed: {exc}", file=sys.stderr)
         return 1
-    for warning in context.status.warnings:
-        print(f"warning: {warning}", file=sys.stderr)
     sys.stdout.buffer.write(context.canonical_bytes())
     return 0
 
@@ -1294,14 +1380,24 @@ if __name__ == "__main__":
 __all__ = [
     "CONTEXT_VERSION",
     "DOMAIN_ORDER",
+    "DOMAIN_STATES",
+    "DOMAIN_UNIT_TYPE",
     "ELIGIBLE_PATHS",
+    "LIMITATION_CODES",
+    "MEMBERSHIP_AUTHORITY",
+    "SCOPE_DOMAIN",
+    "SCOPE_ORDER",
+    "UNIT_TYPES",
+    "DigestContent",
     "DigestContext",
-    "DigestDomain",
+    "DigestDomainStatus",
+    "DigestEventTime",
     "DigestFeedBinding",
-    "DigestItem",
+    "DigestLimitation",
     "DigestPreparationError",
-    "DigestProvider",
     "DigestStatus",
+    "DigestUnitTrace",
+    "DigestUpdateUnit",
     "eligible_paths",
     "main",
     "prepare_digest_context",

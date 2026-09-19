@@ -8,6 +8,40 @@ available. Preserve source identity and attribution. The list below is a
 closed whitelist enforced by deterministic preparation; it does not authorize
 facts outside the listed paths.
 
+## Reader-Facing Unit
+
+Preparation exposes one `news_publication` unit for each news item whose
+membership it proves. The unit carries the closed unit domain `news`, its
+`news_publication` unit type, the Provider identity, the item's closed source
+provenance, an event-time semantic of kind `published_at`, the closed
+supporting evidence, and a trace of the supporting Feed item IDs. The unit
+identifier is the deterministic function of the unit type and those Feed item
+IDs; a later multi-item unit would require an accepted shared identity before
+extending that rule. A news item that is not proven current yields no unit.
+
+## Current Membership
+
+Membership is evaluated against the half-open Feed window
+`[window.start, window.end)`. The only accepted authority is
+`source.published_at`. A publication time inside the interval yields exactly
+one current unit; an explicitly earlier publication time yields
+`news/no_current_update`; a missing, invalid, at-or-after-end, or otherwise
+unusable publication time yields `news/current_membership_unproven`. News
+`occurred_at`, `source.updated_at`, and `source.knowledge_available_at` are
+never substituted for the publication authority, and no other timestamp is
+tried.
+
+## Supporting Evidence
+
+The closed whitelist below is the item-level inventory. Preparation maps it
+into the unit without opening it: the item identifier becomes the unit trace,
+`provider_id` becomes the unit Provider identity, the item `source.*` and
+`source_lineage[].*` paths become the unit source provenance, and the
+`payload.*` and `semantic_context.*` paths become the unit supporting evidence,
+with `payload.*` nested under its payload member and `semantic_context.*` under
+its semantic-context member. Nothing outside this inventory is exposed, and no
+Feed item becomes a Digest statement by itself.
+
 ## Evidence Fields
 
 The closed whitelist for a `news` item is:

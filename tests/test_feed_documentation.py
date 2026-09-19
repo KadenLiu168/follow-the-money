@@ -93,19 +93,28 @@ def test_feed_contract_owns_feed_details():
         assert term in lowered
 
 
-def test_presentation_contract_owns_digest_output_requirements():
+def test_presentation_contract_owns_prepared_update_consumption():
     lowered = PRESENTATION_CONTRACT.read_text(encoding="utf-8").lower()
 
     for term in (
-        "feed data status",
-        "evidence_cutoff_at",
-        "provider coverage",
+        "content.updates",
+        "status.domains",
+        "status.limitations",
+        "current-membership",
+        "claim support",
+        "non-exhaustive",
         "source provenance",
-        "freshness",
-        "current-window updates",
-        "data-quality or unavailable-source limitations",
+        "conditions materially affect a reader's understanding",
+        "compact limitation",
     ):
         assert term in lowered
+    for removed in (
+        "feed data status",
+        "evidence_cutoff_at",
+        "secondary audit surface",
+        "full feed evidence, provider outcomes, freshness records, counts",
+    ):
+        assert removed not in lowered
 
 
 def test_presentation_hierarchy_owns_field_and_compression_guidance():
@@ -115,14 +124,21 @@ def test_presentation_hierarchy_owns_field_and_compression_guidance():
     assert "validated" in presentation
     assert "payload.type" in presentation
     for term in (
-        "domain total",
-        "individually summarized",
-        "represented through consolidation",
-        "omitted",
-        "reconcile",
+        "not required to display every prepared update",
+        "claim",
         "traceab",
+        "omission",
+        "authoritative feed",
     ):
         assert term in compression
+    for removed in (
+        "report the domain total",
+        "individually summarized",
+        "represented through consolidation",
+        "must reconcile",
+        "counts as omitted",
+    ):
+        assert removed not in compression
 
 
 def test_normal_skill_output_does_not_require_financial_judgment_sections():

@@ -1,21 +1,4 @@
-# digest-preparation-contract Specification
-
-## Purpose
-
-Define the typed, versioned, deterministic preparation of one non-persisted Agent-facing `DigestContext` from the canonical validated current Evidence Feed without creating another evidence authority or schema.
-
-## Requirements
-
-### Requirement: Digest preparation consumes exactly one validated current Feed
-Normal Digest preparation SHALL begin only after the existing canonical published-Feed retrieval, bundle reconstruction, Feed schema and semantic validation, provenance validation, and identity validation have succeeded. It SHALL reuse that path without duplicating its validation rules and SHALL NOT accept a local, historical, stale, partial, caller-supplied, or independently reconstructed Feed.
-
-#### Scenario: Current Feed validation succeeds
-- **WHEN** canonical current published-Feed consumption returns one fully validated Feed
-- **THEN** preparation derives one `DigestContext` from exactly that Feed
-
-#### Scenario: Retrieval or validation fails
-- **WHEN** any existing published-Feed retrieval or validation step fails
-- **THEN** preparation exposes the existing typed failure and produces no partial `DigestContext`
+## MODIFIED Requirements
 
 ### Requirement: DigestContext is typed, versioned, and deterministic
 Normal Digest preparation SHALL produce the explicit code-level `DigestContext` version `2`. Its Agent-facing representation SHALL be canonical JSON produced by the repository's canonical serializer. For the same validated Feed and supported context version, preparation SHALL produce byte-identical typed values and bytes independent of wall-clock time, environment, filesystem state, iteration order, current configuration, network state after Feed consumption, historical Feed state, checkpoint state, or model behavior. Version `1` SHALL NOT remain a normal Agent-facing output, and any unsupported version SHALL fail closed.
@@ -27,17 +10,6 @@ Normal Digest preparation SHALL produce the explicit code-level `DigestContext` 
 #### Scenario: Context version is unsupported
 - **WHEN** preparation is requested with a context version other than `2`
 - **THEN** preparation fails closed without emitting version `1`, silently interpreting the request as version `2`, or producing a partial context
-
-### Requirement: DigestContext remains wholly Feed-derived and Feed-bound
-Every evidence, status, coverage, warning, freshness, availability, limitation, and provenance value in `DigestContext` SHALL be copied from or deterministically computed from the single validated input Feed. The context SHALL carry the source Feed's schema version, `run_id`, `content_digest`, window, and evidence cutoff so its derivation remains unambiguous. Fixed context-version and structural discriminator values SHALL describe only the preparation contract and SHALL NOT assert evidence. Preparation MUST NOT enrich values from external knowledge, another Feed, a checkpoint, current configuration, Provider access, free-form interpretation, or an unstated calculation.
-
-#### Scenario: Feed identity is retained
-- **WHEN** a context is prepared successfully
-- **THEN** its Feed binding exactly matches the validated Feed's schema version, `run_id`, `content_digest`, window, and evidence cutoff
-
-#### Scenario: Evidence is unavailable
-- **WHEN** an eligible Feed value is null, absent, legacy-omitted, or explicitly unavailable
-- **THEN** preparation preserves that limitation and does not reconstruct or replace the value
 
 ### Requirement: DigestContext exposes deterministic status and coverage context
 `DigestContext` version `2` SHALL expose `status.domains` and `status.limitations` as closed, typed, Feed-derived descriptors rather than copying complete Feed item, Provider-outcome, warning, freshness, coverage, or reconciliation audit surfaces. Domain descriptors SHALL use only the closed states `current_updates_available`, `no_current_update`, `carried_reference_state`, `stale_reference_state`, `current_membership_unproven`, `provider_unavailable`, and `domain_empty`; implementation MAY represent unavailable Providers exclusively as limitation descriptors rather than duplicating them in domain status. Material Provider unavailability and a structured Feed coverage gap SHALL remain accurately represented by closed limitation codes with the supporting Provider identity, affected coverage groups, or gap bounds needed for reader-facing disclosure. Attempted, fetched, accepted, rejected, upstream HTTP status, raw warning strings, complete Provider rows, Feed-domain totals, reference-item counts, and representation-accounting counts SHALL NOT be exposed by default.
@@ -69,17 +41,6 @@ Preparation SHALL select a domain solely from each Feed item's validated `payloa
 - **WHEN** a validated Feed is prepared
 - **THEN** every Feed item is deterministically classified as a current unit candidate, an explicit non-current condition, or an unproven-current condition without requiring every item to appear in Agent-facing content
 
-### Requirement: DigestContext is not an independent evidence schema or persisted artifact
-`DigestContext` SHALL be a non-persisted Agent-facing consumption interface, not a published artifact, checkpoint, cache, Feed replacement, or independent evidence authority. It SHALL have no standalone JSON Schema and SHALL NOT change Feed schemas, canonical Feed bytes, Feed identity, collection, validation, publication, or retrieval. Context validity and authority SHALL derive from successful construction by the typed preparation layer and its retained binding to the validated Feed.
-
-#### Scenario: Repository artifacts are inspected
-- **WHEN** schemas, published Feed products, checkpoints, caches, and runtime state are inspected after preparation
-- **THEN** no `DigestContext` artifact or schema exists and no persistent state was mutated
-
-#### Scenario: Context and Feed authority are compared
-- **WHEN** a projected context value is used by the Host Agent
-- **THEN** its authority remains limited to its supporting validated Feed evidence and the context adds no independent fact or verification claim
-
 ### Requirement: Preparation performs no Host-Agent presentation work
 Preparation MAY perform only contract-defined deterministic current-membership classification, reader-facing unit construction, compact domain-status derivation, material-limitation derivation, and canonical ordering wholly supported by explicit validated Feed evidence. It SHALL NOT perform semantic inference, open-ended topic or event grouping, title/provider/date/keyword/embedding similarity grouping, importance selection, top-N selection, ranking, readability ordering, summarization, prose generation, financial interpretation, semantic-support assessment for proposed prose, or final-output accounting. It SHALL add no model/LLM runtime, prompt pipeline, renderer, template engine, retry/rewrite loop, or Agent orchestration.
 
@@ -90,6 +51,8 @@ Preparation MAY perform only contract-defined deterministic current-membership c
 #### Scenario: Several documents appear related
 - **WHEN** multiple Feed items share a Provider, date, title prefix, keyword, or apparent subject but no accepted shared identity
 - **THEN** preparation does not merge them into one update unit
+
+## ADDED Requirements
 
 ### Requirement: DigestContext v2 contains only current update units as substantive content
 `DigestContext` version `2` SHALL retain the exact source Feed schema version, `run_id`, `content_digest`, window, and evidence cutoff under `feed`; SHALL expose substantive evidence only as `content.updates`; and SHALL expose non-substantive conditions only as compact `status.domains` and `status.limitations`. It SHALL NOT expose `domains[].items[]`, `reference_state`, `unresolved_items`, complete Provider outcomes, or another collection of non-current evidence. Each `DigestUpdateUnit` SHALL contain a deterministic `unit_id`, a domain from the accepted five-domain whitelist, a unit type from `news_publication`, `macro_release`, `policy_document`, `positioning_report`, or `sec_filing`, an explicit event-time `kind` and `value`, Provider identity, closed source provenance, closed supporting evidence, and `trace.feed_item_ids`.

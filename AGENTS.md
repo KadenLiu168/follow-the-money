@@ -25,9 +25,12 @@ verified、credential-free Provider。CFTC 是 minimum-one 的必需 weekly posi
 coverage。
 
 Skill 只消费当前 validated published Feed，不接收公司、资产、主题、时间范围或
-研究问题，也不读取历史 Feed 或 checkpoint。Host Agent 可以进行 grouping、heading、
-ordering、consolidation 和 compression，但不得把 presentation choice 变成重要性、
-因果、market impact、prediction、投资或交易判断。
+研究问题，也不读取历史 Feed 或 checkpoint。Skill 负责确定性的 current-membership
+classification、reader unit construction、compact domain status 和 material
+limitations；Host Agent 只消费准备好的 current updates，可以进行 grouping、heading、
+ordering、consolidation 和 compression，但不得重新分类 Feed evidence、对每个 Feed
+item 做 omission accounting，或把 presentation choice 变成重要性、因果、
+market impact、prediction、投资或交易判断。
 
 不得引入 model/LLM runtime、credential/API-key request path、prompt pipeline、
 Agent orchestration、standalone public CLI、自动交易或投资执行能力。运行时不得

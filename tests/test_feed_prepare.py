@@ -31,7 +31,7 @@ def test_prepare_feed_emits_canonical_digest_context(monkeypatch, capsys):
     assert captured.err == ""
 
 
-def test_prepare_feed_preserves_degraded_warnings_on_stderr(monkeypatch, capsys):
+def test_prepare_feed_emits_compact_limitations_instead_of_warnings(monkeypatch, capsys):
     digest = _digest_module()
     feed = _feed()
     cftc = next(
@@ -59,7 +59,9 @@ def test_prepare_feed_preserves_degraded_warnings_on_stderr(monkeypatch, capsys)
     assert digest.main([]) == 0
     captured = capsys.readouterr()
     assert captured.out == _project_validated_feed(feed).canonical_bytes().decode("utf-8")
-    assert captured.err == "warning: blocked Provider cftc\n"
+    assert captured.err == ""
+    assert "blocked Provider cftc" not in captured.out
+    assert '"limitations":[{"affected_coverage_groups":["cftc_positioning"],"code":' in captured.out
 
 
 def test_prepare_feed_reports_typed_failure_on_stderr(monkeypatch, capsys):

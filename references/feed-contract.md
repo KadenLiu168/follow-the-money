@@ -10,9 +10,12 @@ credential-free, makes no Provider request or GitHub REST API request, and has
 no local, stale, legacy, partial, or unvalidated fallback.
 
 After Feed retrieval and validation succeed, the same invocation deterministically
-projects the validated Feed into one canonical v1 `DigestContext` for the Host
-Agent. The context is typed and non-persisted; it is not a published artifact,
-checkpoint, cache, Feed replacement, or independent evidence schema.
+prepares the validated Feed into one canonical `DigestContext` version `2` for
+the Host Agent. The context binds the exact Feed identity and exposes only
+prepared current `content.updates`, compact `status.domains`, and closed
+`status.limitations`. It is typed and non-persisted; it is not a published
+artifact, checkpoint, cache, Feed replacement, or independent evidence schema,
+and version `1` is no longer a normal Agent-facing output.
 
 ## Manifest and artifacts
 

@@ -9,6 +9,45 @@ limitations. One filing contract owns all filing subtypes. The list below is a
 closed whitelist enforced by deterministic preparation; it does not authorize
 facts outside the listed paths.
 
+## Reader-Facing Unit
+
+Preparation exposes one accession-level `sec_filing` unit for each filing
+accession whose membership it proves, regardless of how many holdings,
+reporting owners, transactions, positions, footnotes, remarks, or comparison
+facts the accession contains. The unit carries the closed unit domain `filing`,
+its `sec_filing` unit type, the Provider identity, the item's closed source
+provenance, an event-time semantic of kind `accepted_at`, the closed supporting
+evidence, and a trace of the supporting Feed item IDs. The unit identifier is
+the deterministic function of the unit type and those Feed item IDs. Nested
+holdings, entries, owners, positions, previous snapshots, and other historical
+comparison evidence remain evidence inside that one unit and never become a
+second update.
+
+## Current Membership
+
+Membership is evaluated against the half-open Feed window
+`[window.start, window.end)` for each filing scope: `form13f`, `form4`, and
+`beneficial_ownership`. The only accepted authority is `payload.accepted_at`,
+and preparation never falls back to `payload.filed_at`. An acceptance time
+inside the interval yields exactly one current unit for that accession; an
+explicitly earlier acceptance time yields
+`filing/<subtype>/no_current_update`; a missing, invalid, at-or-after-end, or
+otherwise unusable acceptance time yields
+`filing/<subtype>/current_membership_unproven`. A subtype-less legacy filing
+item has no closed reader scope and yields neither a unit nor a status
+descriptor; its evidence stays in the validated Feed.
+
+## Supporting Evidence
+
+The closed whitelists below are the item-level inventory. Preparation maps them
+into the unit without opening them: the item identifier becomes the unit trace,
+`provider_id` becomes the unit Provider identity, the item `source.*` and
+`source_lineage[].*` paths become the unit source provenance, and the
+`payload.*` paths become the unit supporting evidence under its payload member.
+A Form 13F whose acceptance predates the window keeps its holdings out of every
+Agent-facing collection; a current accession retains its nested evidence. No
+Feed item becomes a Digest statement by itself.
+
 ## Evidence Fields
 
 The closed common whitelist for a `filing` item is:

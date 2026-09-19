@@ -8,6 +8,39 @@ scope. Preserve the distinction between announcement and effect. The list below
 is a closed whitelist enforced by deterministic preparation; it does not
 authorize facts outside the listed paths.
 
+## Reader-Facing Unit
+
+Preparation exposes one `policy_document` unit for each policy item whose
+membership it proves. The unit carries the closed unit domain `policy`, its
+`policy_document` unit type, the Provider identity, the item's closed source
+provenance, an event-time semantic of kind `announced_at`, the closed supporting
+evidence, and a trace of the supporting Feed item IDs. The unit identifier is
+the deterministic function of the unit type and those Feed item IDs. A policy
+item that is not proven current yields no unit.
+
+## Current Membership
+
+Membership is evaluated against the half-open Feed window
+`[window.start, window.end)`. The only accepted authority is
+`payload.announced_at`. An announcement time inside the interval yields exactly
+one current unit; an explicitly earlier announcement time yields
+`policy/no_current_update`; a missing, invalid, at-or-after-end, or otherwise
+unusable announcement time yields `policy/current_membership_unproven`.
+`payload.effective_at` is retained only as supporting evidence inside that one
+unit, and policy type, action, and affected scope never become additional
+updates.
+
+## Supporting Evidence
+
+The closed whitelist below is the item-level inventory. Preparation maps it
+into the unit without opening it: the item identifier becomes the unit trace,
+`provider_id` becomes the unit Provider identity, the item `source.*` and
+`source_lineage[].*` paths become the unit source provenance, and the
+`payload.*` and `semantic_context.*` paths become the unit supporting evidence,
+with `payload.*` nested under its payload member and `semantic_context.*` under
+its semantic-context member. Nothing outside this inventory is exposed, and no
+Feed item becomes a Digest statement by itself.
+
 ## Evidence Fields
 
 The closed whitelist for a `policy` item is:

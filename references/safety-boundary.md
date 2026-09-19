@@ -5,11 +5,13 @@ advice or execution. Feed items retain source provenance and verification
 status. The Feed does not produce importance, ranking, market-impact,
 prediction, recommendation, or trading conclusions.
 
-The Skill first applies the closed field and domain rules while projecting one
-validated Feed into a non-persisted `DigestContext`. The Host Agent must then
-assess semantic support before presenting a factual digest assertion. A
-`DigestContext` remains a Feed-bound view, not an independent evidence schema
-or authority. A citation alone is not semantic support, and summarization or
+The Skill first applies the closed field, domain, and current-membership rules
+while preparing one validated Feed into a non-persisted `DigestContext` version
+`2`. The Host Agent must then assess semantic support before presenting a
+factual digest assertion. A `DigestContext` remains a Feed-bound view, not an
+independent evidence schema or authority; evidence it does not expose as a
+current update remains authoritative in the Feed without becoming a presentation
+judgment. A citation alone is not semantic support, and summarization or
 consolidation must not exceed the supporting source authority. Unsupported
 assertions must be omitted, narrowed, or accurately qualified rather than
 presented as grounded facts.

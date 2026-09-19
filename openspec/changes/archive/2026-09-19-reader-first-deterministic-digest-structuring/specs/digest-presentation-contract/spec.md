@@ -1,10 +1,4 @@
-# digest-presentation-contract Specification
-
-## Purpose
-
-Define the static global, compression, and per-domain contracts that constrain Host-Agent presentation of the validated current Evidence Feed while preserving its evidence-only authority and existing runtime boundary.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Every active Feed domain has exactly one presentation contract
 The contract set SHALL contain exactly one domain contract per active Feed payload type and none for non-Feed domains. Deterministic Digest preparation SHALL select the contract only from a Feed item's validated `payload.type`, apply its closed current-membership rule, and construct any eligible reader-facing unit before Agent consumption. Selection and membership SHALL NOT depend on title, Provider-name inference, free-form source text, model behavior, importance, relevance, or another evidence category.
@@ -31,28 +25,6 @@ Each domain contract MUST define its Reader-Facing Unit, Current Membership, Sup
 #### Scenario: Feed schema gains a field
 - **WHEN** a later accepted Feed contract adds a field that the matching Digest domain contract has not added to its closed supporting evidence
 - **THEN** preparation keeps that field unavailable to the Host Agent
-
-### Requirement: Missing evidence remains missing
-Domain presentation contracts and deterministic preparation SHALL preserve null values, explicit unavailability, and absent or legacy-omitted fields as missing evidence. They MUST NOT reconstruct missing facts from titles, free-form text, `raw_metadata`, another item, a historical Feed or checkpoint, external knowledge, or an unstated calculation.
-
-#### Scenario: Legacy semantic context is absent
-- **WHEN** a valid legacy `news`, `macro_release`, or `policy` item omits `semantic_context`
-- **THEN** preparation and presentation use only eligible evidence actually present and do not reconstruct semantic context
-
-#### Scenario: Optional evidence is null or unavailable
-- **WHEN** a whitelisted field is null or explicitly unavailable
-- **THEN** `DigestContext` preserves that state and the Digest preserves or accurately discloses the limitation instead of inventing a value or interpretation
-
-### Requirement: Domain presentation remains evidence preserving
-Every domain contract SHALL define its factual purpose, closed evidence fields, recommended representation, and forbidden interpretation. It MUST NOT direct the Host Agent to add unsupported facts or infer importance, anomaly, ranking, score, causality, sentiment, direction, market impact, signal, prediction, recommendation, or trading instruction. Source-authored analysis MAY be summarized only with attribution and no authority upgrade.
-
-#### Scenario: Facts invite financial interpretation
-- **WHEN** a domain item contains facts from which an analytical or financial conclusion could be inferred
-- **THEN** the applicable contract permits presentation of supported facts but prohibits adding the inferred conclusion
-
-#### Scenario: Source contains analytical wording
-- **WHEN** analytical or predictive wording is itself present in whitelisted validated source evidence
-- **THEN** the contract permits only an accurately attributed summary that is not presented as a Feed, Skill, or Host-Agent conclusion
 
 ### Requirement: Compression rules are global and transparent
 The presentation-contract hierarchy SHALL define reader-facing compression once for all domains. Every factual claim actually presented SHALL remain traceable through one or more `DigestUpdateUnit` values to their supporting Feed item IDs and eligible original-source provenance. The Host Agent MAY summarize, consolidate source-supported repetition, or omit prepared updates from prose without reporting Feed-domain totals, individual/consolidated/omitted counts, all supporting item IDs to the reader, or a complete audit surface. An omission or the absence of a Feed item from `content.updates` SHALL NOT be characterized as evidence of irrelevance, insignificance, invalidity, low importance, or another financial or editorial judgment.
@@ -102,6 +74,8 @@ The default Digest SHALL be a selective reader-facing editorial view of the curr
 #### Scenario: Retrieval validation or preparation fails
 - **WHEN** current Feed retrieval, validation, or deterministic preparation fails
 - **THEN** the existing fail-closed behavior produces no normal Digest
+
+## ADDED Requirements
 
 ### Requirement: Non-current Feed evidence remains authoritative but non-substantive
 Evidence excluded from `content.updates` SHALL remain unchanged and authoritative in the validated Feed. Its absence from substantive Digest content SHALL mean only that the v2 membership contract did not expose it as a current reader update; it SHALL NOT imply that the evidence is irrelevant, insignificant, invalid, false, or unimportant.

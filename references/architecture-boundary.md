@@ -23,13 +23,16 @@ assessment, and user-facing presentation. Neither side may turn presentation
 choices into importance, causality, market impact, prediction, investment, or
 trading judgment.
 
-After canonical Feed consumption, the Skill deterministically projects one
-typed, versioned, non-persisted `DigestContext`. The context is a bounded view
-of the validated Feed, not a second evidence schema or authority; it is never
-published, cached, checkpointed, or used to replace Feed identity. Closed
-domain field selection and dispatch happen in this preparation step. The Host
-Agent owns representation, semantic-support assessment, summarization,
-editorial operations, compression accounting, and final formatting.
+After canonical Feed consumption, the Skill deterministically prepares one
+typed, versioned, non-persisted `DigestContext` version `2`. The context is a
+bounded view of the validated Feed, not a second evidence schema or authority;
+it is never published, cached, checkpointed, or used to replace Feed identity.
+Closed domain field selection, current-membership classification, reader-unit
+construction, reference-state classification, compact domain status, and
+material limitations happen in this preparation step. The Host Agent owns
+representation, semantic-support assessment, summarization, editorial
+operations, and final formatting; it does not reclassify Feed evidence or
+account for every Feed item.
 
 The item-level `semantic_context` is a closed evidence projection attached only
 to newly acquired or replaced `news`, `macro_release`, and `policy` items. It

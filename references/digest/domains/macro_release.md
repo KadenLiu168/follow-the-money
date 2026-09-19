@@ -8,6 +8,40 @@ observations. Preserve numeric value, unit, unknown reason, and source
 provenance. The list below is a closed whitelist enforced by deterministic
 preparation; it does not authorize facts outside the listed paths.
 
+## Reader-Facing Unit
+
+Preparation exposes one `macro_release` unit for each macro-release item whose
+membership it proves. The unit carries the closed unit domain `macro_release`,
+its `macro_release` unit type, the Provider identity, the item's closed source
+provenance, an event-time semantic of kind `released_at`, the closed supporting
+evidence, and a trace of the supporting Feed item IDs. The unit identifier is
+the deterministic function of the unit type and those Feed item IDs. A
+macro-release item that is not proven current yields no unit.
+
+## Current Membership
+
+Membership is evaluated against the half-open Feed window
+`[window.start, window.end)`. The only accepted authority is
+`payload.released_at`. A release time inside the interval yields exactly one
+current unit; an explicitly earlier release time yields
+`macro_release/no_current_update`; a missing, invalid, at-or-after-end, or
+otherwise unusable release time yields
+`macro_release/current_membership_unproven`. Observation period, actual,
+consensus, previous, and revision values remain supporting evidence inside that
+one unit and never become additional updates; source and retrieval times are
+never substituted for the release authority.
+
+## Supporting Evidence
+
+The closed whitelist below is the item-level inventory. Preparation maps it
+into the unit without opening it: the item identifier becomes the unit trace,
+`provider_id` becomes the unit Provider identity, the item `source.*` and
+`source_lineage[].*` paths become the unit source provenance, and the
+`payload.*` and `semantic_context.*` paths become the unit supporting evidence,
+with `payload.*` nested under its payload member and `semantic_context.*` under
+its semantic-context member. Nothing outside this inventory is exposed, and no
+Feed item becomes a Digest statement by itself.
+
 ## Evidence Fields
 
 The closed whitelist for a `macro_release` item is:

@@ -1,9 +1,4 @@
-# information-digest-invocation Specification
-
-## Purpose
-Define normal consumption of the current published Evidence Feed as a Host-Agent-owned information digest.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Normal invocation produces the current information digest
 Normal `/follow-the-money` invocation SHALL consume the current validated published Feed through deterministic preparation and provide its one Feed-bound `DigestContext` version `2` to the Host Agent for direct production of a reader-first evidence-based information digest. The Host Agent SHALL use `content.updates` as its default substantive input and `status.domains` plus `status.limitations` only for applicable conditional disclosure. Invocation SHALL NOT request or accept a company, asset, topic, time range, research question, or other user-supplied scope and SHALL NOT read a historical Feed or checkpoint. “Current” or “new” SHALL mean membership proven by the applicable preparation contract, not mere presence in the current Feed or comparison with a prior publication.
@@ -38,17 +33,6 @@ The Host Agent MAY summarize prepared updates, group them by source or explicit 
 - **WHEN** the Host Agent changes presentation order or creates headings
 - **THEN** the Digest does not characterize that presentation choice as significance, priority, ranking, or membership evidence
 
-### Requirement: Digest excludes financial judgment
-The digest SHALL NOT introduce or infer significance, anomaly, signal, causality, market regime, asset impact, price-in status, prediction, investment recommendation, or trading instruction. It MAY accurately summarize such wording only when it is itself part of the validated source evidence, provided the digest attributes the statement to that source and does not adopt or upgrade it as a Host-Agent or Skill conclusion.
-
-#### Scenario: Evidence could invite interpretation
-- **WHEN** validated Feed items contain facts from which a financial interpretation could be inferred
-- **THEN** the digest summarizes the supported facts without adding significance, anomaly, causality, market-impact, prediction, or investment conclusions
-
-#### Scenario: Source contains analytical language
-- **WHEN** a validated Feed item explicitly records a source’s analytical or predictive statement
-- **THEN** the digest may summarize it only with clear source attribution and without representing it as a Skill-verified or Host-Agent-derived conclusion
-
 ### Requirement: Digest invocation preserves the existing runtime boundary
 Normal Digest invocation SHALL retrieve and fail-closed validate only the canonical current published Feed, deterministically prepare one non-persisted Feed-bound `DigestContext` version `2`, and pass it to the Host Agent. Retrieval, validation, or preparation failure SHALL produce no context or Digest and SHALL NOT trigger Provider collection, local or stale fallback, partial evidence output, historical input, another evidence capability, or any embedded model runtime. Version `1` complete projection SHALL NOT remain a parallel normal Host-Agent input. Evidence Feed SHALL remain the repository's sole evidence authority, and the Digest SHALL remain Host-Agent-owned output behavior rather than a Feed field or repository-generated narrative.
 
@@ -60,9 +44,18 @@ Normal Digest invocation SHALL retrieve and fail-closed validate only the canoni
 - **WHEN** the invocation contract is compared with repository schemas, runtime entries, and imports
 - **THEN** only Feed production, current published-Feed consumption, deterministic v2 structuring, and Host-Agent presentation remain
 
+## ADDED Requirements
+
 ### Requirement: Digest selection is non-exhaustive and claim-traceable
 The default Digest SHALL NOT be required to display every Feed item or domain, reconcile every item into representation categories, expose all supporting item IDs, disclose every omission, or print complete Provider and freshness audit tables. Every factual claim that the Digest does present SHALL remain traceable through a prepared update to supporting Feed evidence and eligible original-source provenance.
 
 #### Scenario: Feed contains extensive reference state
 - **WHEN** a validated Feed contains many old, carried, stale, or unproven-current items and only a small number of eligible current updates
 - **THEN** the Digest uses the eligible updates as substantive content and uses only applicable compact statuses and limitations for the remaining conditions
+
+## REMOVED Requirements
+
+### Requirement: Compression coverage is transparent
+**Reason**: Feed-wide individual/consolidated/omitted accounting makes a complete Feed require a complete visible textual audit and conflicts with selective reader-facing v2 preparation.
+
+**Migration**: Replace per-domain totals and representation counts with claim-level traceability from each presented statement through `DigestUpdateUnit` to supporting Feed evidence. Full evidence accounting remains in the authoritative Feed.

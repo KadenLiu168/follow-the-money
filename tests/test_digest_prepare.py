@@ -1,44 +1,107 @@
-"""Deterministic Feed-to-DigestContext preparation regressions."""
+"""Deterministic Feed-to-DigestContext v2 preparation regressions."""
 
 from __future__ import annotations
 
+import json
 import re
 from copy import deepcopy
 from dataclasses import FrozenInstanceError, fields, is_dataclass
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
 from follow_the_money.canonical import canonical_bytes
 from follow_the_money.digest import (
+    DOMAIN_STATES,
     ELIGIBLE_PATHS,
+    LIMITATION_CODES,
+    SCOPE_ORDER,
+    DigestContext,
     DigestPreparationError,
     _project_validated_feed,
     eligible_paths,
     prepare_digest_context,
 )
-from tests.test_feed_boundary import _cftc_v2_item, _macro_item, _policy_item, _sec_v2_item
-from tests.test_feed_bundle import _feed, _news
+from tests.test_feed_boundary import _macro_item, _policy_item, _sec_v2_item
+from tests.test_feed_bundle import T0, _feed, _news
+
+CURRENT = T0 - timedelta(hours=1)
+EXPECTED_SCOPES = (
+    ("news", "news"),
+    ("macro_release", "macro_release"),
+    ("policy", "policy"),
+    ("positioning", "cftc"),
+    ("filing", "form13f"),
+    ("filing", "form4"),
+    ("filing", "beneficial_ownership"),
+)
 
 
-def test_digest_context_is_frozen_and_slotted_with_explicit_version():
-    context = _project_validated_feed(_feed([_news()]))
+def _current_news(item_id: str = "news-current") -> dict:
+    return _news(item_id, at=CURRENT)
+
+
+def _current_macro() -> dict:
+    item = _macro_item()
+    item["payload"]["released_at"] = _ts(CURRENT)
+    item["source"]["published_at"] = _ts(CURRENT)
+    item["source"]["knowledge_available_at"] = _ts(CURRENT)
+    item["semantic_context"]["event"]["occurred_at"] = _ts(CURRENT)
+    return item
+
+
+def _current_policy() -> dict:
+    item = _policy_item()
+    item["payload"]["announced_at"] = _ts(CURRENT)
+    item["source"]["published_at"] = _ts(CURRENT)
+    item["source"]["knowledge_available_at"] = _ts(CURRENT)
+    return item
+
+
+def _form13f_item(item_id: str = "sec-v2-item", accepted_at: str | None = None) -> dict:
+    item = _sec_v2_item()
+    item["id"] = item_id
+    item["source"]["id"] = item_id
+    item["payload"]["filing_subtype"] = "form13f"
+    if accepted_at is not None:
+        item["payload"]["accepted_at"] = accepted_at
+        item["payload"]["filed_at"] = accepted_at
+    return item
+
+
+def _ts(value) -> str:
+    return value.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def _status_by_scope(context: DigestContext) -> dict[str, dict]:
+    return {row["scope"]: row for row in context.to_mapping()["status"]["domains"]}
+
+
+def test_digest_context_v2_is_frozen_slotted_and_explicitly_versioned():
+    context = _project_validated_feed(_feed([_current_news()]))
 
     assert is_dataclass(context)
-    assert context.context_version == 1
+    assert context.context_version == 2
     assert hasattr(context, "__slots__")
     assert all(field.name != "__dict__" for field in fields(context))
     with pytest.raises(FrozenInstanceError):
-        context.context_version = 2  # type: ignore[misc]
+        context.context_version = 1  # type: ignore[misc]
     with pytest.raises(TypeError):
         context.feed.window["start"] = "changed"  # type: ignore[index]
+    unit = context.content.updates[0]
+    with pytest.raises(TypeError):
+        unit.evidence["payload"]["title"] = "changed"  # type: ignore[index]
 
 
-def test_digest_context_retains_exact_feed_binding_and_fixed_domain_order():
-    feed = _feed([_news()])
+def test_digest_context_v2_exposes_only_feed_content_and_status():
+    feed = _feed([_current_news()])
     context = _project_validated_feed(feed)
     value = context.to_mapping()
 
+    assert set(value) == {"context_version", "feed", "content", "status"}
+    assert set(value["content"]) == {"updates"}
+    assert set(value["status"]) == {"domains", "limitations"}
     assert value["feed"] == {
         "schema_version": feed["schema_version"],
         "run_id": feed["run_id"],
@@ -46,18 +109,60 @@ def test_digest_context_retains_exact_feed_binding_and_fixed_domain_order():
         "window": feed["window"],
         "evidence_cutoff_at": feed["evidence_cutoff_at"],
     }
-    assert [domain["domain"] for domain in value["domains"]] == [
-        "news",
-        "macro_release",
-        "policy",
-        "positioning",
-        "filing",
-    ]
-    assert [domain["total"] for domain in value["domains"]] == [1, 0, 0, 0, 0]
+    for row in value["status"]["domains"]:
+        assert set(row) <= {"domain", "scope", "state", "data_as_of"}
+        assert "items" not in row
+        assert "total" not in row
+    for unit in value["content"]["updates"]:
+        assert set(unit) <= {
+            "unit_id",
+            "domain",
+            "unit_type",
+            "provider_id",
+            "source",
+            "source_lineage",
+            "event_time",
+            "evidence",
+            "trace",
+        }
+        assert "payload" not in unit
+
+    serialized = canonical_bytes(value).decode("utf-8")
+    for removed in (
+        "reference_state",
+        "unresolved_items",
+        "providers",
+        "warnings",
+        "freshness",
+        "attempted",
+        "rejected",
+        "availability",
+        "upstream_http_status",
+    ):
+        assert removed not in serialized
+
+
+def test_unsupported_context_version_fails_closed():
+    feed = _feed([_current_news()])
+
+    with pytest.raises(DigestPreparationError, match="unsupported DigestContext version"):
+        _project_validated_feed(feed, context_version=1)
+    with pytest.raises(DigestPreparationError, match="unsupported DigestContext version"):
+        _project_validated_feed(feed, context_version=3)
+    with pytest.raises(DigestPreparationError, match="unsupported DigestContext version"):
+        prepare_digest_context(context_version=1)
+
+
+def test_non_consumable_pipeline_status_fails_closed():
+    feed = _feed([_current_news()])
+    feed["pipeline"] = {"status": "failure", "warnings": ["deficient coverage groups: x"]}
+
+    with pytest.raises(DigestPreparationError, match="not a consumable Feed"):
+        _project_validated_feed(feed)
 
 
 def test_repeated_preparation_has_byte_identical_canonical_json():
-    feed = _feed([_news()])
+    feed = _feed([_current_news(), _current_macro(), _current_policy()])
 
     first = _project_validated_feed(feed)
     second = _project_validated_feed(deepcopy(feed))
@@ -65,10 +170,28 @@ def test_repeated_preparation_has_byte_identical_canonical_json():
     assert canonical_bytes(first.to_mapping()) == canonical_bytes(second.to_mapping())
 
 
+def test_preparation_is_invariant_to_pre_normalization_input_perturbation():
+    feed = _feed([_current_news("news-1"), _current_macro(), _current_policy()])
+    perturbed = json.loads(json.dumps(feed, sort_keys=True))
+    assert list(perturbed) != list(feed)
+
+    baseline = _project_validated_feed(feed)
+    other = _project_validated_feed(perturbed)
+
+    assert baseline.to_mapping() == other.to_mapping()
+    assert [unit.unit_id for unit in baseline.content.updates] == [
+        "news_publication:news-1",
+        "macro_release:macro-item",
+        "policy_document:policy-item",
+    ]
+    assert baseline.status.to_mapping() == other.status.to_mapping()
+    assert baseline.canonical_bytes() == other.canonical_bytes()
+
+
 def test_supported_entry_consumes_once(monkeypatch):
     from follow_the_money import digest
 
-    feed = _feed([_news()])
+    feed = _feed([_current_news()])
     calls = 0
 
     def consume():
@@ -81,154 +204,16 @@ def test_supported_entry_consumes_once(monkeypatch):
     assert calls == 1
 
 
-def test_projection_failure_has_preparation_specific_error_without_partial_context():
-    feed = _feed([_news()])
+def test_preparation_failure_has_preparation_specific_error_without_partial_context():
+    feed = _feed([_current_news()])
     del feed["items"][0]["payload"]
 
     with pytest.raises(DigestPreparationError):
         _project_validated_feed(feed)
 
 
-def _form4_item() -> dict:
-    item = deepcopy(_sec_v2_item())
-    item["payload"] = {
-        "type": "filing",
-        "filing_subtype": "form4",
-        "form": "4",
-        "company": "0000000001",
-        "accession_number": "0000000001-23-000002",
-        "filed_at": "2023-01-04T00:00:00.000Z",
-        "accepted_at": "2023-01-04T12:00:00.000Z",
-        "document_url": "https://www.sec.gov/Archives/edgar/data/1/form4.xml",
-        "issuer": {"cik": "0000000001", "name": "Issuer", "trading_symbol": "EXM"},
-        "reporting_owners": [
-            {
-                "cik": "0000000002",
-                "name": "Owner",
-                "relationship": {
-                    "director": True,
-                    "officer": False,
-                    "ten_percent_owner": False,
-                    "other": False,
-                    "officer_title": None,
-                    "other_text": None,
-                },
-            }
-        ],
-        "non_derivative_entries": [
-            {
-                "entry_kind": "transaction",
-                "source_ordinal": 0,
-                "entry_id": "transaction-0",
-                "security_title": "Common Stock",
-                "transaction_date": "2023-01-03",
-                "deemed_execution_date": None,
-                "transaction_coding": {
-                    "transaction_form_type": "4",
-                    "transaction_code": "A",
-                    "equity_swap_involved": False,
-                },
-                "timeliness": None,
-                "transaction_amount": {
-                    "branch": "shares",
-                    "shares": {"value": "10", "unit": "shares", "footnote_ids": []},
-                    "total_value": None,
-                },
-                "price_per_share": None,
-                "acquisition_disposition_code": "A",
-                "post_transaction_amount": {
-                    "branch": "shares",
-                    "shares": {"value": "10", "unit": "shares", "footnote_ids": []},
-                    "value": None,
-                },
-                "ownership_nature": {"direct_or_indirect": "direct", "nature_of_ownership": None},
-                "derivative_terms": {
-                    "exercise_date": None,
-                    "expiration_date": None,
-                    "conversion_or_exercise_price": None,
-                },
-                "underlying_security": None,
-                "field_references": [],
-            }
-        ],
-        "derivative_entries": [],
-        "footnotes": [],
-        "remarks": None,
-        "date_of_original_submission": None,
-        "is_amendment": False,
-        "amendment_number": None,
-    }
-    return item
-
-
-def _beneficial_ownership_item() -> dict:
-    item = deepcopy(_sec_v2_item())
-    numeric = {
-        "status": "unavailable",
-        "value": None,
-        "unit": "shares",
-        "reason": "missing_operand",
-        "source_field_refs": [
-            {
-                "snapshot": "current",
-                "source_ordinal": 0,
-                "field": "reporting_person[0].beneficially_owned_shares",
-                "ignored": "not eligible",
-            }
-        ],
-    }
-    position = {
-        "source_ordinal": 0,
-        "source_name": "Owner",
-        "source_cik": None,
-        "identity_basis": "source_name",
-        "person_types": ["individual"],
-        "group_membership": {"is_member": False},
-        "beneficially_owned_shares": numeric,
-        "ownership_percentage": {**numeric, "unit": "percent"},
-        "source_field_refs": [],
-        "comparison": {
-            "status": "unavailable",
-            "reason": "missing_operand",
-            "shares_delta": numeric,
-            "percentage_delta": {**numeric, "unit": "percentage_points"},
-        },
-    }
-    snapshot = {
-        "accession_number": "0000000001-23-000003",
-        "form": "SCHEDULE 13D",
-        "schedule_family": "13D",
-        "filed_at": "2023-01-05T00:00:00.000Z",
-        "accepted_at": "2023-01-05T12:00:00.000Z",
-        "document_url": "https://www.sec.gov/Archives/edgar/data/1/schedule.xml",
-        "issuer": {"cik": "0000000001", "name": "Issuer"},
-        "ownership_class": {"cusip": None, "title": "Common", "identity_basis": "class_title"},
-        "reporting_positions": [position],
-        "group_evidence": None,
-        "is_amendment": False,
-        "amendment_number": None,
-    }
-    item["payload"] = {
-        "type": "filing",
-        "filing_subtype": "beneficial_ownership",
-        "form": "SCHEDULE 13D",
-        "company": "0000000001",
-        "accession_number": snapshot["accession_number"],
-        "filed_at": snapshot["filed_at"],
-        "accepted_at": snapshot["accepted_at"],
-        "document_url": snapshot["document_url"],
-        "schedule_family": "13D",
-        "current_snapshot": snapshot,
-        "previous_snapshot": None,
-        "comparison": {"status": "initial_filing", "reason": None, "previous": None},
-        "is_amendment": False,
-        "amendment_number": None,
-    }
-    return item
-
-
-def test_domain_projection_preserves_order_qualifiers_and_excludes_unlisted_fields():
-    news = _news("news-1")
+def test_units_carry_closed_provenance_evidence_and_trace():
+    news = _current_news("news-1")
     news["source_lineage"] = [
         {
             "id": "duplicate-1",
@@ -239,27 +224,36 @@ def test_domain_projection_preserves_order_qualifiers_and_excludes_unlisted_fiel
             "ignored": "not eligible",
         }
     ]
-    macro = _macro_item()
+    macro = _current_macro()
     macro["payload"]["actual"]["unknown_reason"] = "missing"
-    positioning = _cftc_v2_item()
-    filing13f = _sec_v2_item()
-    filing13f["payload"]["filing_subtype"] = "form13f"
-    items = [
-        news,
-        macro,
-        _policy_item(),
-        positioning,
-        filing13f,
-        _form4_item(),
-        _beneficial_ownership_item(),
+    policy = _current_policy()
+    policy["payload"]["unlisted_field"] = "must stay out"
+
+    context = _project_validated_feed(_feed([news, macro, policy]))
+    updates = context.to_mapping()["content"]["updates"]
+
+    assert [unit["unit_id"] for unit in updates] == [
+        "news_publication:news-1",
+        "macro_release:macro-item",
+        "policy_document:policy-item",
     ]
-
-    context = _project_validated_feed(_feed(items))
-    mapping = context.to_mapping()
-    domains = {domain["domain"]: domain for domain in mapping["domains"]}
-
-    assert [item["id"] for item in domains["news"]["items"]] == ["news-1"]
-    assert domains["news"]["items"][0]["source_lineage"] == [
+    assert [unit["domain"] for unit in updates] == ["news", "macro_release", "policy"]
+    assert [unit["unit_type"] for unit in updates] == [
+        "news_publication",
+        "macro_release",
+        "policy_document",
+    ]
+    assert [unit["event_time"] for unit in updates] == [
+        {"kind": "published_at", "value": _ts(CURRENT)},
+        {"kind": "released_at", "value": _ts(CURRENT)},
+        {"kind": "announced_at", "value": _ts(CURRENT)},
+    ]
+    assert [unit["trace"] for unit in updates] == [
+        {"feed_item_ids": ["news-1"]},
+        {"feed_item_ids": ["macro-item"]},
+        {"feed_item_ids": ["policy-item"]},
+    ]
+    assert updates[0]["source_lineage"] == [
         {
             "id": "duplicate-1",
             "provider_id": "sse",
@@ -268,38 +262,22 @@ def test_domain_projection_preserves_order_qualifiers_and_excludes_unlisted_fiel
             "syndication_origin": None,
         }
     ]
-    assert "raw_metadata" not in str(mapping)
-    assert "ignored" not in str(mapping)
-    assert domains["macro_release"]["items"][0]["payload"]["actual"] == {
+    assert updates[1]["evidence"]["payload"]["actual"] == {
         "value": None,
         "unit": "percent",
         "unknown_reason": "missing",
     }
-    assert domains["positioning"]["items"][0]["payload"]["delta_metrics"] is None
-    assert domains["filing"]["total"] == 3
-    assert domains["filing"]["items"][1]["payload"]["filing_subtype"] == "form4"
-    assert domains["filing"]["items"][2]["payload"]["filing_subtype"] == "beneficial_ownership"
-    assert (
-        domains["filing"]["items"][2]["payload"]["current_snapshot"]["reporting_positions"][0][
-            "ownership_percentage"
-        ]["reason"]
-        == "missing_operand"
-    )
-    assert domains["filing"]["items"][2]["payload"]["current_snapshot"]["reporting_positions"][0][
-        "beneficially_owned_shares"
-    ]["source_field_refs"] == [
-        {
-            "snapshot": "current",
-            "source_ordinal": 0,
-            "field": "reporting_person[0].beneficially_owned_shares",
-        }
-    ]
+    assert "semantic_context" in updates[0]["evidence"]
+    serialized = canonical_bytes(context.to_mapping()).decode("utf-8")
+    assert "raw_metadata" not in serialized
+    assert "ignored" not in serialized
+    assert "unlisted_field" not in serialized
 
 
 def test_eligible_path_inventory_is_explicit_and_domain_specific():
     assert set(ELIGIBLE_PATHS) == {"news", "macro_release", "policy", "positioning", "filing"}
     assert "payload.raw_metadata" not in ELIGIBLE_PATHS["news"]
-    assert "payload.comparison.previous_as_of" in eligible_paths("positioning")
+    assert eligible_paths("positioning") == ("payload.as_of",)
     assert "payload.holdings[].change_type" in eligible_paths("filing", "form13f")
     assert "payload.current_snapshot.reporting_positions[].ownership_percentage.derivation" in (
         eligible_paths("filing", "beneficial_ownership")
@@ -331,33 +309,86 @@ def test_implementation_inventory_covers_the_reference_contract_paths():
         assert documented == declared
 
     assert "payload.raw_metadata" not in set(eligible_paths("filing"))
-    assert "payload.comparison.previous_as_of" in set(eligible_paths("positioning"))
+    assert "payload.as_of" in set(eligible_paths("positioning"))
     assert "payload.derivative_entries[].transaction_coding.transaction_code" in set(
         eligible_paths("filing")
     )
 
 
-def test_status_provider_limitations_and_zero_inclusive_domains_are_preserved():
-    feed = _feed([_news()])
+def test_status_domains_use_fixed_closed_scope_and_state_order():
+    context = _project_validated_feed(_feed([_current_news()]))
+    domains = context.to_mapping()["status"]["domains"]
+
+    assert [(row["domain"], row["scope"]) for row in domains] == list(EXPECTED_SCOPES)
+    assert [row["scope"] for row in domains] == list(SCOPE_ORDER)
+    assert {row["state"] for row in domains} <= DOMAIN_STATES
+    assert {row["state"] for row in domains} == {"current_updates_available", "domain_empty"}
+    assert domains[0] == {
+        "domain": "news",
+        "scope": "news",
+        "state": "current_updates_available",
+    }
+    assert "data_as_of" not in domains[3]
+
+
+def test_domain_empty_no_current_and_unproven_current_stay_distinct():
+    old_news = _current_news("news-old")
+    old_news["source"]["published_at"] = _ts(T0 - timedelta(days=30))
+    unproven_news = _current_news("news-unproven")
+    del unproven_news["source"]["published_at"]
+    after_window = _current_news("news-after")
+    after_window["source"]["published_at"] = _ts(T0 + timedelta(hours=1))
+    old_macro = _current_macro()
+    old_macro["payload"]["released_at"] = _ts(T0 - timedelta(days=30))
+
+    contexts = {
+        "empty": _feed([]),
+        "old_only": _feed([old_news]),
+        "unproven_only": _feed([unproven_news]),
+        "after_window_only": _feed([after_window]),
+        "mixed": _feed([old_news, unproven_news]),
+    }
+    states = {
+        name: _status_by_scope(_project_validated_feed(feed)) for name, feed in contexts.items()
+    }
+
+    assert states["empty"]["news"]["state"] == "domain_empty"
+    assert states["old_only"]["news"]["state"] == "no_current_update"
+    assert states["unproven_only"]["news"]["state"] == "current_membership_unproven"
+    assert states["after_window_only"]["news"]["state"] == "current_membership_unproven"
+    assert states["mixed"]["news"]["state"] == "current_membership_unproven"
+    assert states["mixed"]["macro_release"]["state"] == "domain_empty"
+
+    # An old item still leaves every other scope empty, and no old evidence leaks.
+    old_only = _project_validated_feed(contexts["old_only"])
+    assert old_only.to_mapping()["content"] == {"updates": []}
+    assert old_only.to_mapping()["status"]["limitations"] == []
+    assert _status_by_scope(_project_validated_feed(_feed([old_macro])))["macro_release"] == {
+        "domain": "macro_release",
+        "scope": "macro_release",
+        "state": "no_current_update",
+    }
+
+
+def test_provider_unavailable_is_a_closed_limitation_not_a_provider_audit_row():
+    feed = _feed([_current_news("news-1")])
     feed["pipeline"] = {
         "status": "degraded",
-        "warnings": ["blocked Provider cftc"],
-        "coverage_gap": {
-            "uncovered_start": "2026-08-10T00:00:00.000Z",
-            "uncovered_end": "2026-08-10T01:00:00.000Z",
-        },
+        "warnings": ["blocked Provider bls"],
+        "coverage_gap": None,
     }
-    blocked = next(row for row in feed["provider_outcomes"] if row["provider_id"] == "cftc")
+    blocked = next(row for row in feed["provider_outcomes"] if row["provider_id"] == "bls")
     blocked.update(
         {
             "state": "failed",
             "succeeded": False,
             "failed": True,
+            "accepted": 0,
             "availability": "blocked",
             "availability_reason": "HTTP 403",
             "upstream_http_status": 403,
             "freshness": {
-                "cadence": "weekly",
+                "cadence": "event_driven",
                 "status": "not_evaluated",
                 "origin_contract_hash": None,
                 "carried_forward_from_run_id": None,
@@ -365,15 +396,113 @@ def test_status_provider_limitations_and_zero_inclusive_domains_are_preserved():
         }
     )
     blocked["freshness"]["future_schema_field"] = "must stay out"
-    context = _project_validated_feed(feed).to_mapping()
 
-    assert context["status"] == {
-        "status": "degraded",
-        "warnings": ["blocked Provider cftc"],
-        "coverage_gap": feed["pipeline"]["coverage_gap"],
+    context = _project_validated_feed(feed)
+    value = context.to_mapping()
+
+    assert value["status"]["limitations"] == [
+        {
+            "code": "provider_unavailable",
+            "provider_id": "bls",
+            "affected_coverage_groups": ["us_official_macro_policy"],
+        }
+    ]
+    assert value["status"]["domains"][0]["state"] == "current_updates_available"
+    serialized = canonical_bytes(value).decode("utf-8")
+    for excluded in (
+        "warnings",
+        "blocked Provider bls",
+        "HTTP 403",
+        "upstream_http_status",
+        "availability_reason",
+        "not_evaluated",
+        "future_schema_field",
+        "total",
+    ):
+        assert excluded not in serialized
+
+
+def test_structured_coverage_gap_keeps_exact_feed_bounds():
+    feed = _feed([_current_news("news-1")])
+    feed["pipeline"] = {
+        "status": "healthy",
+        "warnings": ["checkpoint gap exceeded maximum lookback"],
+        "coverage_gap": {
+            "uncovered_start": "2026-08-10T00:00:00.000Z",
+            "uncovered_end": "2026-08-10T01:00:00.000Z",
+        },
     }
-    cftc = next(row for row in context["providers"] if row["provider_id"] == "cftc")
-    assert cftc["availability"] == "blocked"
-    assert cftc["freshness"]["status"] == "not_evaluated"
-    assert "future_schema_field" not in cftc["freshness"]
-    assert [row["total"] for row in context["domains"]] == [1, 0, 0, 0, 0]
+
+    value = _project_validated_feed(feed).to_mapping()
+
+    assert value["status"]["limitations"] == [
+        {
+            "code": "coverage_gap",
+            "uncovered_start": "2026-08-10T00:00:00.000Z",
+            "uncovered_end": "2026-08-10T01:00:00.000Z",
+        }
+    ]
+    assert LIMITATION_CODES == ("provider_unavailable", "coverage_gap")
+
+
+def test_multiple_provider_limitations_use_fixed_code_then_provider_order():
+    feed = _feed([_current_news("news-1")])
+    feed["pipeline"] = {
+        "status": "degraded",
+        "warnings": [],
+        "coverage_gap": {
+            "uncovered_start": "2026-08-10T00:00:00.000Z",
+            "uncovered_end": "2026-08-10T01:00:00.000Z",
+        },
+    }
+    for provider_id in ("szse", "bls"):
+        outcome = next(
+            row for row in feed["provider_outcomes"] if row["provider_id"] == provider_id
+        )
+        outcome.update(
+            {
+                "state": "failed",
+                "succeeded": False,
+                "failed": True,
+                "accepted": 0,
+                "availability": "blocked",
+                "availability_reason": "HTTP 401",
+                "upstream_http_status": 401,
+            }
+        )
+
+    limitations = _project_validated_feed(feed).to_mapping()["status"]["limitations"]
+
+    assert limitations == [
+        {
+            "code": "provider_unavailable",
+            "provider_id": "bls",
+            "affected_coverage_groups": ["us_official_macro_policy"],
+        },
+        {
+            "code": "provider_unavailable",
+            "provider_id": "szse",
+            "affected_coverage_groups": ["china_exchange_evidence"],
+        },
+        {
+            "code": "coverage_gap",
+            "uncovered_start": "2026-08-10T00:00:00.000Z",
+            "uncovered_end": "2026-08-10T01:00:00.000Z",
+        },
+    ]
+
+
+def test_form13f_status_never_exposes_holdings():
+    feed = _feed([_form13f_item()])
+
+    value = _project_validated_feed(feed).to_mapping()
+
+    assert value["content"] == {"updates": []}
+    assert _status_by_scope(_project_validated_feed(feed))["form13f"] == {
+        "domain": "filing",
+        "scope": "form13f",
+        "state": "no_current_update",
+    }
+    serialized = canonical_bytes(value).decode("utf-8")
+    assert "holdings" not in serialized
+    assert "037833100" not in serialized

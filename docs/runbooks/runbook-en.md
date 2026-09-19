@@ -46,7 +46,8 @@ explicit coverage gap.
 ## Consumer boundary
 
 The Skill uses `scripts/skill/prepare-feed`, which retrieves and validates the
-canonical manifest and its five artifacts, then emits one non-persisted,
-Feed-bound v1 `DigestContext` for the Host Agent. The projection is not a
-published artifact or independent evidence schema. It does not call Providers,
-use local state, or fall back to a stale/partial product.
+canonical manifest and its five artifacts, then prepares one non-persisted,
+Feed-bound `DigestContext` version `2` for the Host Agent from prepared current
+updates, compact domain status, and closed material limitations. The context is
+not a published artifact or independent evidence schema. It does not call
+Providers, use local state, or fall back to a stale/partial product.

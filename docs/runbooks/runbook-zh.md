@@ -37,7 +37,7 @@ checkpoint 间隔超过配置上限时采用 bounded 72h bootstrap 回看，并�
 ## Consumer 边界
 
 Skill 使用 `scripts/skill/prepare-feed` 获取并校验 canonical manifest 及其五个
-artifact，然后只在 stdout 输出一个绑定当前 Feed 的、非持久化 v1
-`DigestContext` 给 Host Agent。它不是发布 artifact、checkpoint、cache 或独立
-evidence schema；不会调用 Provider、读取本地 state，或 fallback 到 stale/partial
-product。
+artifact，然后只在 stdout 输出一个绑定当前 Feed 的、非持久化 `DigestContext`
+version `2`：它只包含准备好的 current updates、compact domain status 和封闭的
+material limitations。它不是发布 artifact、checkpoint、cache 或独立 evidence
+schema；不会调用 Provider、读取本地 state，或 fallback 到 stale/partial product。

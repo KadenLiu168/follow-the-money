@@ -15,8 +15,10 @@ validated Feed -> DigestContext -> Host Agent -> evidence-preserving Digest
 ```
 
 Run `scripts/skill/prepare-feed` under [the Feed contract](references/feed-contract.md).
-It emits one canonical, non-persisted v1 `DigestContext` after the current
-validated Feed has been consumed. Apply [the safety boundary](references/safety-boundary.md)
+It emits one canonical, non-persisted `DigestContext` version `2` after the current
+validated Feed has been consumed. Consume `content.updates` as the default
+substantive input and use `status.domains` and `status.limitations` only for
+applicable conditional disclosure. Apply [the safety boundary](references/safety-boundary.md)
 and the global [Digest presentation contract](references/digest/presentation-contract.md)
 for the authoritative presentation rules. On retrieval, validation, or
 preparation failure, surface the exact stderr and stop. Never substitute local,
