@@ -17,20 +17,21 @@ from ..config.model import (
     FreshnessContract,
     ProviderEntry,
     RatePolicy,
+    SourceContentContract,
     SourceLinkRule,
 )
 
 MANIFEST_ROOT = Path(__file__).resolve().parents[3] / "providers"
-# Provider contracts evolve independently while the logical Feed remains v4.
+# Provider contracts evolve independently of the logical Feed major.
 SUPPORTED_CONTRACT_VERSIONS: dict[str, frozenset[int]] = {
     "sec_edgar": frozenset({1, 2, 3, 4}),
     "cftc": frozenset({1, 2}),
-    "federal_reserve": frozenset({1}),
+    "federal_reserve": frozenset({1, 2}),
     "bls": frozenset({1}),
-    "pboc": frozenset({1}),
+    "pboc": frozenset({1, 2}),
     "nbs": frozenset({1}),
-    "sse": frozenset({1}),
-    "szse": frozenset({1}),
+    "sse": frozenset({1, 2}),
+    "szse": frozenset({1, 2}),
 }
 SUPPORTED_PAYLOAD_TYPES = frozenset({"news", "macro_release", "policy", "positioning", "filing"})
 IMPLEMENTED_PAYLOAD_TYPES = {
@@ -78,8 +79,34 @@ _ALLOWED_MANIFEST_KEYS = frozenset(
         "fixture_provenance",
         "form4",
         "beneficial_ownership",
+        "content",
     }
 )
+
+#: Providers whose v2 contract acquires bounded official detail documents.
+SOURCE_CONTENT_PROVIDERS = frozenset({"federal_reserve", "pboc", "sse", "szse"})
+#: Exchange providers additionally declare bounded sequential discovery.
+SOURCE_CONTENT_EXCHANGE_PROVIDERS = frozenset({"sse", "szse"})
+_SOURCE_CONTENT_REQUIRED_KEYS = frozenset(
+    {
+        "acquisition",
+        "extraction_method",
+        "allowed_content_types",
+        "max_document_bytes",
+        "max_text_chars",
+        "max_detail_documents_per_window",
+        "required_for_selected_item",
+    }
+)
+_SOURCE_CONTENT_EXCHANGE_KEYS = frozenset({"max_discovery_pages_per_window", "discovery_order"})
+_SOURCE_CONTENT_VALUE = "detail_document"
+_SOURCE_CONTENT_EXTRACTION_METHOD = "official_html_text_v1"
+_SOURCE_CONTENT_CONTENT_TYPES = ["text/html"]
+_SOURCE_CONTENT_MAX_DOCUMENT_BYTES = 2097152
+_SOURCE_CONTENT_MAX_TEXT_CHARS = 12000
+_SOURCE_CONTENT_MAX_DETAIL_DOCUMENTS = 50
+_SOURCE_CONTENT_MAX_DISCOVERY_PAGES = 10
+_SOURCE_CONTENT_DISCOVERY_ORDER = "published_at_descending"
 
 
 def _require(mapping: Mapping[str, Any], required: set[str], where: str) -> None:
@@ -375,8 +402,20 @@ def _validate_manifest(data: Mapping[str, Any], path: Path, provider_id: str) ->
         raise ManifestError(
             f"manifest {path}.time.payload_types exceeds adapter output: {sorted(overdeclared)}"
         )
-    if not isinstance(data["fixture_provenance"]["files"], list):
-        raise ManifestError(f"manifest {path}.fixture_provenance.files must be a list")
+    fixture_files = data["fixture_provenance"]["files"]
+    if not isinstance(fixture_files, list) or not fixture_files:
+        raise ManifestError(f"manifest {path}.fixture_provenance.files must be a non-empty list")
+    provider_root = path.parent.resolve()
+    for index, entry in enumerate(fixture_files):
+        where = f"manifest {path}.fixture_provenance.files[{index}]"
+        if not isinstance(entry, str) or not entry.strip():
+            raise ManifestError(f"{where} must be a non-empty relative path")
+        relative = Path(entry)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ManifestError(f"{where} must stay inside the Provider directory")
+        declared = (provider_root / relative).resolve()
+        if not declared.is_relative_to(provider_root) or not declared.is_file():
+            raise ManifestError(f"{where} is not a checked-in Provider fixture: {entry!r}")
     if not isinstance(data["units"], dict):
         raise ManifestError(f"manifest {path}.units must be a mapping")
     if provider_id == "sec_edgar" and version in {2, 3, 4}:
@@ -496,6 +535,64 @@ def _validate_manifest(data: Mapping[str, Any], path: Path, provider_id: str) ->
     elif beneficial_ownership is not None:
         raise ManifestError(
             f"manifest {path}: beneficial_ownership section is only supported by SEC v4"
+        )
+    content = data.get("content")
+    if provider_id in SOURCE_CONTENT_PROVIDERS and version == 2:
+        if not isinstance(content, dict):
+            raise ManifestError(f"manifest {path}: content section is required")
+        required_keys = _SOURCE_CONTENT_REQUIRED_KEYS
+        if provider_id in SOURCE_CONTENT_EXCHANGE_PROVIDERS:
+            required_keys = required_keys | _SOURCE_CONTENT_EXCHANGE_KEYS
+        _require(content, set(required_keys), f"manifest {path}.content")
+        _unknown(content, required_keys, f"manifest {path}.content")
+        if content["acquisition"] != _SOURCE_CONTENT_VALUE:
+            raise ManifestError(
+                f"manifest {path}: content acquisition must be {_SOURCE_CONTENT_VALUE!r}"
+            )
+        if content["extraction_method"] != _SOURCE_CONTENT_EXTRACTION_METHOD:
+            raise ManifestError(
+                f"manifest {path}: content extraction method must be "
+                f"{_SOURCE_CONTENT_EXTRACTION_METHOD!r}"
+            )
+        if content["allowed_content_types"] != _SOURCE_CONTENT_CONTENT_TYPES:
+            raise ManifestError(
+                f"manifest {path}: content types must be {_SOURCE_CONTENT_CONTENT_TYPES}"
+            )
+        for key, expected in (
+            ("max_document_bytes", _SOURCE_CONTENT_MAX_DOCUMENT_BYTES),
+            ("max_text_chars", _SOURCE_CONTENT_MAX_TEXT_CHARS),
+            ("max_detail_documents_per_window", _SOURCE_CONTENT_MAX_DETAIL_DOCUMENTS),
+        ):
+            if _as_int(content[key], f"manifest {path}.content.{key}") != expected:
+                raise ManifestError(f"manifest {path}: content {key} must be {expected}")
+        if (
+            not isinstance(content["required_for_selected_item"], bool)
+            or not content["required_for_selected_item"]
+        ):
+            raise ManifestError(
+                f"manifest {path}: content must be required for every selected item"
+            )
+        if provider_id in SOURCE_CONTENT_EXCHANGE_PROVIDERS:
+            if (
+                _as_int(
+                    content["max_discovery_pages_per_window"],
+                    f"manifest {path}.content.max_discovery_pages_per_window",
+                )
+                != _SOURCE_CONTENT_MAX_DISCOVERY_PAGES
+            ):
+                raise ManifestError(
+                    f"manifest {path}: content discovery pages must be "
+                    f"{_SOURCE_CONTENT_MAX_DISCOVERY_PAGES}"
+                )
+            if content["discovery_order"] != _SOURCE_CONTENT_DISCOVERY_ORDER:
+                raise ManifestError(
+                    f"manifest {path}: content discovery order must be "
+                    f"{_SOURCE_CONTENT_DISCOVERY_ORDER!r}"
+                )
+    elif content is not None:
+        raise ManifestError(
+            f"manifest {path}: content section is only supported by the "
+            "Federal Reserve, PBOC, SSE, and SZSE v2 contracts"
         )
     if version == 2 and provider_id == "cftc":
         if data["units"] != {"contracts": "contracts"}:
@@ -619,6 +716,8 @@ def manifest_to_provider_entry(
     )
     beneficial_ownership = manifest.get("beneficial_ownership")
     beneficial_values = beneficial_ownership if isinstance(beneficial_ownership, Mapping) else {}
+    content = manifest.get("content")
+    content_values = content if isinstance(content, Mapping) else {}
     return ProviderEntry(
         id=str(manifest["provider_id"]),
         name=str(manifest["name"]),
@@ -717,6 +816,41 @@ def manifest_to_provider_entry(
         ),
         beneficial_ownership_locator_prefixes=tuple(
             str(value) for value in beneficial_values.get("locator_prefixes", [])
+        ),
+        source_content=(
+            SourceContentContract(
+                acquisition=str(content_values["acquisition"]),
+                extraction_method=str(content_values["extraction_method"]),
+                allowed_content_types=tuple(
+                    str(value) for value in content_values["allowed_content_types"]
+                ),
+                max_document_bytes=_as_int(
+                    content_values["max_document_bytes"], "manifest content document bound"
+                ),
+                max_text_chars=_as_int(
+                    content_values["max_text_chars"], "manifest content text bound"
+                ),
+                max_detail_documents_per_window=_as_int(
+                    content_values["max_detail_documents_per_window"],
+                    "manifest content detail bound",
+                ),
+                required_for_selected_item=bool(content_values["required_for_selected_item"]),
+                max_discovery_pages_per_window=(
+                    _as_int(
+                        content_values["max_discovery_pages_per_window"],
+                        "manifest content discovery-page bound",
+                    )
+                    if "max_discovery_pages_per_window" in content_values
+                    else None
+                ),
+                discovery_order=(
+                    str(content_values["discovery_order"])
+                    if "discovery_order" in content_values
+                    else None
+                ),
+            )
+            if content_values
+            else None
         ),
     )
 
@@ -826,6 +960,137 @@ def validate_sec_deadline(config: Any, contract: Any) -> SecSendShape:
             f"{config.feed.pre_commit_deadline_seconds} < {required}"
         )
     return shape
+
+
+@dataclass(frozen=True, slots=True)
+class SourceContentSendShape:
+    """Maximum successful-path managed sends for one affected rate scope."""
+
+    scope_id: str
+    policy: RatePolicy
+    base_requests: int
+    exchange_discovery_pages: int
+    detail_documents: int
+
+    @property
+    def total(self) -> int:
+        return self.base_requests + self.exchange_discovery_pages + self.detail_documents
+
+    @property
+    def spacing_floor_seconds(self) -> int:
+        return max(0, self.total - 1) * self.policy.minimum_interval_seconds
+
+    @property
+    def token_refill_floor_seconds(self) -> int:
+        if self.total <= self.policy.capacity:
+            return 0
+        return math.ceil(
+            (self.total - self.policy.capacity)
+            * self.policy.refill_period_seconds
+            / self.policy.capacity
+        )
+
+    @property
+    def managed_send_floor(self) -> int:
+        return max(self.spacing_floor_seconds, self.token_refill_floor_seconds)
+
+
+#: A successful-path send count larger than this cannot be admitted by any
+#: deadline comparison; anything beyond it is arithmetic overflow.
+_MAX_MANAGED_SENDS = 2**31 - 1
+
+
+def _source_content_bound(value: Any, label: str) -> int:
+    if isinstance(value, bool):
+        raise TypeError(f"{label} is not an integer")
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"{label} is not an integer") from exc
+    if number <= 0:
+        raise ValueError(f"{label} must be positive")
+    if number > _MAX_MANAGED_SENDS:
+        raise ValueError(f"{label} exceeds the representable managed-send count")
+    return number
+
+
+def source_content_send_shape(config: Any, scope_id: str) -> SourceContentSendShape:
+    """Recompute one affected scope's successful-path send shape.
+
+    Every enabled Provider sharing the scope contributes its unchanged base
+    request. Exchange contracts additionally contribute their bounded
+    discovery pages beyond the first, and every content contract contributes
+    its bounded selected detail documents.
+    """
+    policy: RatePolicy | None = None
+    base_requests = 0
+    exchange_discovery_pages = 0
+    detail_documents = 0
+    for provider in config.providers:
+        if not provider.enabled:
+            continue
+        provider_policy = provider.rate_policy
+        if provider_policy is None or provider_policy.unlimited:
+            continue
+        if provider_policy.scope_id != scope_id:
+            continue
+        if policy is not None and policy != provider_policy:
+            raise ValueError(f"rate scope {scope_id!r} has inconsistent policies")
+        policy = provider_policy
+        base_requests += 1
+        content = provider.source_content
+        if content is None:
+            continue
+        if content.max_discovery_pages_per_window is not None:
+            exchange_discovery_pages += (
+                _source_content_bound(
+                    content.max_discovery_pages_per_window,
+                    f"provider {provider.id!r} discovery-page bound",
+                )
+                - 1
+            )
+        detail_documents += _source_content_bound(
+            content.max_detail_documents_per_window,
+            f"provider {provider.id!r} detail-document bound",
+        )
+    if policy is None:
+        raise ValueError(f"rate scope {scope_id!r} has no enabled bounded Provider")
+    return SourceContentSendShape(
+        scope_id=scope_id,
+        policy=policy,
+        base_requests=base_requests,
+        exchange_discovery_pages=exchange_discovery_pages,
+        detail_documents=detail_documents,
+    )
+
+
+def validate_source_content_deadline(config: Any) -> dict[str, SourceContentSendShape]:
+    """Fail closed unless every affected shared scope fits the configured budget."""
+    scope_ids = sorted(
+        {
+            provider.rate_policy.scope_id
+            for provider in config.providers
+            if provider.enabled
+            and provider.source_content is not None
+            and provider.rate_policy is not None
+            and not provider.rate_policy.unlimited
+        }
+    )
+    shapes: dict[str, SourceContentSendShape] = {}
+    for scope_id in scope_ids:
+        shape = source_content_send_shape(config, scope_id)
+        required = (
+            shape.managed_send_floor
+            + config.feed.source_content_request_network_headroom_seconds
+            + config.feed.commit_reserve_seconds
+        )
+        if config.feed.pre_commit_deadline_seconds < required:
+            raise ValueError(
+                f"source content pre-commit deadline is below the closed request budget for "
+                f"scope {scope_id!r}: {config.feed.pre_commit_deadline_seconds} < {required}"
+            )
+        shapes[scope_id] = shape
+    return shapes
 
 
 def load_all_manifests(root: Path | None = None) -> dict[str, Mapping[str, Any]]:

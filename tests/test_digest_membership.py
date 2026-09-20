@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 from copy import deepcopy
 from datetime import timedelta
 
 from follow_the_money.canonical import canonical_bytes
 from follow_the_money.digest import _project_validated_feed
+from follow_the_money.semantic.news import build_news_context
+from follow_the_money.semantic.policy import build_policy_context
 from tests.test_digest_prepare import (
     CURRENT,
     _current_macro,
@@ -564,4 +567,123 @@ def test_production_shaped_feed_serializes_only_current_units_and_compact_status
     assert states["form13f"]["state"] == "no_current_update"
     assert states["news"]["state"] == "current_updates_available"
     assert len(serialized) * 20 < len(canonical_bytes(feed))
+    assert canonical_bytes(_project_validated_feed(deepcopy(feed)).to_mapping()) == serialized
+
+
+def _enriched(provider_id: str, item: dict, *, text: str) -> dict:
+    """Attach the required v2 bounded official source content to one item."""
+    item["payload"]["source_content"] = {
+        "text": text,
+        "format": "plain_text",
+        "extraction_method": "official_html_text_v1",
+        "truncated": False,
+        "document_sha256": hashlib.sha256(f"{provider_id}:{item['id']}".encode()).hexdigest(),
+    }
+    return item
+
+
+def _current_sse_news(item_id: str = "sse-current") -> dict:
+    item = _current_news(item_id)
+    item["provider_id"] = "sse"
+    item["source"].update(
+        {
+            "id": f"{item_id}-source",
+            "name": "上海证券交易所",
+            "url": "https://www.sse.com.cn/disclosure/announcement/general/c/c_1.shtml",
+        }
+    )
+    item["semantic_context"] = build_news_context("sse", item["payload"], item["source"]).to_dict()
+    return _enriched("sse", item, text="上证公告正文：本次调整自2026年8月11日起实施。")
+
+
+def _current_pboc_policy(item_id: str = "pboc-current") -> dict:
+    item = _current_policy()
+    item["id"] = item_id
+    item["provider_id"] = "pboc"
+    item["source"].update(
+        {
+            "id": f"{item_id}-source",
+            "name": "中国人民银行",
+            "url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/1/index.html",
+        }
+    )
+    item["semantic_context"] = build_policy_context(
+        "pboc", item["payload"], item["source"]
+    ).to_dict()
+    return _enriched("pboc", item, text="中国人民银行公告正文。")
+
+
+def test_production_shaped_enriched_feed_keeps_membership_status_and_limitations():
+    rows = [_positioning_item(f"cftc-{index:03d}") for index in range(300)]
+    old_filings = [_form13f_item(f"sec-old-{index}") for index in range(3)]
+    fed = _enriched(
+        "federal_reserve",
+        _current_policy(),
+        text="Federal Reserve issues FOMC statement.",
+    )
+    feed = _feed(
+        [
+            *rows,
+            *old_filings,
+            _current_sse_news(),
+            _current_pboc_policy(),
+            fed,
+        ],
+        target_v2=True,
+    )
+    feed["pipeline"] = {
+        "status": "degraded",
+        "warnings": ["blocked Provider nbs"],
+        "coverage_gap": None,
+    }
+    blocked = next(row for row in feed["provider_outcomes"] if row["provider_id"] == "nbs")
+    blocked.update(
+        {
+            "state": "failed",
+            "succeeded": False,
+            "failed": True,
+            "accepted": 0,
+            "availability": "blocked",
+            "availability_reason": "HTTP 403",
+            "upstream_http_status": 403,
+        }
+    )
+    _with_positioning_freshness(feed, status="stale")
+
+    context = _project_validated_feed(feed)
+    value = context.to_mapping()
+
+    # Only the current updates carry bounded official source content.
+    assert [unit["unit_id"] for unit in value["content"]["updates"]] == [
+        "news_publication:sse-current",
+        "policy_document:pboc-current",
+        "policy_document:policy-item",
+    ]
+    for unit in value["content"]["updates"]:
+        content = unit["evidence"]["payload"]["source_content"]
+        assert set(content) == {"text", "format", "truncated"}
+        assert content["format"] == "plain_text"
+        assert content["truncated"] is False
+        assert content["text"]
+
+    # CFTC and Form 13F membership, status, and substantive exclusion unchanged.
+    states = _status_by_scope(context)
+    assert states["cftc"]["state"] == "stale_reference_state"
+    assert states["form13f"]["state"] == "no_current_update"
+    assert states["news"]["state"] == "current_updates_available"
+    assert states["policy"]["state"] == "current_updates_available"
+    assert value["status"]["limitations"] == [
+        {
+            "code": "provider_unavailable",
+            "provider_id": "nbs",
+            "affected_coverage_groups": ["china_official_macro_policy"],
+        }
+    ]
+    assert not [
+        unit
+        for unit in value["content"]["updates"]
+        if unit["evidence"].get("payload", {}).get("type") in {"positioning", "filing"}
+    ]
+
+    serialized = canonical_bytes(value)
     assert canonical_bytes(_project_validated_feed(deepcopy(feed)).to_mapping()) == serialized

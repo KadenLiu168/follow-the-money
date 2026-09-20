@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -387,7 +388,7 @@ def test_run_feed_separates_product_and_runtime_state_roots(tmp_path, monkeypatc
     assert result.status == "healthy"
     manifest = json.loads((product_root / "feed-manifest.json").read_bytes())
     assert manifest["evidence_cutoff_at"] == "2026-08-11T00:20:00.123Z"
-    assert manifest["schema_version"] == 4
+    assert manifest["schema_version"] == 5
     assert all(
         set(outcome)
         >= {
@@ -607,6 +608,15 @@ def _accepted_item(provider_id: str, item_id: str) -> dict:
             }
         ),
     }
+    if provider_id in {"federal_reserve", "pboc", "sse", "szse"}:
+        # These providers carry the v2 bounded official source-content obligation.
+        item["payload"]["source_content"] = {
+            "text": f"{item_id} official source text.",
+            "format": "plain_text",
+            "extraction_method": "official_html_text_v1",
+            "truncated": False,
+            "document_sha256": hashlib.sha256(item_id.encode()).hexdigest(),
+        }
     if provider_id == "federal_reserve":
         item["semantic_context"] = build_policy_context(
             provider_id, item["payload"], item["source"]

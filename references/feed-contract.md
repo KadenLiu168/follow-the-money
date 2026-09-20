@@ -53,10 +53,17 @@ recommendations.
 document facts, bounded numeric observations, macro period/revision facts, and
 policy date/scope facts for evidence-preserving presentation. It does not add
 ranking, sentiment, market impact, prediction, recommendation, or trading
-semantics, and `filing`/`positioning` items do not acquire it. The published v4
+semantics, and `filing`/`positioning` items do not acquire it. The published
 consumer accepts valid legacy omissions; production admission requires context
 on new or replacement affected items and preserves an eligible contextless
 carried slice byte-for-byte.
+`news`, `macro_release`, and `policy` items may also carry the closed
+`source_content` sibling holding bounded normalized official document text,
+its format, its truncation state, and the digest of the admitted raw response.
+Federal Reserve, PBOC, SSE, and SZSE v2 contracts require it for every item
+they acquire; carried previous-major evidence may omit it. Text is never
+treated as a complete document when `truncated` is true, and source content is
+never used to reconstruct an absent structured semantic field.
 The Feed is deterministic, credential-free, and contains no Agent runtime.
 
 ## Freshness and degradation

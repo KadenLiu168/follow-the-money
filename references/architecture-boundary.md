@@ -36,9 +36,17 @@ account for every Feed item.
 
 The item-level `semantic_context` is a closed evidence projection attached only
 to newly acquired or replaced `news`, `macro_release`, and `policy` items. It
-does not generate a Digest or add analytical meaning. Valid legacy v4
-omissions remain readable, and eligible contextless carried slices retain
+does not generate a Digest or add analytical meaning. Valid legacy previous-
+major omissions remain readable, and eligible contextless carried slices retain
 their original bytes; `filing` and `positioning` remain outside this field.
+
+The item-level `source_content` sibling is likewise closed evidence, not an
+analysis surface: DigestContext exposes only its `text`, `format`, and
+`truncated` values for current units, never its extraction method or document
+digest, and preparation performs no URL access or document parsing. Bounded
+official text may support attributed factual statements, but it never
+reconstructs an absent structured semantic field and a truncated extract is
+never presented as the complete official document.
 
 There is no repository Agent orchestration, model/LLM runtime, private
 invocation path, Audit/Event capability, research engine, market analytics/state,

@@ -44,6 +44,15 @@ attribute a source-authored analytical or predictive statement to that source;
 do not present it as a Feed, Skill, or Host-Agent conclusion. A citation by
 itself is not semantic support.
 
+A current unit may carry bounded official source text as
+`payload.source_content.text` with `format` and `truncated`. The Host Agent may
+summarize factual statements and source-authored analysis explicitly present in
+that text, always attributed to the source and traceable to the unit. When
+`truncated` is true the summary must not describe the bounded text as the
+complete official document or infer facts from omitted content. Extraction
+method and document digest are Feed validation provenance: they are never
+exposed, printed, or reconstructed, and the source URL is never accessed.
+
 ## Content-First Presentation Hierarchy
 
 Content-first is a semantic priority between the substantive content and the

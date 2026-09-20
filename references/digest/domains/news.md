@@ -67,6 +67,9 @@ The closed whitelist for a `news` item is:
 - `payload.title`
 - `payload.snippet`
 - `payload.occurred_at`
+- `payload.source_content.text` (when present)
+- `payload.source_content.format` (when present)
+- `payload.source_content.truncated` (when present)
 - `semantic_context.version` (when present)
 - `semantic_context.entities[].role` (when present)
 - `semantic_context.entities[].name` (when present)
@@ -108,3 +111,18 @@ or significance from open-ended wording. `raw_metadata` and every unlisted
 field are outside the presentation evidence. Source-authored analytical wording
 may be summarized only with clear attribution and without upgrading its
 authority.
+
+## Bounded Official Source Content
+
+When a current unit carries `payload.source_content`, the Host Agent may
+summarize factual statements and source-authored analysis explicitly present in
+`payload.source_content.text`, always attributed to the item's source and
+traceable to that unit and its Feed item. The text is a bounded extract of one
+official document, not the document: when
+`payload.source_content.truncated` is true the summary must not describe the
+bounded text as the complete official document or infer facts from omitted
+content. Extraction provenance (`extraction_method`, `document_sha256`) is Feed
+validation fact and is never exposed or printed. Source wording is never a
+Feed, Skill, or Host-Agent conclusion, and source content MUST NOT be used to
+reconstruct an absent structured semantic field or to claim that omitted source
+content is known.

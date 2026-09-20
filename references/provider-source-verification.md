@@ -246,6 +246,47 @@ Observed 2026-09-15 against the live dataset.
 - `id`, `contract_market_name`, and `market_and_exchange_names` are all present
   on current rows.
 
+## Federal Reserve, PBOC, SSE, and SZSE v2 detail containers
+
+### Official authority and dated observations
+
+Recorded verbatim from live official responses on 2026-09-20, under the
+manifest-declared user agent. The candidate lists and article containers below
+are the ones the v2 contracts select and extract:
+
+- Federal Reserve: the RSS discovery response at
+  `https://www.federalreserve.gov/feeds/press_all.xml`, and the article body
+  column `div#article > div.col-xs-12.col-sm-8.col-md-8` excluding the
+  `heading` column, whose content is `<p>` blocks.
+- PBOC: the server-rendered index at
+  `https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html`, whose
+  candidate list is `div#r_con font.newslist_style a` with the sibling
+  `span.hui12` publication date, and whose announcement body is `div#zoom`.
+- SSE: the sequential index pages at
+  `https://www.sse.com.cn/disclosure/announcement/general/s_list.shtml` and
+  `s_list_{page}.shtml` for page 2 and later, whose candidate list is
+  `div#sse_list_1 dl dd` with a `span` date and titled anchor, and whose notice
+  body is `div.allZoom`.
+- SZSE: the sequential index pages at
+  `https://www.szse.cn/disclosure/notice/general/index.html` and
+  `index_{page-1}.html` for page 2 and later, whose candidate locator and title
+  are embedded `curHref`/`curTitle` literals beside a `span.time` date, and
+  whose notice body is `div#desContent`.
+
+Observed list order is newest first on all four pages, and SZSE page 2
+continued strictly older than page 1 (2026-07-03 then 2026-06-30), which is the
+monotonic property the bounded traversal relies on.
+
+### Contract consequences
+
+The four manifests declare `max_discovery_pages_per_window = 10` (exchanges
+only) and `discovery_order = published_at_descending`; traversal stops only when
+a page's oldest entry proves the window boundary and fails closed otherwise.
+Detail acquisition admits only the declared `text/html` media type under the
+2 MiB document bound, requires the final canonical URL to equal the selected
+candidate URL, and extracts only the verified container above — never a
+whole-body fallback, an attachment, or a heuristic article reader.
+
 ## Verification limits
 
 Direct requests to `https://www.sec.gov/files/form13f.pdf`,

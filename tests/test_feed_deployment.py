@@ -133,8 +133,8 @@ def build_production_state_fixture(
         (product_root / name).write_bytes(_git_blob(commit, f"feeds/{name}"))
 
 
-def build_v4_product(product_root: Path) -> dict:
-    """Replace the fixture product root with a current five-domain v4 bundle."""
+def build_current_product(product_root: Path) -> dict:
+    """Replace the fixture product root with a current five-domain bundle."""
     feed = _healthy_feed()
     bundle = build_bundle(feed)
     product_root.mkdir(parents=True, exist_ok=True)
@@ -1016,7 +1016,7 @@ def test_real_v3_product_as_migration_input_fails_closed(
     tmp_path: Path, production_config: AppConfig
 ):
     build_production_state_fixture(tmp_path / ".feed-state", tmp_path / "feeds")
-    with pytest.raises(DeploymentError, match="previous Feed bundle migration failed"):
+    with pytest.raises(DeploymentError, match="unsupported Feed manifest schema version"):
         prepare_production_fixture(
             tmp_path,
             production_config,
@@ -1081,11 +1081,11 @@ def test_obsolete_yahoo_market_scope_is_tolerated_and_required(
         )
 
 
-def test_current_v4_product_takes_normal_preparation_path(
+def test_current_product_takes_normal_preparation_path(
     tmp_path: Path, production_config: AppConfig, monkeypatch: pytest.MonkeyPatch
 ):
     build_production_runtime_state(tmp_path / ".feed-state")
-    feed = build_v4_product(tmp_path / "feeds")
+    feed = build_current_product(tmp_path / "feeds")
     migration_calls: list[object] = []
     monkeypatch.setattr(
         deployment,
@@ -1103,6 +1103,6 @@ def test_current_v4_product_takes_normal_preparation_path(
     assert result.mode == "armed"
     assert migration_calls == []
     manifest = json.loads((tmp_path / "feeds" / "feed-manifest.json").read_text(encoding="utf-8"))
-    assert manifest["schema_version"] == 4
+    assert manifest["schema_version"] == 5
     assert manifest["run_id"] == feed["run_id"]
     assert read_lease(tmp_path / ".feed-state" / "feed-run-lease.json").state == ("in_progress")

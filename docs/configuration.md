@@ -6,8 +6,8 @@ Provider-specific facts remain in `providers/<provider>/manifest.yaml`.
 
 ## Surviving configuration
 
-- Feed window, deadline, concurrency, response, item, serialization, and lock
-  limits;
+- Feed window, deadline, concurrency, response, item, serialization, lock, and
+  source-content request-headroom limits;
 - output, runtime-state, and run roots;
 - rate-registry persistence contract;
 - source-family provenance;

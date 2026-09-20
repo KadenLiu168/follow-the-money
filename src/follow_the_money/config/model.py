@@ -83,6 +83,21 @@ class FreshnessContract:
 
 
 @dataclass(frozen=True)
+class SourceContentContract:
+    """One resolved bounded official-document content contract."""
+
+    acquisition: str
+    extraction_method: str
+    allowed_content_types: tuple[str, ...]
+    max_document_bytes: int
+    max_text_chars: int
+    max_detail_documents_per_window: int
+    required_for_selected_item: bool
+    max_discovery_pages_per_window: int | None = None
+    discovery_order: str | None = None
+
+
+@dataclass(frozen=True)
 class ProviderEntry:
     """One resolved verified Provider contract."""
 
@@ -130,6 +145,7 @@ class ProviderEntry:
     beneficial_ownership_structured_formats: tuple[str, ...] = ()
     beneficial_ownership_schema_versions: tuple[str, ...] = ()
     beneficial_ownership_locator_prefixes: tuple[str, ...] = ()
+    source_content: SourceContentContract | None = None
 
 
 @dataclass(frozen=True)
@@ -175,6 +191,7 @@ class FeedLimits:
     max_serialized_feed_bytes: int
     lock_timeout_seconds: int
     sec_request_network_headroom_seconds: int
+    source_content_request_network_headroom_seconds: int
 
 
 @dataclass(frozen=True)

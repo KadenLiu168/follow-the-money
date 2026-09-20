@@ -32,9 +32,7 @@ def parse_reference_timestamp(value: object, where: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
-def payload_reference_times(
-    item: Mapping[str, Any], *, legacy: bool = False
-) -> tuple[datetime, ...]:
+def payload_reference_times(item: Mapping[str, Any]) -> tuple[datetime, ...]:
     payload = item.get("payload")
     if not isinstance(payload, Mapping):
         raise FreshnessError("item payload is missing")
@@ -47,15 +45,6 @@ def payload_reference_times(
         if value is None:
             value = payload.get("announced_at")
         return (parse_reference_timestamp(value, "policy.effective_at/announced_at"),)
-    if legacy and payload_type == "market_data":
-        observations = payload.get("observations")
-        if not isinstance(observations, list) or not observations:
-            raise FreshnessError("market_data.observations has no reference timestamp")
-        return tuple(
-            parse_reference_timestamp(observation.get("as_of"), "market_data.observations[].as_of")
-            for observation in observations
-            if isinstance(observation, Mapping)
-        )
     fields = _DATA_AS_OF_FIELDS.get(str(payload_type))
     if fields is None:
         raise FreshnessError(f"unsupported payload type for data_as_of: {payload_type!r}")
@@ -78,10 +67,9 @@ def reference_time_for_item(
     reference_time: str,
     *,
     checked_at: str | None = None,
-    legacy: bool = False,
 ) -> datetime:
     if reference_time == "data_as_of":
-        return max(payload_reference_times(item, legacy=legacy))
+        return max(payload_reference_times(item))
     if reference_time == "source_updated_at":
         return source_reference_time(item)
     if reference_time == "checked_at":
@@ -96,7 +84,6 @@ def evaluate_freshness(
     *,
     carried_forward: bool = False,
     checked_at: str | None = None,
-    legacy: bool = False,
 ) -> str:
     """Return the closed freshness status for one selected Provider slice."""
     if not items:
@@ -111,8 +98,6 @@ def evaluate_freshness(
     ):
         raise FreshnessError("evidence_cutoff_at must carry a timezone")
     allowed_cadences = {"weekly", "scheduled", "event_driven"}
-    if legacy:
-        allowed_cadences.add("market_session")
     if contract.cadence not in allowed_cadences:
         raise FreshnessError(f"unsupported cadence: {contract.cadence!r}")
     if contract.reference_time not in {"data_as_of", "source_updated_at", "checked_at"}:
@@ -127,12 +112,10 @@ def evaluate_freshness(
 
     if contract.valid_for_seconds is None or contract.valid_for_seconds <= 0:
         raise FreshnessError("bounded cadence requires a positive validity window")
-    if contract.cadence == "market_session" and not legacy:
-        raise FreshnessError("market_session is only supported by the bounded migration reader")
     if contract.reference_time == "checked_at":
         raise FreshnessError("bounded cadence cannot use checked_at")
     references = [
-        reference_time_for_item(item, contract.reference_time, checked_at=checked_at, legacy=legacy)
+        reference_time_for_item(item, contract.reference_time, checked_at=checked_at)
         for item in items
     ]
     latest = max(references)

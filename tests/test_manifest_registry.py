@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
+import pytest
+import yaml
+
 from follow_the_money.config import load_config
+from follow_the_money.config.load import ConfigError
 from follow_the_money.providers.manifest import load_all_manifests
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -91,3 +96,67 @@ def test_all_shipped_adapters_are_implemented():
         adapter = adapter_cls()
         assert adapter.provider_id in REQUIRED
         assert adapter._rules
+
+
+RECORDED_CONTENT_FIXTURES = {
+    "federal_reserve": (
+        "fixtures/press_all.xml",
+        "fixtures/detail-monetary20260916a.htm",
+    ),
+    "pboc": (
+        "fixtures/index.html",
+        "fixtures/detail-2026091815494839605.html",
+    ),
+    "sse": (
+        "fixtures/s_list.shtml",
+        "fixtures/s_list_2.shtml",
+        "fixtures/detail-c_20260918_10832703.shtml",
+    ),
+    "szse": (
+        "fixtures/index.html",
+        "fixtures/index_1.html",
+        "fixtures/detail-t20260917_622911.html",
+    ),
+}
+
+
+def test_recorded_source_content_fixtures_are_declared_and_present():
+    cfg = _config()
+    for provider_id, expected in RECORDED_CONTENT_FIXTURES.items():
+        provider = cfg.provider(provider_id)
+        assert provider.contract_version == 2
+        for relative in expected:
+            assert relative in provider.fixture_files
+            declared = DEFAULT_MANIFEST_ROOT / provider_id / relative
+            assert declared.is_file()
+            payload = declared.read_bytes()
+            assert payload
+            payload.decode("utf-8")
+
+
+def test_declared_fixture_provenance_files_exist_and_are_addressed_safely(tmp_path: Path):
+    for index, mutation in enumerate(
+        (
+            lambda files: files.append("fixtures/absent.html"),
+            lambda files: files.append("../../schemas/feed.schema.json"),
+            lambda files: files.clear(),
+        )
+    ):
+        root = tmp_path / f"provenance-{index}"
+        root.mkdir()
+        shutil.copytree(DEFAULT_MANIFEST_ROOT, root / "providers")
+        shutil.copy2(DEFAULT_CONFIG, root / "config.yaml")
+        shutil.copy2(DEFAULT_PROVIDERS, root / "providers.yaml")
+        manifest_path = root / "providers" / "sse" / "manifest.yaml"
+        manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+        mutation(manifest["fixture_provenance"]["files"])
+        manifest_path.write_text(
+            yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True), encoding="utf-8"
+        )
+        with pytest.raises(ConfigError, match="fixture_provenance"):
+            load_config(
+                root / "config.yaml",
+                root / "providers.yaml",
+                manifest_root=root / "providers",
+                require_verified_enabled=True,
+            )

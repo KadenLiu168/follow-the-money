@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from follow_the_money.canonical import canonical_digest
 from follow_the_money.config import load_config
 from follow_the_money.config.load import ConfigError
 
@@ -355,10 +356,13 @@ def test_supported_contract_versions_are_explicit_and_bounded():
 
     assert SUPPORTED_CONTRACT_VERSIONS["sec_edgar"] == frozenset({1, 2, 3, 4})
     assert SUPPORTED_CONTRACT_VERSIONS["cftc"] == frozenset({1, 2})
+    for provider_id in CONTENT_PROVIDERS + EXCHANGE_CONTENT_PROVIDERS:
+        assert SUPPORTED_CONTRACT_VERSIONS[provider_id] == frozenset({1, 2})
     assert all(
         versions == frozenset({1})
         for provider_id, versions in SUPPORTED_CONTRACT_VERSIONS.items()
-        if provider_id not in {"sec_edgar", "cftc"}
+        if provider_id
+        not in {"sec_edgar", "cftc"} | set(CONTENT_PROVIDERS + EXCHANGE_CONTENT_PROVIDERS)
     )
 
 
@@ -390,6 +394,17 @@ def test_config_snapshot_has_no_runtime_root_or_removed_surface():
     from follow_the_money.canonical import canonical_digest
 
     assert canonical_digest(changed) != canonical_digest(snapshot)
+
+
+def test_config_snapshot_embeds_source_content_deadline_headroom():
+    cfg = _load()
+    from follow_the_money.feed.cli import _feed_config_snapshot
+
+    snapshot = _feed_config_snapshot(cfg)["snapshot"]
+    assert (
+        snapshot["feed"]["source_content_request_network_headroom_seconds"]
+        == cfg.feed.source_content_request_network_headroom_seconds
+    )
 
 
 VERIFIED_WATCHED_CIKS = (
@@ -443,3 +458,305 @@ def test_watched_company_cik_selection_is_fail_closed(tmp_path: Path):
         _write(config, value)
         with pytest.raises(ConfigError, match=message):
             _load(config, providers, manifests)
+
+
+CONTENT_PROVIDERS = ("federal_reserve", "pboc")
+EXCHANGE_CONTENT_PROVIDERS = ("sse", "szse")
+PRODUCTION_CONTENT = {
+    "acquisition": "detail_document",
+    "extraction_method": "official_html_text_v1",
+    "allowed_content_types": ["text/html"],
+    "max_document_bytes": 2097152,
+    "max_text_chars": 12000,
+    "max_detail_documents_per_window": 50,
+    "required_for_selected_item": True,
+}
+EXCHANGE_CONTENT = {
+    **PRODUCTION_CONTENT,
+    "max_discovery_pages_per_window": 10,
+    "discovery_order": "published_at_descending",
+}
+
+
+def test_shipped_provider_v2_content_contracts_resolve_exactly():
+    cfg = _load()
+    for provider_id in CONTENT_PROVIDERS:
+        provider = cfg.provider(provider_id)
+        assert provider.contract_version == 2
+        content = provider.source_content
+        assert content is not None
+        assert content.acquisition == "detail_document"
+        assert content.extraction_method == "official_html_text_v1"
+        assert content.allowed_content_types == ("text/html",)
+        assert content.max_document_bytes == 2097152
+        assert content.max_text_chars == 12000
+        assert content.max_detail_documents_per_window == 50
+        assert content.required_for_selected_item is True
+        assert content.max_discovery_pages_per_window is None
+        assert content.discovery_order is None
+    for provider_id in EXCHANGE_CONTENT_PROVIDERS:
+        content = cfg.provider(provider_id).source_content
+        assert content is not None
+        assert content.max_discovery_pages_per_window == 10
+        assert content.discovery_order == "published_at_descending"
+    for provider_id in ("bls", "nbs", "sec_edgar", "cftc"):
+        assert cfg.provider(provider_id).source_content is None
+
+
+def test_provider_content_contract_rejects_every_unsupported_mutation(tmp_path: Path):
+    cases = [
+        (lambda content: content.pop("max_text_chars"), "missing required keys"),
+        (lambda content: content.update({"undeclared": 1}), "unknown keys"),
+        (lambda content: content.update({"acquisition": "index_entry"}), "acquisition must be"),
+        (
+            lambda content: content.update({"extraction_method": "readability_v1"}),
+            "extraction method",
+        ),
+        (
+            lambda content: content.update({"allowed_content_types": ["text/html", "text/plain"]}),
+            "content types",
+        ),
+        (
+            lambda content: content.update({"allowed_content_types": ["application/pdf"]}),
+            "content types",
+        ),
+        (lambda content: content.update({"max_document_bytes": 2097153}), "max_document_bytes"),
+        (lambda content: content.update({"max_text_chars": 12001}), "max_text_chars"),
+        (
+            lambda content: content.update({"max_detail_documents_per_window": 51}),
+            "max_detail_documents",
+        ),
+        (
+            lambda content: content.update({"required_for_selected_item": False}),
+            "required for every",
+        ),
+        (lambda content: content.update({"max_discovery_pages_per_window": 10}), "unknown keys"),
+        (
+            lambda content: content.update({"discovery_order": "published_at_descending"}),
+            "unknown keys",
+        ),
+    ]
+    for index, (mutation, message) in enumerate(cases):
+        case_root = tmp_path / f"content-mutation-{index}"
+        case_root.mkdir()
+        config, providers, manifests = _copy_contracts(case_root)
+        path = manifests / "federal_reserve" / "manifest.yaml"
+        value = _yaml(path)
+        mutation(value["content"])
+        _write(path, value)
+        with pytest.raises(ConfigError, match=message):
+            _load(config, providers, manifests)
+
+
+def test_exchange_content_contract_requires_the_bounded_discovery_contract(tmp_path: Path):
+    cases = [
+        (lambda content: content.pop("max_discovery_pages_per_window"), "missing required keys"),
+        (lambda content: content.update({"max_discovery_pages_per_window": 11}), "discovery pages"),
+        (lambda content: content.pop("discovery_order"), "missing required keys"),
+        (
+            lambda content: content.update({"discovery_order": "published_at_ascending"}),
+            "discovery order",
+        ),
+    ]
+    for index, (mutation, message) in enumerate(cases):
+        case_root = tmp_path / f"exchange-mutation-{index}"
+        case_root.mkdir()
+        config, providers, manifests = _copy_contracts(case_root)
+        path = manifests / "sse" / "manifest.yaml"
+        value = _yaml(path)
+        mutation(value["content"])
+        _write(path, value)
+        with pytest.raises(ConfigError, match=message):
+            _load(config, providers, manifests)
+
+
+def test_content_section_is_forbidden_outside_the_v2_target_contracts(tmp_path: Path):
+    for index, provider_id in enumerate(("bls", "nbs")):
+        case_root = tmp_path / f"foreign-content-{index}"
+        case_root.mkdir()
+        config, providers, manifests = _copy_contracts(case_root)
+        path = manifests / provider_id / "manifest.yaml"
+        value = _yaml(path)
+        value["content"] = dict(PRODUCTION_CONTENT)
+        _write(path, value)
+        with pytest.raises(ConfigError, match="content section is only supported"):
+            _load(config, providers, manifests)
+
+    case_root = tmp_path / "version-three"
+    case_root.mkdir()
+    config, providers, manifests = _copy_contracts(case_root)
+    path = manifests / "federal_reserve" / "manifest.yaml"
+    value = _yaml(path)
+    value["contract_version"] = 3
+    _write(path, value)
+    with pytest.raises(ConfigError, match="unsupported contract_version"):
+        _load(config, providers, manifests)
+
+
+def test_provider_contract_snapshot_embeds_the_content_contract():
+    from follow_the_money.feed.cli import _provider_contract_snapshots
+
+    cfg = _load()
+    snapshots = {entry["provider_id"]: entry for entry in _provider_contract_snapshots(cfg)}
+    sse = snapshots["sse"]["snapshot"]
+    assert sse["contract_version"] == 2
+    assert sse["content"] == EXCHANGE_CONTENT
+    assert snapshots["sse"]["hash"] == canonical_digest(sse)
+    assert "content" not in snapshots["nbs"]["snapshot"]
+
+
+def test_source_content_network_headroom_is_required_and_closed(tmp_path: Path):
+    assert _load().feed.source_content_request_network_headroom_seconds == 120
+
+    for mutation, message in (
+        (lambda feed: feed.pop("source_content_request_network_headroom_seconds"), "missing"),
+        (
+            lambda feed: feed.update({"source_content_request_network_headroom_seconds": 0}),
+            "positive",
+        ),
+        (
+            lambda feed: feed.update({"source_content_request_network_headroom_seconds": True}),
+            "integer",
+        ),
+    ):
+        case_root = tmp_path / f"headroom-{message}"
+        case_root.mkdir()
+        config, providers, manifests = _copy_contracts(case_root)
+        value = _yaml(config)
+        mutation(value["feed"])
+        _write(config, value)
+        with pytest.raises(ConfigError, match=message):
+            _load(config, providers, manifests)
+
+
+def _with_feed(cfg, **overrides):
+    from dataclasses import replace
+
+    return replace(cfg, feed=replace(cfg.feed, **overrides))
+
+
+def _with_provider(cfg, provider_id: str, **overrides):
+    from dataclasses import replace
+
+    providers = tuple(
+        replace(provider, **overrides) if provider.id == provider_id else provider
+        for provider in cfg.providers
+    )
+    return replace(cfg, providers=providers)
+
+
+def test_source_content_send_shape_covers_every_shared_scope():
+    from follow_the_money.providers.manifest import validate_source_content_deadline
+
+    cfg = _load()
+    shapes = validate_source_content_deadline(cfg)
+
+    assert set(shapes) == {"china_gov", "us_gov"}
+    us_gov = shapes["us_gov"]
+    assert (us_gov.base_requests, us_gov.exchange_discovery_pages, us_gov.detail_documents) == (
+        3,
+        0,
+        50,
+    )
+    assert us_gov.total == 53
+    china_gov = shapes["china_gov"]
+    assert (
+        china_gov.base_requests,
+        china_gov.exchange_discovery_pages,
+        china_gov.detail_documents,
+    ) == (4, 18, 150)
+    assert china_gov.total == 172
+
+    # Every affected scope still re-enters the managed-send boundary with the
+    # exact configured headroom and commit reserve inside the deadline.
+    for scope_id, shape in shapes.items():
+        assert shape.scope_id == scope_id
+        reference = cfg.provider("federal_reserve").rate_policy
+        assert (
+            shape.policy.capacity,
+            shape.policy.refill_period_seconds,
+            shape.policy.minimum_interval_seconds,
+        ) == (
+            reference.capacity,
+            reference.refill_period_seconds,
+            reference.minimum_interval_seconds,
+        )
+        assert (
+            shape.managed_send_floor
+            + (
+                cfg.feed.source_content_request_network_headroom_seconds
+                + cfg.feed.commit_reserve_seconds
+            )
+            <= cfg.feed.pre_commit_deadline_seconds
+        )
+
+
+def test_source_content_deadline_rejects_an_inadmissible_configured_deadline():
+    from follow_the_money.providers.manifest import validate_source_content_deadline
+
+    cfg = _load()
+    china_gov = validate_source_content_deadline(cfg)["china_gov"]
+    required = china_gov.managed_send_floor + (
+        cfg.feed.source_content_request_network_headroom_seconds + cfg.feed.commit_reserve_seconds
+    )
+    assert required == 591
+
+    admissible = _with_feed(cfg, pre_commit_deadline_seconds=required)
+    assert "china_gov" in validate_source_content_deadline(admissible)
+
+    with pytest.raises(ValueError, match="china_gov"):
+        validate_source_content_deadline(_with_feed(cfg, pre_commit_deadline_seconds=required - 1))
+
+
+def test_source_content_deadline_fails_closed_on_missing_overflowing_and_incompatible_bounds():
+    from dataclasses import replace
+
+    from follow_the_money.providers.manifest import validate_source_content_deadline
+
+    cfg = _load()
+    content = cfg.provider("federal_reserve").source_content
+    assert content is not None
+
+    for bound, message in (
+        (None, "integer"),
+        (True, "integer"),
+        (0, "positive"),
+        (2**31, "representable"),
+    ):
+        broken = _with_provider(
+            cfg,
+            "federal_reserve",
+            source_content=replace(content, max_detail_documents_per_window=bound),
+        )
+        with pytest.raises((TypeError, ValueError), match=message):
+            validate_source_content_deadline(broken)
+
+    from follow_the_money.config.model import RatePolicy
+
+    inconsistent = _with_provider(
+        cfg,
+        "cftc",
+        rate_policy=RatePolicy(
+            scope_id="us_gov",
+            capacity=5,
+            refill_period_seconds=60,
+            minimum_interval_seconds=1,
+        ),
+    )
+    with pytest.raises(ValueError, match="inconsistent"):
+        validate_source_content_deadline(inconsistent)
+
+
+def test_inadmissible_source_content_deadline_fails_before_config_resolution_completes(
+    tmp_path: Path,
+):
+    case_root = tmp_path / "source-content-deadline"
+    case_root.mkdir()
+    config, providers, manifests = _copy_contracts(case_root)
+    value = _yaml(config)
+    # The unchanged SEC budget still fits the configured deadline; only the
+    # shared source-content scope no longer does.
+    value["feed"]["source_content_request_network_headroom_seconds"] = 250
+    _write(config, value)
+    with pytest.raises(ConfigError, match="source content"):
+        _load(config, providers, manifests)

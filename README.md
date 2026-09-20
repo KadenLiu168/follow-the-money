@@ -28,7 +28,7 @@ not reclassify Feed evidence or account for every Feed item.
 
 ## Current Feed contract
 
-New bundles use logical Feed schema major **4**, manifest major **4**, and
+New bundles use logical Feed schema major **5**, manifest major **5**, and
 artifact major **2**. The fixed artifact order is the retained evidence surface:
 
 ```text
@@ -60,14 +60,27 @@ source-supported subjects, event/document facts, bounded numeric observations,
 macro periods or revisions, and policy dates or affected scope. It does not
 rank evidence, state sentiment or market impact, make predictions, or provide
 recommendations. `filing` and `positioning` items do not carry this field.
-The v4 consumer still accepts a structurally valid legacy omission; a
+The published consumer still accepts a structurally valid legacy omission; a
 contextless prior slice may be carried byte-for-byte only with its existing
 carry-forward proof, while new or replacement affected items require valid
 context.
 
-A validated previous eight-domain bundle may enter only the explicit bounded
-migration path. Normal loading and remote consumption reject the previous
-major and never use removed-domain artifacts as current evidence.
+`news`, `macro_release`, and `policy` items may also carry the closed
+`source_content` field: bounded NFC plain text of one official document
+(at most 12,000 code points), its `format`, its `truncated` state, and the
+SHA-256 of the exact admitted raw response bytes. The Federal Reserve, PBOC,
+SSE, and SZSE v2 Provider contracts require it for every selected
+current-window item they acquire, so an unavailable, unsupported, unsafe,
+oversized, or unextractable required document leaves the Provider incomplete
+instead of producing a healthy title-only item. Bounded text never
+reconstructs an absent structured semantic field, and DigestContext exposes
+only `text`, `format`, and `truncated` — extraction method and document digest
+stay Feed-only provenance.
+
+A validated immediate-previous-major bundle may enter only the explicit
+bounded migration path. Normal loading and remote consumption reject the
+previous major and every older major, and never treat carried previous-major
+evidence as a fresh acquisition.
 
 ## Repository layout
 

@@ -16,9 +16,10 @@ The shipped Feed coverage rows are backed by these adapters:
 
 from __future__ import annotations
 
+import itertools
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from email.utils import parsedate_to_datetime
@@ -34,6 +35,17 @@ from ..semantic.news import build_news_context
 from ..semantic.policy import build_policy_context
 from .base import Provider, ProviderRegistry
 from .cftc_cot import compare_reports, publication_boundary, select_report_dates
+from .document import (
+    AdmittedDocument,
+    DocumentCandidate,
+    SourceContentAcquisition,
+    assemble_source_content,
+    extract_federal_reserve,
+    extract_pboc,
+    extract_sse,
+    extract_szse,
+    select_candidates,
+)
 from .http import (
     FetchError,
     bounded_fetch,
@@ -62,7 +74,7 @@ from .sec_form4 import (
     parse_form4_document,
     select_form4_filings,
 )
-from .urls import UrlValidationError, sec_archive_cik
+from .urls import UrlValidationError, canonicalize_url, sec_archive_cik
 
 
 class BaseAdapter(Provider):
@@ -82,7 +94,14 @@ class BaseAdapter(Provider):
         self._fetch_rules = self._contract.fetch_hosts
         self._redirect_rules = self._contract.redirect_hosts
 
-    def _fetch(self, client: Any, url: str, *, headers: Mapping[str, str] | None = None) -> Any:
+    def _fetch(
+        self,
+        client: Any,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        max_bytes: int | None = None,
+    ) -> Any:
         request_headers = {
             key: value for key, value in (headers or {}).items() if key.lower() != "user-agent"
         }
@@ -92,9 +111,71 @@ class BaseAdapter(Provider):
             url,
             headers=request_headers,
             timeout=self._contract.attempt_timeout_seconds,
-            max_bytes=self._contract.response_limit_bytes,
+            max_bytes=(self._contract.response_limit_bytes if max_bytes is None else max_bytes),
             fetch_rules=self._fetch_rules,
             redirect_rules=self._redirect_rules,
+        )
+
+    def _fetch_detail(self, client: Any, candidate_url: str, *, max_bytes: int) -> Any:
+        """Fetch one selected detail document under the stricter document bound.
+
+        The caller passes the already-canonical candidate URL. The response
+        must declare one of the contract's allowed media types, and a redirect
+        that changes the canonical source locator changes document identity:
+        both fail closed instead of hashing bytes retrieved from one locator
+        while publishing another.
+        """
+        contract = self._contract.source_content
+        if contract is None:
+            raise FetchError("detail acquisition requires a source-content contract")
+        result = self._fetch(client, candidate_url, max_bytes=max_bytes)
+        declared = str(getattr(result, "content_type", "") or "").split(";", 1)[0].strip().lower()
+        if declared not in {value.lower() for value in contract.allowed_content_types}:
+            raise FetchError(
+                f"detail document media type is not the declared "
+                f"{', '.join(contract.allowed_content_types)}"
+            )
+        final_url = getattr(result, "url", candidate_url)
+        if canonicalize_url(final_url, rules=self._rules, where="detail_url") != candidate_url:
+            raise FetchError("detail document redirect changed the canonical source URL")
+        return result
+
+    def _discover_pages(
+        self,
+        client: Any,
+        window: Mapping[str, str],
+        *,
+        contract: Any,
+        page_url: Callable[[int], str],
+        parse: Callable[[Any], tuple[DocumentCandidate, ...]],
+    ) -> tuple[DocumentCandidate, ...]:
+        """Traverse declared sequential index pages until the window boundary is proved.
+
+        The verified exchange lists are published newest first. Each page must
+        be internally non-increasing and must not jump forward across a page
+        boundary; once a page's oldest entry predates the window, every later
+        page is older and traversal stops. Reaching the declared page bound
+        without that proof fails closed instead of treating a prefix as the
+        whole current window.
+        """
+        collected: list[DocumentCandidate] = []
+        previous_oldest: datetime | None = None
+        # pi-lens-ignore: unchecked-throwing-call-python
+        for page in range(1, int(contract.max_discovery_pages_per_window) + 1):
+            candidates = parse(self._fetch(client, page_url(page)))
+            if not candidates:
+                raise FetchError("exchange discovery page returned no candidates")
+            dates = [_parse_timestamp(candidate.published_at) for candidate in candidates]
+            if any(later > earlier for earlier, later in itertools.pairwise(dates)):
+                raise FetchError("exchange discovery page is not in descending publication order")
+            if previous_oldest is not None and dates[0] > previous_oldest:
+                raise FetchError("exchange discovery pages are not in descending publication order")
+            collected.extend(candidates)
+            previous_oldest = dates[-1]
+            if previous_oldest < _parse_timestamp(window["start"]):
+                return tuple(collected)
+        raise FetchError(
+            "exchange discovery could not prove the window boundary within the declared page bound"
         )
 
     def _validate_url(self, url: str) -> str:
@@ -218,19 +299,98 @@ class BaseAdapter(Provider):
 
 
 class FedAdapter(BaseAdapter):
+    """Federal Reserve v2 two-stage acquisition: RSS discovery, HTML detail."""
+
     provider_id = "federal_reserve"
+    DISCOVERY_URL = "https://www.federalreserve.gov/feeds/press_all.xml"
 
     def fetch(self, window: Mapping[str, str], client: Any) -> Any:
-        return self._fetch(client, "https://www.federalreserve.gov/feeds/press_all.xml")
+        contract = self._contract.source_content
+        if contract is None:
+            raise FetchError("Federal Reserve requires the v2 source-content contract")
+        discovery = self._fetch(client, self.DISCOVERY_URL)
+        candidates = select_candidates(
+            self._rss_candidates(discovery),
+            window=window,
+            limit=contract.max_detail_documents_per_window,
+        )
+        documents = tuple(
+            AdmittedDocument(
+                candidate=candidate,
+                final_url=result.url,
+                body=result.body_bytes,
+            )
+            for candidate, result in (
+                (
+                    candidate,
+                    self._fetch_detail(
+                        client, candidate.url, max_bytes=contract.max_document_bytes
+                    ),
+                )
+                for candidate in candidates
+            )
+        )
+        return SourceContentAcquisition(candidates=candidates, documents=documents)
 
     def normalize(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
-        return self._rss_items(
-            raw,
-            name="Federal Reserve",
-            tier="Tier 1",
-            payload_type="policy",
-            window=window,
-        )
+        """Extract every admitted release without further I/O."""
+        contract = self._contract.source_content
+        if contract is None:
+            raise FetchError("Federal Reserve requires the v2 source-content contract")
+        acquisition = _require_acquisition(raw)
+        items: list[dict[str, Any]] = []
+        for document in acquisition.documents:
+            candidate = document.candidate
+            content = assemble_source_content(
+                extract_federal_reserve(document.body, charset=self._contract.allowed_charset),
+                max_text_chars=contract.max_text_chars,
+                document_sha256=document.document_sha256,
+            )
+            source = self._source(
+                source_id=f"{self.provider_id}-{stable_item_id(self.provider_id, candidate.identity)}",
+                name="Federal Reserve",
+                tier="Tier 1",
+                url=candidate.url,
+                published_at=candidate.published_at,
+                knowledge=candidate.published_at,
+                kind="policy",
+            )
+            payload: dict[str, Any] = {
+                "type": "policy",
+                "title": candidate.title[:300],
+                "announced_at": candidate.published_at,
+                "raw_metadata": {},
+                "source_content": content.to_payload(),
+            }
+            item = {
+                "id": stable_item_id(self.provider_id, candidate.identity),
+                "provider_id": self.provider_id,
+                "source": source,
+                "payload": payload,
+            }
+            items.append(self._attach_semantic_context(item))
+        return items
+
+    def _rss_candidates(self, raw: Any) -> tuple[DocumentCandidate, ...]:
+        """RSS GUID-or-link stable identity, canonical source URL, published time."""
+        parsed = safe_parse_rss(raw.body_bytes, charset=self._contract.allowed_charset)
+        candidates: list[DocumentCandidate] = []
+        for entry in parsed.entries:
+            title = str(entry.get("title", "")).strip()
+            link = str(entry.get("link", "")).strip()
+            published = _normalize_timestamp(getattr(entry, "published", None))
+            if not title or not link or not published:
+                continue
+            identity = str(entry.get("id", "")).strip() or link
+            candidates.append(
+                DocumentCandidate(
+                    identity=identity,
+                    title=title,
+                    url=self._validate_url(link),
+                    published_at=published,
+                )
+            )
+        return tuple(candidates)
 
 
 class BlsAdapter(BaseAdapter):
@@ -1119,42 +1279,81 @@ class CftcAdapter(BaseAdapter):
 
 
 class PbocAdapter(BaseAdapter):
-    """PBOC official policy announcements from its HTML index."""
+    """PBOC v2 two-stage acquisition: HTML index discovery, HTML detail."""
 
     provider_id: str = "pboc"
+    DISCOVERY_URL = "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html"
 
     def fetch(self, window: Mapping[str, str], client: Any) -> Any:
-        return self._fetch(client, "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html")
+        contract = self._contract.source_content
+        if contract is None:
+            raise FetchError("PBOC requires the v2 source-content contract")
+        discovery = self._fetch(client, self.DISCOVERY_URL)
+        candidates = select_candidates(
+            _index_candidates(
+                PbocIndexParser(),
+                discovery,
+                charset=self._contract.allowed_charset,
+                canonicalize=self._validate_url,
+            ),
+            window=window,
+            limit=contract.max_detail_documents_per_window,
+        )
+        documents = tuple(
+            AdmittedDocument(
+                candidate=candidate,
+                final_url=result.url,
+                body=result.body_bytes,
+            )
+            for candidate, result in (
+                (
+                    candidate,
+                    self._fetch_detail(
+                        client, candidate.url, max_bytes=contract.max_document_bytes
+                    ),
+                )
+                for candidate in candidates
+            )
+        )
+        return SourceContentAcquisition(candidates=candidates, documents=documents)
 
     def normalize(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
-        entries = self._index_entries(raw, "announcements")
+        """Extract every admitted announcement without further I/O."""
+        contract = self._contract.source_content
+        if contract is None:
+            raise FetchError("PBOC requires the v2 source-content contract")
+        acquisition = _require_acquisition(raw)
         items: list[dict[str, Any]] = []
-        for entry in entries[:200]:
-            title = entry.get("title", "")
-            url = entry.get("url", "")
-            published = entry.get("published_at")
-            if not title or not url or not published:
-                continue
-            if not _in_half_open_window(published, window):
-                continue
+        for document in acquisition.documents:
+            candidate = document.candidate
+            content = assemble_source_content(
+                extract_pboc(document.body, charset=self._contract.allowed_charset),
+                max_text_chars=contract.max_text_chars,
+                document_sha256=document.document_sha256,
+            )
             source = self._source(
-                source_id=f"pboc-{stable_item_id(self.provider_id, url)}",
+                source_id=(
+                    f"{self.provider_id}-{stable_item_id(self.provider_id, candidate.identity)}"
+                ),
                 name="中国人民银行",
                 tier="Tier 1",
-                url=url,
-                published_at=published,
-                knowledge=published,
+                url=candidate.url,
+                published_at=candidate.published_at,
+                knowledge=candidate.published_at,
+                kind="policy",
             )
+            payload: dict[str, Any] = {
+                "type": "policy",
+                "title": candidate.title[:300],
+                "announced_at": candidate.published_at,
+                "raw_metadata": {},
+                "source_content": content.to_payload(),
+            }
             item = {
-                "id": stable_item_id(self.provider_id, url),
+                "id": stable_item_id(self.provider_id, candidate.identity),
                 "provider_id": self.provider_id,
                 "source": source,
-                "payload": {
-                    "type": "policy",
-                    "title": title[:300],
-                    "announced_at": published,
-                    "raw_metadata": {},
-                },
+                "payload": payload,
             }
             items.append(self._attach_semantic_context(item))
         return items
@@ -1240,89 +1439,404 @@ class NbsAdapter(BaseAdapter):
 
 
 class SseAdapter(BaseAdapter):
-    """SSE official notices from its HTML index."""
+    """SSE v2 acquisition: bounded sequential index pages, HTML detail."""
 
     provider_id: str = "sse"
+    DISCOVERY_URL = "https://www.sse.com.cn/disclosure/announcement/general/s_list.shtml"
+    PAGE_URL = "https://www.sse.com.cn/disclosure/announcement/general/s_list_{page}.shtml"
 
     def fetch(self, window: Mapping[str, str], client: Any) -> Any:
-        return self._fetch(client, "https://www.sse.com.cn/disclosure/announcement/general/")
+        contract = self._contract.source_content
+        if contract is None:
+            raise FetchError("SSE requires the v2 source-content contract")
+        candidates = select_candidates(
+            self._discover_pages(
+                client,
+                window,
+                contract=contract,
+                page_url=self._page_url,
+                parse=self._page_candidates,
+            ),
+            window=window,
+            limit=contract.max_detail_documents_per_window,
+        )
+        documents = tuple(
+            AdmittedDocument(candidate=candidate, final_url=result.url, body=result.body_bytes)
+            for candidate, result in (
+                (
+                    candidate,
+                    self._fetch_detail(
+                        client, candidate.url, max_bytes=contract.max_document_bytes
+                    ),
+                )
+                for candidate in candidates
+            )
+        )
+        return SourceContentAcquisition(candidates=candidates, documents=documents)
 
     def normalize(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
-        entries = self._index_entries(raw, "notices")
-        items: list[dict[str, Any]] = []
-        for entry in entries[:200]:
-            title = entry.get("title", "")
-            url = entry.get("url", "")
-            published = entry.get("published_at")
-            if not title or not url or not published:
-                continue
-            if not _in_half_open_window(published, window):
-                continue
-            source = self._source(
-                source_id=f"sse-{stable_item_id(self.provider_id, url)}",
-                name="上海证券交易所",
-                tier="Tier 1",
-                url=url,
-                published_at=published,
-                knowledge=published,
-            )
-            item = {
-                "id": stable_item_id(self.provider_id, url),
-                "provider_id": self.provider_id,
-                "source": source,
-                "payload": {
-                    "type": "news",
-                    "title": title[:300],
-                    "snippet": entry.get("snippet", "")[:1000],
-                    "occurred_at": published,
-                    "raw_metadata": {},
-                },
-            }
-            items.append(self._attach_semantic_context(item))
-        return items
+        """Extract every admitted notice without further I/O."""
+        contract = self._contract.source_content
+        if contract is None:
+            raise FetchError("SSE requires the v2 source-content contract")
+        return _exchange_items(
+            _require_acquisition(raw),
+            contract=contract,
+            charset=self._contract.allowed_charset,
+            extract=extract_sse,
+            adapter=self,
+            name="上海证券交易所",
+        )
+
+    def _page_url(self, page: int) -> str:
+        return self.DISCOVERY_URL if page == 1 else self.PAGE_URL.format(page=page)
+
+    def _page_candidates(self, response: Any) -> tuple[DocumentCandidate, ...]:
+        return _index_candidates(
+            SseIndexParser(),
+            response,
+            charset=self._contract.allowed_charset,
+            canonicalize=self._validate_url,
+        )
 
 
 class SzseAdapter(BaseAdapter):
-    """SZSE official notices from its HTML index."""
+    """SZSE v2 acquisition: bounded sequential index pages, HTML detail."""
 
     provider_id: str = "szse"
+    DISCOVERY_URL = "https://www.szse.cn/disclosure/notice/general/index.html"
+    PAGE_URL = "https://www.szse.cn/disclosure/notice/general/index_{page}.html"
 
     def fetch(self, window: Mapping[str, str], client: Any) -> Any:
-        return self._fetch(client, "https://www.szse.cn/disclosure/notice/general/index.html")
+        contract = self._contract.source_content
+        if contract is None:
+            raise FetchError("SZSE requires the v2 source-content contract")
+        candidates = select_candidates(
+            self._discover_pages(
+                client,
+                window,
+                contract=contract,
+                page_url=self._page_url,
+                parse=self._page_candidates,
+            ),
+            window=window,
+            limit=contract.max_detail_documents_per_window,
+        )
+        documents = tuple(
+            AdmittedDocument(candidate=candidate, final_url=result.url, body=result.body_bytes)
+            for candidate, result in (
+                (
+                    candidate,
+                    self._fetch_detail(
+                        client, candidate.url, max_bytes=contract.max_document_bytes
+                    ),
+                )
+                for candidate in candidates
+            )
+        )
+        return SourceContentAcquisition(candidates=candidates, documents=documents)
 
     def normalize(self, raw: Any, window: Mapping[str, str]) -> list[dict[str, Any]]:
-        entries = self._index_entries(raw, "notices")
-        items: list[dict[str, Any]] = []
-        for entry in entries[:200]:
-            title = entry.get("title", "")
-            url = entry.get("url", "")
-            published = entry.get("published_at")
-            if not title or not url or not published:
-                continue
-            if not _in_half_open_window(published, window):
-                continue
-            source = self._source(
-                source_id=f"szse-{stable_item_id(self.provider_id, url)}",
-                name="深圳证券交易所",
-                tier="Tier 1",
+        """Extract every admitted notice without further I/O."""
+        contract = self._contract.source_content
+        if contract is None:
+            raise FetchError("SZSE requires the v2 source-content contract")
+        return _exchange_items(
+            _require_acquisition(raw),
+            contract=contract,
+            charset=self._contract.allowed_charset,
+            extract=extract_szse,
+            adapter=self,
+            name="深圳证券交易所",
+        )
+
+    def _page_url(self, page: int) -> str:
+        return self.DISCOVERY_URL if page == 1 else self.PAGE_URL.format(page=page - 1)
+
+    def _page_candidates(self, response: Any) -> tuple[DocumentCandidate, ...]:
+        return _index_candidates(
+            SzseIndexParser(),
+            response,
+            charset=self._contract.allowed_charset,
+            canonicalize=self._validate_url,
+        )
+
+
+def _exchange_items(
+    acquisition: SourceContentAcquisition,
+    *,
+    contract: Any,
+    charset: str,
+    extract: Any,
+    adapter: BaseAdapter,
+    name: str,
+) -> list[dict[str, Any]]:
+    """Build news items for one exchange slice from its admitted documents."""
+    items: list[dict[str, Any]] = []
+    for document in acquisition.documents:
+        candidate = document.candidate
+        content = assemble_source_content(
+            extract(document.body, charset=charset),
+            max_text_chars=contract.max_text_chars,
+            document_sha256=document.document_sha256,
+        )
+        source = adapter._source(
+            source_id=f"{adapter.provider_id}-{stable_item_id(adapter.provider_id, candidate.identity)}",
+            name=name,
+            tier="Tier 1",
+            url=candidate.url,
+            published_at=candidate.published_at,
+            knowledge=candidate.published_at,
+            kind="news",
+        )
+        payload: dict[str, Any] = {
+            "type": "news",
+            "title": candidate.title[:300],
+            "snippet": "",
+            "occurred_at": candidate.published_at,
+            "raw_metadata": {},
+            "source_content": content.to_payload(),
+        }
+        item = {
+            "id": stable_item_id(adapter.provider_id, candidate.identity),
+            "provider_id": adapter.provider_id,
+            "source": source,
+            "payload": payload,
+        }
+        items.append(adapter._attach_semantic_context(item))
+    return items
+
+
+def _require_acquisition(raw: Any) -> SourceContentAcquisition:
+    if not isinstance(raw, SourceContentAcquisition):
+        raise FetchError("normalize requires a source-content acquisition value")
+    return raw
+
+
+class _IndexCandidateParser(HTMLParser):
+    """Ordered ``(href, title, date_text)`` triples from one verified list."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.entries: list[tuple[str, str, str]] = []
+        self.containers = 0
+
+    def feed_document(self, body: bytes, *, charset: str) -> None:
+        try:
+            text = body.decode(charset)
+        except UnicodeDecodeError as exc:
+            raise FetchError(f"response not decodable as {charset}") from exc
+        self.feed(text)
+        self.close()
+
+    def _emit(self, href: str | None, title: str, date_text: str) -> None:
+        href = (href or "").strip()
+        title = " ".join(title.split())
+        date_text = " ".join(date_text.split())
+        if href and title and date_text:
+            self.entries.append((href, title, date_text))
+
+
+class PbocIndexParser(_IndexCandidateParser):
+    """``div#r_con`` news list: style font anchor plus sibling date span."""
+
+    _CONTAINER_ID = "r_con"
+    _DATE_CLASS = "hui12"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._inside: int | None = None
+        self._in_font = 0
+        self._href: str | None = None
+        self._title = ""
+        self._link_text: list[str] = []
+        self._date: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        mapping = {key.lower(): (value or "") for key, value in attrs}
+        if self._inside is None:
+            if tag == "div" and mapping.get("id") == self._CONTAINER_ID:
+                self._inside = 1
+                self.containers += 1
+            return
+        if tag in _HTML_VOID_ELEMENTS:
+            return
+        self._inside += 1
+        if tag == "font" and "newslist_style" in mapping.get("class", "").split():
+            self._in_font += 1
+        elif tag == "a" and self._in_font:
+            self._href = mapping.get("href")
+            self._title = mapping.get("title", "")
+            self._link_text = []
+        elif (
+            tag == "span"
+            and self._href is not None
+            and self._DATE_CLASS in mapping.get("class", "").split()
+        ):
+            self._date = []
+
+    def handle_data(self, data: str) -> None:
+        if self._date is not None:
+            self._date.append(data)
+        elif self._href is not None:
+            self._link_text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._inside is None:
+            return
+        if tag == "span" and self._date is not None:
+            self._emit(self._href, self._title or "".join(self._link_text), "".join(self._date))
+            self._date = None
+            self._href = None
+            self._title = ""
+            self._link_text = []
+        elif tag == "font" and self._in_font:
+            self._in_font -= 1
+        self._inside -= 1
+        if self._inside == 0:
+            self._inside = None
+
+
+class SseIndexParser(_IndexCandidateParser):
+    """``div#sse_list_1`` date + title definition list entries."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._inside: int | None = None
+        self._in_entry = False
+        self._date: list[str] | None = None
+        self._href: str | None = None
+        self._title = ""
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        mapping = {key.lower(): (value or "") for key, value in attrs}
+        if self._inside is None:
+            if tag == "div" and mapping.get("id") == "sse_list_1":
+                self._inside = 1
+                self.containers += 1
+            return
+        if tag in _HTML_VOID_ELEMENTS:
+            return
+        self._inside += 1
+        if tag == "dd":
+            self._in_entry = True
+            self._date = None
+            self._href = None
+            self._title = ""
+        elif self._in_entry and tag == "span" and self._date is None:
+            self._date = []
+        elif self._in_entry and tag == "a" and self._href is None:
+            self._href = mapping.get("href")
+            self._title = mapping.get("title", "")
+
+    def handle_data(self, data: str) -> None:
+        if self._date is not None and self._href is None:
+            self._date.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._inside is None:
+            return
+        self._inside -= 1
+        if tag == "dd":
+            self._emit(self._href, self._title, "".join(self._date or ()))
+            self._in_entry = False
+        if self._inside == 0:
+            self._inside = None
+
+
+class SzseIndexParser(_IndexCandidateParser):
+    """``ul.newslist`` entries whose locator and title are embedded literals."""
+
+    _HREF = re.compile(r"var\s+curHref\s*=\s*'([^']*)'")
+    _TITLE = re.compile(r"var\s+curTitle\s*=\s*'([^']*)'")
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._inside: int | None = None
+        self._in_entry = False
+        self._in_script = False
+        self._script: list[str] = []
+        self._date: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        mapping = {key.lower(): (value or "") for key, value in attrs}
+        if self._inside is None:
+            if tag == "ul" and "newslist" in mapping.get("class", "").split():
+                self._inside = 1
+                self.containers += 1
+            return
+        if tag in _HTML_VOID_ELEMENTS:
+            return
+        self._inside += 1
+        if tag == "li":
+            self._in_entry = True
+            self._script = []
+            self._date = None
+        elif self._in_entry and tag == "script":
+            self._in_script = True
+        elif self._in_entry and tag == "span" and "time" in mapping.get("class", "").split():
+            if self._date is None:
+                self._date = []
+
+    def handle_data(self, data: str) -> None:
+        if self._in_script:
+            self._script.append(data)
+        elif self._date is not None:
+            self._date.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._inside is None:
+            return
+        self._inside -= 1
+        if tag == "script":
+            self._in_script = False
+        elif tag == "li":
+            script = "".join(self._script)
+            href = self._HREF.search(script)
+            title = self._TITLE.search(script)
+            if href is not None and title is not None:
+                self._emit(href.group(1), title.group(1), "".join(self._date or ()))
+            self._in_entry = False
+        if self._inside == 0:
+            self._inside = None
+
+
+def _index_candidates(
+    parser: _IndexCandidateParser,
+    raw: Any,
+    *,
+    charset: str,
+    canonicalize: Any,
+) -> tuple[DocumentCandidate, ...]:
+    """Build canonical-URL candidates from one verified index document."""
+    parser.feed_document(raw.body_bytes, charset=charset)
+    if parser.containers == 0:
+        raise FetchError("index document lacks the verified candidate container")
+    base_url = getattr(raw, "url", "")
+    candidates: list[DocumentCandidate] = []
+    for href, title, date_text in parser.entries:
+        url = canonicalize(urljoin(base_url, href))
+        candidates.append(
+            DocumentCandidate(
+                identity=url,
+                title=title,
                 url=url,
-                published_at=published,
-                knowledge=published,
+                published_at=_candidate_timestamp(date_text),
             )
-            item = {
-                "id": stable_item_id(self.provider_id, url),
-                "provider_id": self.provider_id,
-                "source": source,
-                "payload": {
-                    "type": "news",
-                    "title": title[:300],
-                    "snippet": entry.get("snippet", "")[:1000],
-                    "occurred_at": published,
-                    "raw_metadata": {},
-                },
-            }
-            items.append(self._attach_semantic_context(item))
-        return items
+        )
+    return tuple(candidates)
+
+
+def _candidate_timestamp(date_text: str) -> str:
+    """Normalize a verified index date cell to a UTC instant."""
+    match = re.search(r"(20\d{2})\D(\d{1,2})\D(\d{1,2})", date_text)
+    if match is None:
+        raise FetchError("index candidate has no usable publication date")
+    try:
+        parsed = datetime(int(match.group(1)), int(match.group(2)), int(match.group(3)), tzinfo=UTC)
+    except ValueError as exc:
+        raise FetchError("index candidate publication date is invalid") from exc
+    return _format_timestamp(parsed)
 
 
 def _parse_timestamp(value: str) -> datetime:
@@ -1420,6 +1934,26 @@ def _html_index_entries(raw: Any, *, base_url: str, charset: str) -> list[dict[s
             }
         )
     return entries
+
+
+_HTML_VOID_ELEMENTS = frozenset(
+    {
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
+    }
+)
 
 
 def _response_bytes(raw: Any) -> bytes:

@@ -27,9 +27,9 @@ workflow preserves failure diagnostics without publishing a failed Feed.
 
 Do not hand-edit Feed identity, artifact hashes, checkpoint, rate state, or
 lease state. Re-run through the producer/deployment path with deterministic
-fixtures for testing. A previous eight-domain product must use the explicit
-bounded migration path before it can become current; mixed generations are
-invalid.
+fixtures for testing. A previous-major product must use the explicit bounded
+migration path before it can become current; every older major and every mixed
+generation is invalid.
 
 ## Recovery runs
 

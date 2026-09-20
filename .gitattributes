@@ -1,0 +1,4 @@
+# Recorded official Provider fixtures are checked in verbatim, including any
+# source whitespace, so git must not report their content as a patch error.
+providers/*/fixtures/** -whitespace
+tests/fixtures/** -whitespace

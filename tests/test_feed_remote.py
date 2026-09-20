@@ -232,6 +232,26 @@ def test_invalid_manifest_is_rejected_before_artifact_retrieval(failure_kind):
     assert calls == [remote._raw_url("feed-manifest.json")]
 
 
+def test_consumer_accepts_major_five_from_a_foreign_build_and_rejects_older_majors():
+    remote = _remote_module()
+    feed = _feed([_news()], major=5)
+    feed["producer"] = {**feed["producer"], "fingerprint": "f" * 64}
+    feed["content_digest"], feed["run_id"] = recompute_feed_identity(feed)
+    bundle = build_bundle(feed)
+    calls: list[str] = []
+    with _client_for_bundle(bundle, remote, calls) as client:
+        assert remote.consume_published_feed(client=client) == feed
+
+    for major in (3, 4):
+        previous = json.loads(bundle.manifest_bytes)
+        previous["schema_version"] = major
+        with (
+            _client_for_payloads(remote, [], canonical_bytes(previous), {}) as client,
+            pytest.raises(remote.FeedRemoteError, match="Feed manifest validation"),
+        ):
+            remote.consume_published_feed(client=client)
+
+
 def test_http_manifest_failure_is_typed_and_does_not_read_local_feed():
     remote = _remote_module()
     calls: list[str] = []

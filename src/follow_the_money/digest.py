@@ -364,6 +364,14 @@ BENEFICIAL_PATHS = (
     ),
 )
 
+#: Reader-relevant bounded official source content. Extraction provenance
+#: (``extraction_method``, ``document_sha256``) stays Feed-only.
+SOURCE_CONTENT_PATHS: tuple[str, ...] = (
+    "payload.source_content.text",
+    "payload.source_content.format",
+    "payload.source_content.truncated",
+)
+
 ELIGIBLE_PATHS: Mapping[str, tuple[str, ...]] = MappingProxyType(
     {
         "news": _unique_paths(
@@ -373,6 +381,7 @@ ELIGIBLE_PATHS: Mapping[str, tuple[str, ...]] = MappingProxyType(
                 "payload.title",
                 "payload.snippet",
                 "payload.occurred_at",
+                *SOURCE_CONTENT_PATHS,
             )
             + SEMANTIC_PATHS
             + SEMANTIC_NEWS_PATHS
@@ -393,6 +402,7 @@ ELIGIBLE_PATHS: Mapping[str, tuple[str, ...]] = MappingProxyType(
                 "payload.previous.value",
                 "payload.previous.unit",
                 "payload.previous.unknown_reason",
+                *SOURCE_CONTENT_PATHS,
             )
             + SEMANTIC_PATHS
             + SEMANTIC_MACRO_PATHS
@@ -404,6 +414,7 @@ ELIGIBLE_PATHS: Mapping[str, tuple[str, ...]] = MappingProxyType(
                 "payload.title",
                 "payload.announced_at",
                 "payload.effective_at",
+                *SOURCE_CONTENT_PATHS,
             )
             + SEMANTIC_PATHS
             + SEMANTIC_POLICY_PATHS
@@ -542,9 +553,28 @@ def _numeric(value: Any, where: str) -> dict[str, Any]:
     return _copy_keys(value, ("value", "unit", "unknown_reason"), where)
 
 
+def _project_source_content(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Copy reader-relevant source content without its Feed-only provenance."""
+    content = _mapping(payload["source_content"], "item.payload.source_content")
+    return {
+        "source_content": _copy_keys(
+            content, ("text", "format", "truncated"), "item.payload.source_content"
+        )
+    }
+
+
+def _with_source_content(result: dict[str, Any], payload: Mapping[str, Any]) -> dict[str, Any]:
+    if "source_content" in payload:
+        result.update(_project_source_content(payload))
+    return result
+
+
 def _project_semantic_payload(payload: Mapping[str, Any], domain: str) -> dict[str, Any]:
     if domain == "news":
-        return _copy_keys(payload, ("type", "title", "snippet", "occurred_at"), "item.payload")
+        return _with_source_content(
+            _copy_keys(payload, ("type", "title", "snippet", "occurred_at"), "item.payload"),
+            payload,
+        )
     if domain == "macro_release":
         result = _copy_keys(
             payload,
@@ -554,10 +584,11 @@ def _project_semantic_payload(payload: Mapping[str, Any], domain: str) -> dict[s
         for name in ("actual", "consensus", "previous"):
             if name in payload:
                 result[name] = _numeric(payload[name], f"item.payload.{name}")
-        return result
+        return _with_source_content(result, payload)
     if domain == "policy":
-        return _copy_keys(
-            payload, ("type", "title", "announced_at", "effective_at"), "item.payload"
+        return _with_source_content(
+            _copy_keys(payload, ("type", "title", "announced_at", "effective_at"), "item.payload"),
+            payload,
         )
     raise DigestPreparationError(f"unsupported semantic payload domain: {domain!r}")
 
@@ -625,20 +656,20 @@ def _form4_entry(value: Any, where: str) -> dict[str, Any]:
         )
     if "derivative_terms" in entry:
         terms = entry["derivative_terms"]
-        result["derivative_terms"] = (
-            None
-            if terms is None
-            else _copy_keys(
+        if terms is None:
+            result["derivative_terms"] = None
+        else:
+            derivative_terms = _copy_keys(
                 terms,
                 ("exercise_date", "expiration_date", "conversion_or_exercise_price"),
                 f"{where}.derivative_terms",
             )
-        )
-        if isinstance(terms, Mapping) and terms.get("conversion_or_exercise_price") is not None:
-            result["derivative_terms"]["conversion_or_exercise_price"] = _form4_numeric(
-                terms["conversion_or_exercise_price"],
-                f"{where}.derivative_terms.conversion_or_exercise_price",
-            )
+            result["derivative_terms"] = derivative_terms
+            if isinstance(terms, Mapping) and terms.get("conversion_or_exercise_price") is not None:
+                derivative_terms["conversion_or_exercise_price"] = _form4_numeric(
+                    terms["conversion_or_exercise_price"],
+                    f"{where}.derivative_terms.conversion_or_exercise_price",
+                )
     if "underlying_security" in entry:
         underlying = entry["underlying_security"]
         result["underlying_security"] = (

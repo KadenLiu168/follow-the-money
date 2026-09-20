@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from copy import deepcopy
@@ -506,3 +507,79 @@ def test_form13f_status_never_exposes_holdings():
     serialized = canonical_bytes(value).decode("utf-8")
     assert "holdings" not in serialized
     assert "037833100" not in serialized
+
+
+def _with_source_content(item: dict, *, text: str = "Official statement.", truncated: bool = False):
+    item = deepcopy(item)
+    item["payload"]["source_content"] = {
+        "text": text,
+        "format": "plain_text",
+        "extraction_method": "official_html_text_v1",
+        "truncated": truncated,
+        "document_sha256": hashlib.sha256(item["id"].encode()).hexdigest(),
+    }
+    return item
+
+
+def test_current_units_expose_only_reader_relevant_source_content():
+    news = _with_source_content(_current_news("news-enriched"), text="Bounded official text.")
+    feed = _feed([news], target_v2=True)
+    context = _project_validated_feed(feed)
+
+    unit = next(
+        unit for unit in context.content.updates if unit.unit_id.startswith("news_publication")
+    )
+    evidence = unit.evidence["payload"]["source_content"]
+    assert evidence == {
+        "text": "Bounded official text.",
+        "format": "plain_text",
+        "truncated": False,
+    }
+    assert "extraction_method" not in evidence
+    assert "document_sha256" not in evidence
+    assert "extraction_method" not in canonical_bytes(context.to_mapping()).decode()
+    assert "document_sha256" not in canonical_bytes(context.to_mapping()).decode()
+
+
+def test_current_macro_and_policy_units_expose_truncation_state():
+    macro = _with_source_content(_current_macro(), text="Release text.", truncated=True)
+    policy = _with_source_content(_current_policy(), text="Statement text.")
+    macro["provider_id"] = "nbs"
+    feed = _feed([macro, policy], target_v2=True)
+    context = _project_validated_feed(feed)
+
+    units = {unit.unit_type: unit for unit in context.content.updates}
+    assert units["macro_release"].evidence["payload"]["source_content"] == {
+        "text": "Release text.",
+        "format": "plain_text",
+        "truncated": True,
+    }
+    assert units["policy_document"].evidence["payload"]["source_content"] == {
+        "text": "Statement text.",
+        "format": "plain_text",
+        "truncated": False,
+    }
+
+
+def test_items_without_source_content_keep_the_omission():
+    context = _project_validated_feed(_feed([_current_news()]))
+    unit = context.content.updates[0]
+    assert "source_content" not in unit.evidence["payload"]
+
+
+def test_preparation_is_repeatable_and_performs_no_document_access(monkeypatch):
+    feed = _feed([_with_source_content(_current_news("news-enriched"))], target_v2=True)
+    first = _project_validated_feed(deepcopy(feed))
+    second = _project_validated_feed(deepcopy(feed))
+    assert canonical_bytes(first.to_mapping()) == canonical_bytes(second.to_mapping())
+
+    # Preparation may not open a URL or read a document.
+    import urllib.request
+
+    def _forbidden(*_args, **_kwargs):  # pragma: no cover - must never run
+        raise AssertionError("Digest preparation must not perform network access")
+
+    monkeypatch.setattr(urllib.request, "urlopen", _forbidden)
+    assert canonical_bytes(_project_validated_feed(feed).to_mapping()) == canonical_bytes(
+        first.to_mapping()
+    )

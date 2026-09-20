@@ -1,7 +1,7 @@
 # Feed contract
 
 The repository publishes one deterministic, credential-free Evidence Feed. New
-production bundles use logical Feed schema major 4, manifest major 4, and
+production bundles use logical Feed schema major 5, manifest major 5, and
 artifact major 2.
 
 ## Closed domains
@@ -15,9 +15,9 @@ Artifacts are always present and ordered as:
 5. `filing`
 
 `market_data`, `flow`, `calendar`, and unknown domains are not current Feed
-capabilities. A previous eight-domain major is accepted only by the bounded
-migration helper, which validates it first, projects retained evidence, and
-recomputes identity before publication.
+capabilities. Only the immediate previous major is accepted, and only by the
+bounded migration helper, which validates it first, projects retained evidence,
+and recomputes identity before publication; every older major is rejected.
 
 ## Bundle shape
 
@@ -39,12 +39,32 @@ field is evidence-only and cannot express ranking, sentiment, signal,
 prediction, recommendation, market impact, or trading direction. `filing` and
 `positioning` items do not use it.
 
-Consumer validation accepts a structurally valid v4 omission for legacy items.
+Consumer validation accepts a structurally valid previous-major omission for
+legacy items.
 Current Feed construction and `build_bundle` require valid context on every
 newly acquired or replacement item in the three affected domains. A complete
 contextless prior slice is the only production exception: it must retain its
 non-null `carried_forward_from_run_id` and is carried without rewriting its
 bytes, whether its existing freshness status is `valid_unchanged` or `stale`.
+
+## Bounded official source content
+
+`news`, `macro_release`, and `policy` payloads may additionally carry one
+closed `source_content` object: non-empty NFC `text` of at most 12,000 Unicode
+code points, `format` (`plain_text`), `extraction_method`
+(`official_html_text_v1`), boolean `truncated`, and `document_sha256` — the
+lowercase SHA-256 of the exact admitted raw detail-response body bytes. The
+Federal Reserve, PBOC, SSE, and SZSE v2 Provider contracts make it mandatory
+for every selected current-window item they acquire, so a required detail
+document that is missing, unsupported, unsafe, oversized, or unextractable
+leaves the Provider incomplete rather than emitting a healthy title-only item.
+Text is assembled from whole normalized blocks inside a verified official
+container; `truncated` is set exactly when otherwise admissible later blocks
+were omitted. The object is not a new artifact, cache, or evidence authority:
+it is item evidence, and every serialized field is part of Feed identity, so
+any admitted raw-response byte change conservatively changes the Feed digest
+even when the extracted text is unchanged. Extraction method and document hash
+are Feed validation provenance and never appear in DigestContext.
 
 The logical Feed retains:
 

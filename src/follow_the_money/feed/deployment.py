@@ -336,7 +336,7 @@ def _assert_no_partial_bundle(product_root: Path) -> None:
 
 
 def _validate_product_bundle(product_root: Path) -> dict[str, Any] | None:
-    """Validate an active target bundle or the bounded v3 migration input."""
+    """Validate an active target bundle or the bounded previous-major migration input."""
     product_root = Path(product_root)
     _assert_no_partial_bundle(product_root)
     manifest_path = product_root / MANIFEST_FILENAME
@@ -436,7 +436,7 @@ def allowlisted_paths(root: Path) -> tuple[Path, ...]:
 
 
 def _migrate_previous_product(product_root: Path, config: AppConfig) -> tuple[Path, ...]:
-    """Project a validated v3 bundle into the current v4 product."""
+    """Project a validated previous-major bundle into the current product."""
     from .cli import _feed_config_snapshot, _provider_contract_snapshots, _schema_descriptor
 
     try:
@@ -978,7 +978,7 @@ def _migration_allowlisted_paths(
     repo_root: Path | None = None,
     git: GitRunner | None = None,
 ) -> tuple[Path, ...]:
-    """Allow the v3-to-v4 product replacement and stale artifact deletions."""
+    """Allow the previous-major product replacement and stale artifact deletions."""
     runtime_state_root = Path(runtime_state_root)
     product_root = Path(product_root)
     manifest_path = product_root / MANIFEST_FILENAME

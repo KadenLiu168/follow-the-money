@@ -33,7 +33,7 @@ the prepared current updates of the current validated Feed.
 
 ## Feed surface
 
-New bundles use logical/manifest major 4 and artifact major 2. The fixed domain
+New bundles use logical/manifest major 5 and artifact major 2. The fixed domain
 set is:
 
 ```text
@@ -54,9 +54,11 @@ Federal Reserve/PBOC policy, BLS/NBS/SSE/SZSE news, and NBS macro paths attach
 the closed `semantic_context` sibling. This mapping is deterministic and
 Provider-local; it performs no fetch, reclassification, entity inference, or
 separate orchestration. New/replacement affected items require context in
-production. Legacy v4 omissions remain readable and a proven contextless
-carried slice remains byte-identical, including when its carry status becomes
-`stale`.
+production. Legacy previous-major omissions remain readable and a proven
+contextless carried slice remains byte-identical, including when its carry
+status becomes `stale`. Bounded official `source_content` follows the same
+shape: newly acquired target-Provider v2 evidence requires it, while carried
+previous-major evidence may omit it.
 
 ## Trust boundaries
 
@@ -87,11 +89,15 @@ the same manifest-led bundle and has no local fallback.
 
 ## Migration
 
-A fully validated previous eight-domain bundle may be supplied only to the
-bounded migration helper. It projects retained evidence, replaces the Feed and
+A fully validated previous-major bundle may be supplied only to the bounded
+migration helper. It projects retained evidence, replaces the Feed and
 Provider/configuration snapshots with the current five-domain contract,
-recomputes `content_digest` and `run_id`, and publishes a new generation. Mixed
-or corrupt generations fail closed.
+recomputes `content_digest` and `run_id`, and publishes a new generation. The
+physical five-domain artifact layout is unchanged by the logical major, so only
+the logical version moves. Evidence the previous major acquired under a v1
+Provider contract is recorded as carried forward rather than freshly acquired.
+Mixed or corrupt generations, and any bundle older than the immediate previous
+major, fail closed.
 
 ## Code map
 

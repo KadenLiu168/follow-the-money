@@ -23,8 +23,6 @@ from follow_the_money.providers.adapters import (
     NbsAdapter,
     PbocAdapter,
     SecEdgarAdapter,
-    SseAdapter,
-    SzseAdapter,
 )
 from follow_the_money.providers.http import FetchError, bounded_fetch
 from follow_the_money.providers.urls import UrlValidationError
@@ -86,6 +84,18 @@ def _rss_feed(entries: list[tuple[str, str, str]]) -> bytes:
     ).encode()
 
 
+def _two_stage_items(adapter, discovery_body: bytes, *, detail: bytes | None = None):
+    """Run one v2 fetch/normalize cycle from a synthetic discovery document."""
+    from tests.source_content_harness import DISCOVERY_URLS, SourceContentFixtureClient
+
+    client = SourceContentFixtureClient(
+        adapter.provider_id,
+        pages={DISCOVERY_URLS[adapter.provider_id]: discovery_body},
+        **({"detail": detail} if detail is not None else {}),
+    )
+    return adapter.normalize(adapter.fetch(WINDOW, client), WINDOW)
+
+
 # ---------------------------------------------------------------------------
 # Fed
 # ---------------------------------------------------------------------------
@@ -103,7 +113,7 @@ def test_fed_normalize_valid_policy_items():
         ]
     )
     adapter = FedAdapter()
-    items = adapter.normalize(FakeResponse(body), WINDOW)
+    items = _two_stage_items(adapter, body)
     assert len(items) == 1
     assert items[0]["payload"]["type"] == "policy"
     context = items[0]["semantic_context"]
@@ -118,19 +128,19 @@ def test_fed_rejects_off_manifest_url():
     body = _rss_feed([("Bad Link", "https://evil.example.com/x", pub)])
     adapter = FedAdapter()
     with pytest.raises(UrlValidationError):
-        adapter.normalize(FakeResponse(body), WINDOW)
+        adapter._rss_candidates(FakeResponse(body))
 
 
 def test_fed_invalid_rss_raises():
     adapter = FedAdapter()
     with pytest.raises(FetchError):
-        adapter.normalize(FakeResponse(b"<html>not rss</html>"), WINDOW)
+        adapter._rss_candidates(FakeResponse(b"<html>not rss</html>"))
 
 
 def test_fed_empty_feed_ok():
     body = _rss_feed([])
     adapter = FedAdapter()
-    assert adapter.normalize(FakeResponse(body), WINDOW) == []
+    assert _two_stage_items(adapter, body) == []
 
 
 def test_rss_normalize_uses_half_open_knowledge_window():
@@ -150,7 +160,7 @@ def test_rss_normalize_uses_half_open_knowledge_window():
             ),
         ]
     )
-    items = FedAdapter().normalize(FakeResponse(body), WINDOW)
+    items = _two_stage_items(FedAdapter(), body)
     assert [item["payload"]["title"] for item in items] == ["In window"]
 
 
@@ -164,7 +174,7 @@ def test_shared_fetch_uses_resolved_provider_user_agent():
     adapter = FedAdapter()
     client = FakeClient(b"{}")
 
-    adapter.fetch(WINDOW, client)
+    adapter._fetch(client, FedAdapter.DISCOVERY_URL)
 
     assert client.request_headers == [{"User-Agent": adapter._contract.user_agent}]
 
@@ -330,17 +340,6 @@ def test_nbs_html_index_is_supported():
     ("adapter", "fixture", "base_url", "titles"),
     [
         (
-            PbocAdapter(),
-            "pboc-index.html",
-            "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html",
-            [
-                "2026年8月10日 货币政策公告",
-                "2026-02-30 2026-08-09 公开市场公告",
-                "政策公告",
-                "统计公告",
-            ],
-        ),
-        (
             NbsAdapter(),
             "nbs-index.html",
             "https://www.stats.gov.cn/sj/zxfb/index.html",
@@ -373,6 +372,39 @@ def test_production_shaped_html_indexes_skip_invalid_candidates_and_keep_first_v
     assert all("semantic_context" in item for item in items)
 
 
+def test_pboc_candidate_index_reads_the_verified_container():
+    from follow_the_money.providers.adapters import PbocIndexParser, _index_candidates
+
+    adapter = PbocAdapter()
+    response = FakeResponse(
+        (Path(__file__).parent / "fixtures" / "provider-indexes" / "pboc-index.html").read_bytes()
+    )
+    response.url = "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html"
+    candidates = _index_candidates(
+        PbocIndexParser(),
+        response,
+        charset="utf-8",
+        canonicalize=adapter._validate_url,
+    )
+    assert [candidate.title for candidate in candidates] == [
+        "2026年8月10日 货币政策公告",
+        "公开市场公告",
+    ]
+    assert [candidate.published_at for candidate in candidates] == [
+        "2026-08-10T00:00:00.000Z",
+        "2026-08-09T00:00:00.000Z",
+    ]
+    assert all(candidate.identity == candidate.url for candidate in candidates)
+
+    with pytest.raises(FetchError, match="verified candidate container"):
+        _index_candidates(
+            PbocIndexParser(),
+            FakeResponse(b"<html><body>no container</body></html>"),
+            charset="utf-8",
+            canonicalize=adapter._validate_url,
+        )
+
+
 @pytest.mark.parametrize(
     ("adapter", "fixture", "base_url"),
     [
@@ -380,16 +412,6 @@ def test_production_shaped_html_indexes_skip_invalid_candidates_and_keep_first_v
             NbsAdapter(),
             "../providers/nbs/fixtures/releases.json",
             "https://www.stats.gov.cn/sj/zxfb/index.html",
-        ),
-        (
-            SseAdapter(),
-            "../providers/sse/fixtures/notices.json",
-            "https://www.sse.com.cn/disclosure/announcement/general/",
-        ),
-        (
-            SzseAdapter(),
-            "../providers/szse/fixtures/notices.json",
-            "https://www.szse.cn/disclosure/notice/general/index.html",
         ),
     ],
 )
@@ -546,7 +568,14 @@ def test_all_manifests_load_and_provider_id_matches():
     }
     for pid, m in manifests.items():
         assert m["provider_id"] == pid
-        assert m["contract_version"] == {"sec_edgar": 4, "cftc": 2}.get(pid, 1)
+        assert m["contract_version"] == {
+            "sec_edgar": 4,
+            "cftc": 2,
+            "federal_reserve": 2,
+            "pboc": 2,
+            "sse": 2,
+            "szse": 2,
+        }.get(pid, 1)
 
 
 def test_no_manifest_claims_verified_without_date():

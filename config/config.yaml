@@ -25,6 +25,7 @@ feed:
   max_serialized_feed_bytes: 52428800
   lock_timeout_seconds: 60
   sec_request_network_headroom_seconds: 45
+  source_content_request_network_headroom_seconds: 120
 
 rate_registry:
   version: "1"

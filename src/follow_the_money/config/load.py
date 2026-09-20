@@ -14,6 +14,7 @@ from ..providers.manifest import (
     load_manifest,
     manifest_to_provider_entry,
     validate_sec_deadline,
+    validate_source_content_deadline,
 )
 from .model import (
     REQUIRED_COVERAGE_GROUPS,
@@ -72,6 +73,7 @@ FEED_KEYS = frozenset(
         "max_serialized_feed_bytes",
         "lock_timeout_seconds",
         "sec_request_network_headroom_seconds",
+        "source_content_request_network_headroom_seconds",
     }
 )
 RATE_REGISTRY_KEYS = frozenset({"version", "crash_cooldown_hours", "schema_file"})
@@ -526,30 +528,29 @@ def load_config(
     _validate_coverage(providers, coverage, strict=require_verified_enabled)
     _validate_rate_policies(providers)
     _validate_provider_sources(providers, source_families, feed)
+    budget_config = AppConfig(
+        schema_version=1,
+        name="budget-validation",
+        providers=providers,
+        coverage=coverage,
+        source_families=source_families,
+        watched_companies=watched_companies,
+        watched_form4_issuers=watched_form4_issuers,
+        watched_beneficial_ownership_filers=watched_beneficial_ownership_filers,
+        feed=feed,
+        rate_registry=rate_registry,
+        runtime_state_root=".",
+        output_root=".",
+        runs_root=".",
+        timezone="UTC",
+    )
     sec_provider = next((provider for provider in providers if provider.id == "sec_edgar"), None)
-    if sec_provider is not None and sec_provider.contract_version in {3, 4}:
-        try:
-            validate_sec_deadline(
-                AppConfig(
-                    schema_version=1,
-                    name="budget-validation",
-                    providers=providers,
-                    coverage=coverage,
-                    source_families=source_families,
-                    watched_companies=watched_companies,
-                    watched_form4_issuers=watched_form4_issuers,
-                    watched_beneficial_ownership_filers=watched_beneficial_ownership_filers,
-                    feed=feed,
-                    rate_registry=rate_registry,
-                    runtime_state_root=".",
-                    output_root=".",
-                    runs_root=".",
-                    timezone="UTC",
-                ),
-                sec_provider,
-            )
-        except ValueError as exc:
-            raise ConfigError(str(exc)) from exc
+    try:
+        if sec_provider is not None and sec_provider.contract_version in {3, 4}:
+            validate_sec_deadline(budget_config, sec_provider)
+        validate_source_content_deadline(budget_config)
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(str(exc)) from exc
 
     scalar_paths = ("name", "timezone", "output_root", "runtime_state_root", "runs_root")
     values = {path: _as_nonempty_str(data[path], f"{config_path}.{path}") for path in scalar_paths}

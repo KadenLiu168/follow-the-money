@@ -1,19 +1,21 @@
 # Federal Reserve — provider contract manifest
-# Contract status: verified on 2026-08-11 against the public RSS contract and
-# the checked-in fixture. The adapter remains evidence-only and bounded.
+# Contract status: re-verified on 2026-09-20 against the recorded RSS response and
+# the recorded official release page; the v2 contract acquires bounded official
+# detail documents. The adapter remains evidence-only and bounded.
 
-contract_version: 1
+contract_version: 2
 provider_id: federal_reserve
 name: Federal Reserve
 source_family_id: federal_reserve
 tier: "Tier 1"
 verification:
   verified: true
-  verification_date: "2026-08-11"
+  verification_date: "2026-09-20"
   contract_url: "https://www.federalreserve.gov/feeds/press_all.xml"
   usage_note: >
     Official policy statements and press releases. Public data, no
-    authentication; RSS response and source-link rules are verified.
+    authentication; the RSS response, source-link rules, and the verified
+    article container (div#article body column) were re-verified on 2026-09-20.
 
 authentication: none
 protocol: https
@@ -74,6 +76,16 @@ pagination: none
 default_enabled: true
 
 fixture_provenance:
-  source: "Recorded from live responses on 2026-08-11; fixture-backed adapter contract."
+  source: "Recorded verbatim from live official responses on 2026-09-20; fixture-backed adapter contract."
   files:
     - fixtures/press_all.xml
+    - fixtures/detail-monetary20260916a.htm
+
+content:
+  acquisition: detail_document
+  extraction_method: official_html_text_v1
+  allowed_content_types: [text/html]
+  max_document_bytes: 2097152
+  max_text_chars: 12000
+  max_detail_documents_per_window: 50
+  required_for_selected_item: true

@@ -115,6 +115,18 @@ def _news(item_id: str = "item-1", at: datetime = T0 - timedelta(hours=1)) -> di
     return item
 
 
+def _source_content(
+    text: str = "Official statement paragraph.", *, truncated: bool = False
+) -> dict:
+    return {
+        "text": text,
+        "format": "plain_text",
+        "extraction_method": "official_html_text_v1",
+        "truncated": truncated,
+        "document_sha256": canonical_sha256(text.encode("utf-8")),
+    }
+
+
 def _coverage_groups(provider_id: str) -> list[str]:
     return sorted(
         cast(str, row["group"])
@@ -123,7 +135,19 @@ def _coverage_groups(provider_id: str) -> list[str]:
     )
 
 
-def _feed(items: list[dict] | None = None) -> dict:
+SOURCE_CONTENT_CONTRACT = {
+    "acquisition": "detail_document",
+    "extraction_method": "official_html_text_v1",
+    "allowed_content_types": ["text/html"],
+    "max_document_bytes": 2097152,
+    "max_text_chars": 12000,
+    "max_detail_documents_per_window": 50,
+    "required_for_selected_item": True,
+}
+TARGET_V2_PROVIDERS = ("federal_reserve", "pboc", "sse", "szse")
+
+
+def _feed(items: list[dict] | None = None, *, major: int = 5, target_v2: bool = False) -> dict:
     selected = items or []
     contracts = []
     outcomes = []
@@ -141,6 +165,9 @@ def _feed(items: list[dict] | None = None) -> dict:
             "payload_types": [PROVIDER_PAYLOADS[provider_id]],
             "freshness": freshness,
         }
+        if target_v2 and provider_id in TARGET_V2_PROVIDERS:
+            snapshot["contract_version"] = 2
+            snapshot["content"] = dict(SOURCE_CONTENT_CONTRACT)
         contract_hash = canonical_digest(snapshot)
         contracts.append({"provider_id": provider_id, "snapshot": snapshot, "hash": contract_hash})
         provider_items = [item for item in selected if item["provider_id"] == provider_id]
@@ -174,7 +201,7 @@ def _feed(items: list[dict] | None = None) -> dict:
         outcomes.append(outcome)
 
     feed = {
-        "schema_version": 4,
+        "schema_version": major,
         "run_id": "",
         "window": {"start": _ts(T0 - timedelta(hours=72)), "end": _ts(T0)},
         "collection_started_at": _ts(T0 - timedelta(minutes=1)),
@@ -213,6 +240,19 @@ def _write_bundle(root: Path, bundle) -> None:
     (root / "feed-manifest.json").write_bytes(bundle.manifest_bytes)
     for domain, data in bundle.artifact_bytes.items():
         (root / artifact_relative_path(domain, bundle.run_id)).write_bytes(data)
+
+
+def _previous_major_bundle(feed: dict):
+    """Serialize one major-4 candidate exactly as the previous release did.
+
+    Physical layout is unchanged between majors, so only the writer's accepted
+    major differs. Current production must never take this path.
+    """
+    assert feed["schema_version"] == bundle_module.PREVIOUS_BUNDLE_MAJOR
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(bundle_module, "SUPPORTED_BUNDLE_MAJOR", feed["schema_version"])
+        patch.setattr(bundle_module, "validate_feed", lambda *_args, **_kwargs: None)
+        return build_bundle(feed)
 
 
 def test_v4_legacy_sec_and_cftc_items_remain_readable():
@@ -351,55 +391,15 @@ def test_bundle_integrity_rejects_corruption_without_legacy_fallback(tmp_path: P
 
 
 def test_load_feed_rejects_previous_major_even_when_manifest_is_valid(tmp_path: Path):
-    feed = _feed()
-    feed["schema_version"] = 3
-    feed["calendar_horizon_end"] = _ts(T0 + timedelta(hours=26))
-    feed["content_digest"], feed["run_id"] = recompute_feed_identity(feed)
-    previous_domains = (
-        "news",
-        "macro_release",
-        "policy",
-        "market_data",
-        "flow",
-        "positioning",
-        "filing",
-        "calendar",
-    )
-    artifacts = {
-        domain: {
-            "schema_version": 1,
-            "run_id": feed["run_id"],
-            "domain": domain,
-            "items": [],
-        }
-        for domain in previous_domains
-    }
-    data = {domain: canonical_bytes(artifact) for domain, artifact in artifacts.items()}
-    current = build_bundle(_feed())
-    manifest = {key: value for key, value in feed.items() if key != "items"}
-    manifest["bundle_schemas"] = current.manifest["bundle_schemas"]
-    manifest["artifacts"] = [
-        {
-            "domain": domain,
-            "path": f"feed-{domain}-{generation_key(feed['run_id'])}.json",
-            "item_count": 0,
-            "size_bytes": len(data[domain]),
-            "sha256": canonical_sha256(data[domain]),
-        }
-        for domain in previous_domains
-    ]
-    (tmp_path / "feed-manifest.json").write_bytes(canonical_bytes(manifest))
-    for domain, value in data.items():
-        (tmp_path / f"feed-{domain}-{generation_key(feed['run_id'])}.json").write_bytes(value)
-    with pytest.raises(BundleError, match="previous eight-domain"):
+    previous = _feed([_news()], major=4)
+    _write_bundle(tmp_path, _previous_major_bundle(previous))
+    with pytest.raises(BundleError, match="bounded migration"):
         load_feed(tmp_path)
+    assert validate_bundle(tmp_path, allow_previous=True) == previous
 
 
 def test_validate_feed_requires_explicit_previous_migration_permission():
-    feed = _feed()
-    feed["schema_version"] = 3
-    feed["calendar_horizon_end"] = _ts(T0 + timedelta(hours=26))
-    feed["content_digest"], feed["run_id"] = recompute_feed_identity(feed)
+    feed = _feed(major=4)
     with pytest.raises(SchemaError, match="bounded migration"):
         validate_feed(feed)
     validate_feed(feed, allow_previous=True)
@@ -416,65 +416,10 @@ def test_bundle_publication_is_idempotent_and_generation_qualified(tmp_path: Pat
     assert not (tmp_path / "latest.json").exists()
 
 
-def test_migration_projects_removed_payload_and_recomputes_identity(tmp_path: Path):
+def test_migration_rebinds_contracts_and_recomputes_identity(tmp_path: Path):
     current = _feed([_news()])
     old = deepcopy(current)
-    old["schema_version"] = 3
-    old["calendar_horizon_end"] = _ts(T0 + timedelta(hours=26))
-    market_item = deepcopy(_news("market-item"))
-    market_item["provider_id"] = "yahoo_market"
-    market_item["source"]["id"] = "market-item"
-    market_item["source"]["url"] = "https://example.com/market-item"
-    market_item["payload"] = {
-        "type": "market_data",
-        "instrument_id": "sp500",
-        "observations": [{"as_of": _ts(T0 - timedelta(hours=2)), "value": "100", "unit": "index"}],
-        "raw_metadata": {},
-    }
-    old["items"].append(market_item)
-    old_contract = {
-        "provider_id": "yahoo_market",
-        "snapshot": {
-            "provider_id": "yahoo_market",
-            "empty_valid_for_window": True,
-            "payload_types": ["market_data"],
-            "freshness": {
-                "cadence": "market_session",
-                "reference_time": "data_as_of",
-                "valid_for_seconds": 86400,
-            },
-        },
-    }
-    old_contract["hash"] = canonical_digest(old_contract["snapshot"])
-    old["provider_contracts"].append(old_contract)
-    old["provider_contracts"].sort(key=lambda entry: entry["provider_id"])
-    old_outcome = {
-        "provider_id": "yahoo_market",
-        "state": "healthy",
-        "attempted": 1,
-        "fetched": 1,
-        "succeeded": True,
-        "empty": False,
-        "partial": False,
-        "failed": False,
-        "skipped": False,
-        "accepted": 1,
-        "rejected": 0,
-        "error": None,
-        "retrieved_at": _ts(T0 + timedelta(minutes=1)),
-        "freshness": {
-            "cadence": "market_session",
-            "status": "fresh",
-            "origin_contract_hash": old_contract["hash"],
-            "carried_forward_from_run_id": None,
-        },
-        "availability": "success",
-        "availability_reason": None,
-        "upstream_http_status": None,
-        "affected_coverage_groups": [],
-    }
-    old["provider_outcomes"].append(old_outcome)
-    old["provider_outcomes"].sort(key=lambda outcome: outcome["provider_id"])
+    old["schema_version"] = 4
     old["content_digest"], old["run_id"] = recompute_feed_identity(old)
 
     migrated = migrate_feed(
@@ -484,18 +429,17 @@ def test_migration_projects_removed_payload_and_recomputes_identity(tmp_path: Pa
         target_feed_schema=current["feed_schema"],
     )
     validate_feed(migrated)
-    assert migrated["schema_version"] == 4
-    assert all(item["payload"]["type"] in DOMAINS for item in migrated["items"])
-    assert "market-item" not in {item["id"] for item in migrated["items"]}
+    assert migrated["schema_version"] == 5
+    assert {item["id"] for item in migrated["items"]} == {item["id"] for item in old["items"]}
+    assert migrated["provider_contracts"] == current["provider_contracts"]
     assert migrated["run_id"] != old["run_id"]
     assert migrated["content_digest"] != old["content_digest"]
 
 
-def test_v3_migration_enriches_contextless_affected_items_for_production():
+def test_previous_major_migration_enriches_contextless_items_for_production():
     current = _feed([_news()])
     old = deepcopy(current)
-    old["schema_version"] = 3
-    old["calendar_horizon_end"] = _ts(T0 + timedelta(hours=26))
+    old["schema_version"] = 4
     old["items"][0].pop("semantic_context")
     old["content_digest"], old["run_id"] = recompute_feed_identity(old)
 
@@ -508,3 +452,44 @@ def test_v3_migration_enriches_contextless_affected_items_for_production():
 
     assert "semantic_context" in migrated["items"][0]
     build_bundle(migrated)
+
+
+def test_new_production_bundles_require_major_five():
+    with pytest.raises(BundleError, match="schema version 5"):
+        build_bundle(_feed(major=4))
+    bundle = build_bundle(_feed([_news()], major=5))
+    assert bundle.manifest["schema_version"] == 5
+
+
+def test_major_five_keeps_the_unchanged_five_domain_artifact_major():
+    bundle = build_bundle(_feed([_news()], major=5))
+    assert [entry["domain"] for entry in bundle.manifest["artifacts"]] == list(DOMAINS)
+    for domain in DOMAINS:
+        assert bundle.artifacts[domain]["schema_version"] == 2
+
+
+def test_only_major_four_is_a_bounded_migration_input(tmp_path: Path):
+    current = _feed([_news()], major=5)
+    previous = deepcopy(current)
+    previous["schema_version"] = 4
+    previous["content_digest"], previous["run_id"] = recompute_feed_identity(previous)
+
+    migrated = migrate_feed(
+        previous,
+        target_feed_config=current["feed_config"],
+        target_provider_contracts=current["provider_contracts"],
+        target_feed_schema=current["feed_schema"],
+    )
+    assert migrated["schema_version"] == 5
+    build_bundle(migrated)
+
+    older = deepcopy(current)
+    older["schema_version"] = 3
+    older["content_digest"], older["run_id"] = recompute_feed_identity(older)
+    with pytest.raises(BundleError, match="previous-major"):
+        migrate_feed(
+            older,
+            target_feed_config=current["feed_config"],
+            target_provider_contracts=current["provider_contracts"],
+            target_feed_schema=current["feed_schema"],
+        )

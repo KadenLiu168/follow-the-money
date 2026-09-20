@@ -17,8 +17,9 @@ from follow_the_money.feed.validate import (
     validate_numeric_token,
 )
 from follow_the_money.schema import SchemaError
+from follow_the_money.semantic.news import build_news_context
 from follow_the_money.semantic.policy import build_policy_context
-from tests.test_feed_bundle import T0, _feed, _news, _ts
+from tests.test_feed_bundle import T0, _feed, _news, _source_content, _ts
 
 
 def _news_context() -> dict:
@@ -455,6 +456,120 @@ def test_numeric_guards_remain_closed_for_retained_numeric_evidence():
         validate_canonical_numeric("-0", where="value")
 
 
+def _v5_news_item() -> dict:
+    item = _news()
+    item["payload"]["source_content"] = _source_content()
+    return item
+
+
+def _v5_macro_item() -> dict:
+    item = _macro_item()
+    item["payload"]["source_content"] = _source_content("Release text.", truncated=True)
+    return item
+
+
+def _v5_policy_item() -> dict:
+    item = _policy_item()
+    item["payload"]["source_content"] = _source_content()
+    item["semantic_context"] = build_policy_context(
+        item["provider_id"], item["payload"], item["source"]
+    ).to_dict()
+    return item
+
+
+def _v5_feed(items: list[dict] | None = None) -> dict:
+    feed = _feed(items, major=5)
+    validate_feed(feed)
+    assert_feed_identity(feed)
+    return feed
+
+
+def test_v5_admits_bounded_source_content_for_news_macro_and_policy():
+    feed = _v5_feed([_v5_news_item(), _v5_macro_item(), _v5_policy_item()])
+    bundle = build_bundle(feed)
+    assert bundle.artifacts["news"]["items"][0]["payload"]["source_content"] == _source_content()
+    assert bundle.artifacts["policy"]["items"][0]["payload"]["source_content"] == _source_content()
+    assert (
+        bundle.artifacts["macro_release"]["items"][0]["payload"]["source_content"]["truncated"]
+        is True
+    )
+
+
+def test_v5_source_content_is_rejected_outside_its_closed_payloads():
+    positioning = _positioning_item()
+    positioning["payload"]["source_content"] = _source_content()
+    with pytest.raises(SchemaError):
+        validate_feed(_feed([positioning], major=5))
+
+    filing = deepcopy(_positioning_item())
+    filing["provider_id"] = "sec_edgar"
+    filing["payload"] = {
+        "type": "filing",
+        "form": "13F-HR",
+        "company": "0001067983",
+        "accession_number": "0001067983-26-000001",
+        "filed_at": _ts(T0 - timedelta(hours=1)),
+        "raw_metadata": {},
+        "source_content": _source_content(),
+    }
+    with pytest.raises(SchemaError):
+        validate_feed(_feed([filing], major=5))
+
+
+def test_v5_source_content_is_rejected_inside_raw_metadata_and_semantic_context():
+    in_raw_metadata = _v5_news_item()
+    in_raw_metadata["payload"]["raw_metadata"] = {"source_content": _source_content()}
+    with pytest.raises(SchemaError):
+        validate_feed(_feed([in_raw_metadata], major=5))
+
+    in_context = _v5_news_item()
+    in_context["semantic_context"]["extension"]["document"]["source_content"] = _source_content()
+    with pytest.raises(SchemaError):
+        validate_feed(_feed([in_context], major=5))
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        pytest.param({"text": ""}, id="empty-text"),
+        pytest.param({"text": "a" * 12001}, id="over-text-bound"),
+        pytest.param({"text": "é"}, id="non-nfc-text"),
+        pytest.param({"format": "html"}, id="unknown-format"),
+        pytest.param({"extraction_method": "readability_v1"}, id="unknown-extraction-method"),
+        pytest.param({"truncated": "false"}, id="non-boolean-truncation"),
+        pytest.param({"document_sha256": "D" * 64}, id="uppercase-digest"),
+        pytest.param({"document_sha256": "d" * 63}, id="short-digest"),
+        pytest.param({"document_sha256": None}, id="missing-digest"),
+        pytest.param({"unknown_member": 1}, id="undeclared-member"),
+    ],
+)
+def test_v5_source_content_shape_is_closed(mutation):
+    item = _v5_news_item()
+    if mutation == {"document_sha256": None}:
+        item["payload"]["source_content"].pop("document_sha256")
+    else:
+        item["payload"]["source_content"].update(mutation)
+    with pytest.raises(SchemaError):
+        validate_feed(_feed([item], major=5))
+
+
+def test_v5_is_the_only_current_production_major():
+    previous = _feed([_news()], major=4)
+    with pytest.raises(SchemaError, match="bounded migration"):
+        validate_feed(previous)
+    validate_feed(previous, allow_previous=True)
+    with pytest.raises(SchemaError, match="current production"):
+        validate_feed(previous, allow_previous=True, current_production=True)
+
+    older = _feed(major=3)
+    older["calendar_horizon_end"] = _ts(T0 + timedelta(hours=26))
+    older["content_digest"], older["run_id"] = recompute_feed_identity(older)
+    with pytest.raises(SchemaError):
+        validate_feed(older, allow_previous=True)
+
+    validate_feed(_feed([_news()], major=5), current_production=True)
+
+
 def test_producer_and_contract_descriptors_are_part_of_identity():
     feed = _feed()
     first = recompute_feed_identity(feed)[0]
@@ -665,3 +780,90 @@ def test_semantic_projection_changes_identity_for_sec_and_cftc_facts():
     cftc["items"][0]["payload"]["current_metrics"]["open_interest"]["value"] = "455124"
     changed_cftc_digest, _ = recompute_feed_identity(cftc)
     assert changed_cftc_digest != cftc_digest
+
+
+def _carry_target_provider(feed: dict, provider_id: str) -> None:
+    """Record one target Provider slice as carried forward rather than acquired."""
+    outcome = next(
+        entry for entry in feed["provider_outcomes"] if entry["provider_id"] == provider_id
+    )
+    outcome["freshness"] = {
+        "cadence": "event_driven",
+        "status": "valid_unchanged",
+        "origin_contract_hash": next(
+            entry["hash"]
+            for entry in feed["provider_contracts"]
+            if entry["provider_id"] == provider_id
+        ),
+        "carried_forward_from_run_id": "prior-generation",
+    }
+    feed["content_digest"], feed["run_id"] = recompute_feed_identity(feed)
+
+
+def _target_provider_item(provider_id: str) -> dict:
+    """One valid policy or news item for a v2 target Provider."""
+    if provider_id == "federal_reserve":
+        item = _v5_policy_item()
+    else:
+        item = _v5_news_item()
+        item["provider_id"] = provider_id
+        item["source"].update(
+            {
+                "id": "sse-source",
+                "name": "上海证券交易所",
+                "kind": "news",
+                "url": "https://www.sse.com.cn/disclosure/announcement/general/c/c_1.shtml",
+            }
+        )
+        item["semantic_context"] = build_news_context(
+            provider_id, item["payload"], item["source"]
+        ).to_dict()
+    return item
+
+
+@pytest.mark.parametrize("provider_id", ["federal_reserve", "sse"])
+def test_current_production_requires_source_content_for_acquired_target_v2_items(provider_id):
+    item = _target_provider_item(provider_id)
+    feed = _feed([item], target_v2=True)
+    validate_feed(feed, current_production=True)
+
+    without = deepcopy(feed)
+    without["items"][0]["payload"].pop("source_content")
+    without["content_digest"], without["run_id"] = recompute_feed_identity(without)
+    with pytest.raises(SchemaError, match="require source content"):
+        validate_feed(without, current_production=True)
+    # The same evidence is admissible as a carried previous-major slice.
+    _carry_target_provider(without, provider_id)
+    validate_feed(without, current_production=True)
+
+
+def test_current_production_allows_bls_and_nbs_without_source_content():
+    feed = _feed([_news(), _macro_item()], target_v2=True)
+    validate_feed(feed, current_production=True)
+
+
+def test_current_production_rejects_mixed_source_content_in_one_provider():
+    with_content = _v5_policy_item()
+    without_content = deepcopy(with_content)
+    without_content["id"] = "policy-item-2"
+    without_content["source"]["id"] = "policy-item-2"
+    without_content["payload"].pop("source_content")
+    without_content["semantic_context"] = build_policy_context(
+        "federal_reserve", without_content["payload"], without_content["source"]
+    ).to_dict()
+    feed = _feed([with_content, without_content], target_v2=True)
+    with pytest.raises(SchemaError, match="cannot mix"):
+        validate_feed(feed, current_production=True)
+
+
+def test_forged_v2_contract_snapshot_cannot_accept_title_only_items():
+    item = deepcopy(_v5_policy_item())
+    item["payload"].pop("source_content")
+    item["semantic_context"] = build_policy_context(
+        "federal_reserve", item["payload"], item["source"]
+    ).to_dict()
+    feed = _feed([item], target_v2=True)
+    with pytest.raises(SchemaError, match="require source content"):
+        validate_feed(feed, current_production=True)
+    # A v1 snapshot for the same evidence is still admissible.
+    validate_feed(_feed([item]), current_production=True)

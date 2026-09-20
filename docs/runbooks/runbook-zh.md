@@ -22,7 +22,8 @@ required Provider 的 failed/incomplete 结果会产生 typed failure，不会�
 可以生成 accepted degraded Feed；failed Feed 不得发布。
 
 不要手工编辑 Feed identity、artifact hash、checkpoint、rate state 或 lease。
-上一版八域 product 必须先经过显式 bounded migration；mixed generation 无效。
+上一 major 的五域 product 必须先经过显式 bounded migration；更旧 major 和 mixed
+generation 无效。
 
 ## 恢复运行
 

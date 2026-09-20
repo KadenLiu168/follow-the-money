@@ -148,7 +148,7 @@ def test_repeated_carry_preserves_original_contract_hash():
         outcomes={"provider": outcome},
         current_items=[],
         active_feed={
-            "schema_version": 3,
+            "schema_version": 4,
             "run_id": "prior-run",
             "items": prior,
             "provider_contracts": [{"provider_id": "provider", "snapshot": {}, "hash": "b" * 64}],

@@ -43,6 +43,7 @@ from follow_the_money.providers.adapters import (
 from follow_the_money.providers.http import FetchError
 from follow_the_money.providers.urls import sec_archive_cik
 from follow_the_money.schema import SchemaError
+from tests.source_content_harness import DISCOVERY_URLS, V2_PROVIDERS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CFTC_FIXTURE = REPO_ROOT / "providers" / "cftc" / "fixtures" / "cot.json"
@@ -178,18 +179,52 @@ class _CftcFixtureAdapter:
 
 
 FIXTURE_BY_PROVIDER = {
-    "federal_reserve": "providers/federal_reserve/fixtures/press_all.xml",
     "bls": "providers/bls/fixtures/news.release.xml",
     "sec_edgar": "providers/sec_edgar/fixtures/browse-13f.json",
-    "pboc": "providers/pboc/fixtures/announcements.json",
     "nbs": "providers/nbs/fixtures/releases.json",
-    "sse": "providers/sse/fixtures/notices.json",
-    "szse": "providers/szse/fixtures/notices.json",
 }
 
 
+class _SourceContentFixtureServed:
+    """Serves one v2 Provider its synthetic discovery plan and recorded details."""
+
+    def __init__(self, adapter: Any, *, detail_status: int | None = None) -> None:
+        self.provider_id = adapter.provider_id
+        self.adapter = adapter
+        self.detail_status = detail_status
+
+    def fetch(self, window, client=None):
+        from tests.source_content_harness import (
+            SourceContentFixtureClient,
+            candidate_url,
+            window_discovery,
+        )
+
+        failures = (
+            {candidate_url(self.provider_id, index): self.detail_status for index in range(4)}
+            if self.detail_status is not None
+            else {}
+        )
+        return self.adapter.fetch(
+            window,
+            SourceContentFixtureClient(
+                self.provider_id,
+                pages={
+                    DISCOVERY_URLS[self.provider_id]: window_discovery(self.provider_id, window)
+                },
+                failures=failures,
+            ),
+        )
+
+    def normalize(self, raw, window):
+        return self.adapter.normalize(raw, window)
+
+
 def _fixture_registry(
-    error: Exception | None = None, *, cftc_body: bytes | None = None
+    error: Exception | None = None,
+    *,
+    cftc_body: bytes | None = None,
+    detail_failures: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Every enabled production provider, each served its checked-in fixture."""
     registry = build_registry()
@@ -197,6 +232,11 @@ def _fixture_registry(
     for pid in registry.ids():
         inner = registry.get(pid)
 
+        if pid in V2_PROVIDERS:
+            wrapped[pid] = _SourceContentFixtureServed(
+                cast(Any, inner), detail_status=(detail_failures or {}).get(pid)
+            )
+            continue
         if pid == "cftc":
             wrapped[pid] = _CftcFixtureAdapter(
                 cast(CftcAdapter, inner), error=error, body=cftc_body

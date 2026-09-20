@@ -1181,6 +1181,28 @@ def _provider_contract_snapshots(
         if p.max_filings_per_window is not None:
             payload["max_filings_per_window"] = p.max_filings_per_window
             payload["ownership_xml_schema_versions"] = list(p.ownership_xml_schema_versions)
+        if p.source_content is not None:
+            payload["content"] = {
+                "acquisition": p.source_content.acquisition,
+                "extraction_method": p.source_content.extraction_method,
+                "allowed_content_types": list(p.source_content.allowed_content_types),
+                "max_document_bytes": p.source_content.max_document_bytes,
+                "max_text_chars": p.source_content.max_text_chars,
+                "max_detail_documents_per_window": (
+                    p.source_content.max_detail_documents_per_window
+                ),
+                "required_for_selected_item": p.source_content.required_for_selected_item,
+                **(
+                    {
+                        "max_discovery_pages_per_window": (
+                            p.source_content.max_discovery_pages_per_window
+                        ),
+                        "discovery_order": p.source_content.discovery_order,
+                    }
+                    if p.source_content.max_discovery_pages_per_window is not None
+                    else {}
+                ),
+            }
         if p.beneficial_ownership_max_filings_per_window is not None:
             payload["beneficial_ownership"] = {
                 "max_filings_per_window": p.beneficial_ownership_max_filings_per_window,
@@ -1217,6 +1239,9 @@ def _feed_config_snapshot(cfg: AppConfig) -> dict[str, Any]:
             "max_serialized_feed_bytes": cfg.feed.max_serialized_feed_bytes,
             "lock_timeout_seconds": cfg.feed.lock_timeout_seconds,
             "sec_request_network_headroom_seconds": cfg.feed.sec_request_network_headroom_seconds,
+            "source_content_request_network_headroom_seconds": (
+                cfg.feed.source_content_request_network_headroom_seconds
+            ),
         },
         "coverage": [
             {

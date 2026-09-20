@@ -12,8 +12,8 @@
   ],
   "properties": {
     "schema_version": {
+      "description": "Physical artifact major; the five-domain envelope is unchanged by logical Feed v5.",
       "enum": [
-        1,
         2
       ]
     },
@@ -27,11 +27,8 @@
         "news",
         "macro_release",
         "policy",
-        "market_data",
-        "flow",
         "positioning",
-        "filing",
-        "calendar"
+        "filing"
       ]
     },
     "items": {
@@ -46,46 +43,28 @@
       "$ref": "#/$defs/domain_payloads"
     },
     {
-      "if": {
-        "properties": {
-          "schema_version": {
-            "const": 2
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "domain": {
-            "enum": [
-              "news",
-              "macro_release",
-              "policy",
-              "positioning",
-              "filing"
-            ]
-          },
+      "properties": {
+        "items": {
           "items": {
-            "items": {
-              "properties": {
-                "payload": {
-                  "oneOf": [
-                    {
-                      "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/news"
-                    },
-                    {
-                      "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/macro_release"
-                    },
-                    {
-                      "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/policy"
-                    },
-                    {
-                      "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/positioning"
-                    },
-                    {
-                      "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/filing"
-                    }
-                  ]
-                }
+            "properties": {
+              "payload": {
+                "oneOf": [
+                  {
+                    "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/news"
+                  },
+                  {
+                    "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/macro_release"
+                  },
+                  {
+                    "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/policy"
+                  },
+                  {
+                    "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/positioning"
+                  },
+                  {
+                    "$ref": "https://follow-the-money/schemas/feed.schema.json#/$defs/filing"
+                  }
+                ]
               }
             }
           }
@@ -106,19 +85,10 @@
           "$ref": "#/$defs/policy_artifact"
         },
         {
-          "$ref": "#/$defs/market_data_artifact"
-        },
-        {
-          "$ref": "#/$defs/flow_artifact"
-        },
-        {
           "$ref": "#/$defs/positioning_artifact"
         },
         {
           "$ref": "#/$defs/filing_artifact"
-        },
-        {
-          "$ref": "#/$defs/calendar_artifact"
         }
       ]
     },
@@ -200,58 +170,6 @@
         }
       }
     },
-    "market_data_artifact": {
-      "if": {
-        "properties": {
-          "domain": {
-            "const": "market_data"
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "items": {
-            "items": {
-              "properties": {
-                "payload": {
-                  "properties": {
-                    "type": {
-                      "const": "market_data"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "flow_artifact": {
-      "if": {
-        "properties": {
-          "domain": {
-            "const": "flow"
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "items": {
-            "items": {
-              "properties": {
-                "payload": {
-                  "properties": {
-                    "type": {
-                      "const": "flow"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "positioning_artifact": {
       "if": {
         "properties": {
@@ -295,32 +213,6 @@
                   "properties": {
                     "type": {
                       "const": "filing"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "calendar_artifact": {
-      "if": {
-        "properties": {
-          "domain": {
-            "const": "calendar"
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "items": {
-            "items": {
-              "properties": {
-                "payload": {
-                  "properties": {
-                    "type": {
-                      "const": "calendar"
                     }
                   }
                 }

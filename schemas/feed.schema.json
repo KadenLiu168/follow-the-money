@@ -23,10 +23,10 @@
   ],
   "properties": {
     "schema_version": {
-      "description": "Logical Feed schema major; v3 is the previous eight-domain contract and v4 is the five-domain production contract.",
+      "description": "Logical Feed schema major; v5 is the five-domain production contract carrying bounded official source content; v4 is the immediately preceding bounded migration input.",
       "enum": [
-        3,
-        4
+        4,
+        5
       ]
     },
     "run_id": {
@@ -165,14 +165,6 @@
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
-    "calendar_horizon_end": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "format": "date-time",
-      "description": "Legacy v3 migration metadata; absent from v4."
-    },
     "items": {
       "type": "array",
       "items": {
@@ -231,16 +223,14 @@
       "if": {
         "properties": {
           "schema_version": {
-            "const": 4
+            "enum": [
+              4,
+              5
+            ]
           }
         }
       },
       "then": {
-        "not": {
-          "required": [
-            "calendar_horizon_end"
-          ]
-        },
         "properties": {
           "provider_outcomes": {
             "items": {
@@ -289,30 +279,6 @@
                   ]
                 }
               }
-            }
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "schema_version": {
-            "const": 3
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "provider_outcomes": {
-            "items": {
-              "required": [
-                "freshness",
-                "availability",
-                "availability_reason",
-                "upstream_http_status",
-                "affected_coverage_groups"
-              ]
             }
           }
         }
@@ -900,21 +866,45 @@
           "$ref": "#/$defs/policy"
         },
         {
-          "$ref": "#/$defs/market_data"
-        },
-        {
-          "$ref": "#/$defs/flow"
-        },
-        {
           "$ref": "#/$defs/positioning"
         },
         {
           "$ref": "#/$defs/filing"
-        },
-        {
-          "$ref": "#/$defs/calendar"
         }
       ]
+    },
+    "source_content": {
+      "description": "Closed bounded official first-party document evidence retained for news, macro_release, and policy payloads.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "format",
+        "extraction_method",
+        "truncated",
+        "document_sha256"
+      ],
+      "properties": {
+        "text": {
+          "description": "NFC-normalized deterministic plain text bounded to 12000 Unicode code points.",
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "const": "plain_text"
+        },
+        "extraction_method": {
+          "const": "official_html_text_v1"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "document_sha256": {
+          "description": "Lowercase SHA-256 of the admitted raw detail-response body bytes.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
     },
     "news": {
       "type": "object",
@@ -947,6 +937,9 @@
         },
         "raw_metadata": {
           "type": "object"
+        },
+        "source_content": {
+          "$ref": "#/$defs/source_content"
         }
       }
     },
@@ -988,6 +981,9 @@
         },
         "raw_metadata": {
           "type": "object"
+        },
+        "source_content": {
+          "$ref": "#/$defs/source_content"
         }
       }
     },
@@ -1054,99 +1050,9 @@
         },
         "raw_metadata": {
           "type": "object"
-        }
-      }
-    },
-    "market_data": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "type",
-        "instrument_id",
-        "observations",
-        "raw_metadata"
-      ],
-      "properties": {
-        "type": {
-          "const": "market_data"
         },
-        "instrument_id": {
-          "type": "string"
-        },
-        "unit": {
-          "type": "string"
-        },
-        "observations": {
-          "type": "array",
-          "maxItems": 260,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "as_of",
-              "value",
-              "unit"
-            ],
-            "properties": {
-              "as_of": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "value": {
-                "type": "string",
-                "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
-              },
-              "unit": {
-                "type": "string"
-              },
-              "available_at": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "date-time"
-              },
-              "volume": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
-              }
-            }
-          }
-        },
-        "raw_metadata": {
-          "type": "object"
-        }
-      }
-    },
-    "flow": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "type",
-        "instrument_id",
-        "as_of",
-        "net_flow",
-        "raw_metadata"
-      ],
-      "properties": {
-        "type": {
-          "const": "flow"
-        },
-        "instrument_id": {
-          "type": "string"
-        },
-        "as_of": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "net_flow": {
-          "$ref": "#/$defs/numeric_value"
-        },
-        "raw_metadata": {
-          "type": "object"
+        "source_content": {
+          "$ref": "#/$defs/source_content"
         }
       }
     },
@@ -2047,51 +1953,6 @@
           "items": {
             "$ref": "#/$defs/form4_field_reference"
           }
-        }
-      }
-    },
-    "calendar": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "type",
-        "calendar_id",
-        "scheduled_at",
-        "priority",
-        "raw_metadata"
-      ],
-      "properties": {
-        "type": {
-          "const": "calendar"
-        },
-        "calendar_id": {
-          "type": "string"
-        },
-        "scheduled_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "priority": {
-          "enum": [
-            "critical",
-            "high",
-            "medium",
-            "low"
-          ]
-        },
-        "title": {
-          "type": "string",
-          "maxLength": 300
-        },
-        "announced_at": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "date-time"
-        },
-        "raw_metadata": {
-          "type": "object"
         }
       }
     },
