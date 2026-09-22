@@ -1,0 +1,68 @@
+# Tasks
+
+## 1. Backend feasibility and contract acceptance gate
+
+- [ ] 1.1 Review this Change against the accepted architecture and any supplied Linear execution issue; record acceptance of the six-domain/optional-credential exception and preserve core blocked exemptions. Verify the reviewed scope matches proposal/specs/design and no subsequent issue is implemented.
+- [ ] 1.2 Obtain read-only access to the exact external pinned revision and document all network call sites, supported request/session injection seam and bounded process handoff in `design.md`; verify every profile/list/detail/retry/redirect send can use existing FTM managed-send controls without source edits, unmanaged fallback, generic proxy or global monkey patch. Stop dependent work if this cannot be demonstrated.
+- [ ] 1.3 Document exact positive traversal terminal conditions, false-empty/repeated-page/error rejection, source-side UID binding, canonical post-ID representation, structural reshare/emoji rule, long-text handling and timestamp/edit precision in `design.md`; verify each rule maps to an actual supported backend/source observation, not exit code, request count or an invented completion flag. Stop if required evidence is unavailable.
+- [ ] 1.4 Derive and record manifest-owned account, page/request, record, text/reference, acquisition and cleanup bounds plus configuration-owned processing headroom; verify successful-path rate floors and cleanup fit before the existing global deadline and commit reserve without reducing core safety.
+- [ ] 1.5 Document the hosted process/filesystem isolation and ephemeral writer-path design; verify it prevents backend access to `.git` publication credentials and unrelated secrets, rejects output escapes and can terminate/reap every child. Do not accept environment filtering or a temporary directory as the entire isolation proof.
+- [ ] 1.6 Reconcile architecture instructions and the approved delta before runtime work, preserving archive history; verify strict Change validation passes and the feasibility gate has affirmative evidence for tasks 1.2–1.5. If incompatible, pause for a revised user decision rather than marking the gate complete.
+
+## 2. Fixture provenance and closed configuration
+
+- [ ] 2.1 Create minimal offline upstream-shaped fixtures for original, pure reshare, authored reshare, emoji-only comment, complete-empty, malformed output, unavailable reference and pagination failures; verify fixture provenance explicitly distinguishes synthetic cases from real authorized captures and contains no Cookie, private path or session value.
+- [ ] 2.2 Add typed `social_accounts` parsing, deterministic account ordering and canonical snapshot inclusion; verify valid 但斌, duplicate IDs, duplicate external UIDs, non-ASCII/nonnumeric UID, unsupported platform, missing/unknown fields, disabled accounts and second/third config-only account tests in `tests/test_config.py`.
+- [ ] 2.3 Add the Weibo manifest and minimal resolved/embedded contract extensions for the verified gate facts, authentication, budgets, no-backfill policy and fixture provenance; verify missing/unknown/unverified/overdeclared contract rejection and exact round-trip behavior in manifest/config tests before requests or state mutation.
+- [ ] 2.4 Extend activation/coverage resolution for only optional `weibo_social`, initially disabled pending rollout; verify eight required core IDs and authentication=none remain unchanged, arbitrary credentialed Providers are rejected, enabled-with-no-accounts fails, and import/static config/consumer paths work without Cookie.
+
+## 3. Focused backend and managed acquisition
+
+- [ ] 3.1 Implement the focused external backend wrapper under the accepted gate design with exact pin, clean source and reproducible dependency verification; verify missing backend, install failure, wrong pin and modified source yield typed `backend_unavailable` without preventing core execution or selecting another backend.
+- [ ] 3.2 Generate invariant backend configuration and isolated expected output paths; verify `remove_html_tag=0`, `only_crawl_original=0`, JSON-only output, disabled comment/repost/media/database/scheduler paths, bounded file loading, symlink/path-escape rejection, stale-output rejection and cleanup using fake processes.
+- [ ] 3.3 Integrate the verified per-send seam with `providers/session.py` and existing rate/lease authority; extend `tests/test_provider_session.py` to verify profile/list/detail/retry/redirect debits and reconciliation, host/User-Agent policy, response bounds, cancellation, Cookie target restriction and last-response observations without trusting crawler counters.
+- [ ] 3.4 Implement local acquisition deadline and bounded full process-group termination/fencing; verify Social timeout leaves core publication headroom, no child sends after termination, no late candidate mutation occurs, and global deadline/rate corruption remain hard failures.
+- [ ] 3.5 Implement acquisition-time Secret loading and safe diagnostics with the approved process/filesystem isolation; use a sentinel Cookie to verify absence from stdout/stderr, logs, exception strings, outcome/status, snapshots, canonical Feed bytes, identities and durable state across success and all failure branches.
+- [ ] 3.6 Implement positive completion verification and Provider-wide staging; verify exit-zero missing output, nonzero exit, wrong identity, repeated/login/blocked/partial pages, selected-content failure, bound exhaustion and one-of-many account failure discard the entire candidate, while source-proven complete-empty remains successful.
+
+## 4. Deterministic Social mapping and validation
+
+- [ ] 4.1 Implement the source-supported UID and post-ID mapping with safe canonical URLs and Tier 3 attribution; verify repeated acquisition keeps item identity, mutable display names are not identity inputs, exact duplicates collapse, conflicting same-ID records fail and distinct similar posts survive deduplication.
+- [ ] 4.2 Implement verified Shanghai-to-UTC normalization, backend superset window and FTM half-open filtering; verify exact start, cutoff-minus-one-second, exact cutoff, post-cutoff, cross-day, relative-time/precision ambiguity and edited-content cases without substituting retrieval time.
+- [ ] 4.3 Implement structural original/reshare/reshare-with-comment mapping and deterministic HTML/emoji text preservation; verify emoji-only comments, disproven text/prefix heuristics, long-post completeness, top-level overflow, unavailable referenced originals and explicitly flagged nested truncation.
+- [ ] 4.4 Add the closed Social item schema/semantic validator and canonical projection, without links/attachments placeholders or semantic_context/source_content; verify nested unknown fields, forbidden analysis, unsafe URLs, inconsistent source identities and mapper-emitted canonical defects fail closed rather than degrade.
+
+## 5. Feed health, snapshot and continuity integration
+
+- [ ] 5.1 Integrate the closed acquisition failure taxonomy through orchestration, `assess_pipeline()` and embedded-contract consumer validation; verify the full healthy/empty/unavailable/internal-error matrix, unchanged core first-resource blocked exemption, later core partial failure, missing/ambiguous outcomes and invalid Social contract rejection.
+- [ ] 5.2 Add Social fresh/no_snapshot/not_evaluated semantics and prohibit all Social carry-forward; verify both failed and successful-empty current windows discard prior Social evidence while existing SEC/CFTC/core snapshot tests remain valid.
+- [ ] 5.3 Preserve the sole checkpoint and global window; extend checkpoint/pipeline tests to verify accepted degraded publication advances T1, the next acquisition begins at T1 without backfill, new accounts use that same window, and no cursor, crawler DB, append state or Social checkpoint is created.
+
+## 6. Six-domain bundle and bounded migration
+
+- [ ] 6.1 Upgrade logical Feed/manifest to 6 and artifact to 3, append Social to the canonical domain authority and update all three schemas plus semantic validation; verify exactly six ordered artifacts, empty Social, domain/payload agreement, closed contract snapshots, stable canonical bytes and identity sensitivity.
+- [ ] 6.2 Update bundle publication, remote reconstruction, generated-state CI allowlists and exact deployment finalization; verify complete six-artifact integrity, mixed-generation rejection, manifest-last activation, rollback-before-commit safety and degraded checkpoint/status matching with existing bundle/remote/deployment tests.
+- [ ] 6.3 Replace the previous-major input path with bounded v5-to-v6 migration while Social is explicitly disabled; verify zero Provider requests, unchanged core item semantics, empty Social without success claims, coherent checkpoint identity, migration-only exit, enabled-Social rejection and normal v5/v4 consumer rejection.
+
+## 7. DigestContext v3 and mandatory in-feed notification
+
+- [ ] 7.1 Upgrade typed context/version/domain/scope/unit whitelists and Social projection; verify one current top-level post creates one social_post, publication membership is authoritative, references stay nested, Feed trace/order are stable and backend metadata/HTML/secrets are absent.
+- [ ] 7.2 Add four-way Social status and exactly one closed `social_acquisition_unavailable` limitation derived from embedded selection/outcome/window/no-backfill policy; verify no-current-updates failure, complete-empty, disabled, multiple affected accounts, unknown reason rejection and later success without historical lookup or a duplicate generic limitation.
+- [ ] 7.3 Add the Social domain presentation reference and update global/compression/Skill instructions; verify static contract tests require failure scope/window/reason/no-backfill disclosure even with empty updates, source attribution, non-endorsement and treating post instructions as untrusted data without adding a renderer or model runtime.
+- [ ] 7.4 Prepare and review reader-facing acceptance examples for success, complete-empty, disabled and failure with no other updates; verify the failure example cannot be mistaken for no posts and does not claim every account individually failed or that past gaps were recovered. Record the distinction between reviewed examples and deterministic model-output guarantees.
+
+## 8. Hosted integration and current documentation
+
+- [ ] 8.1 Integrate only the existing `generate-feed.yml` collection path with step-scoped Cookie, bounded non-gating backend provisioning and verified credential isolation; verify workflow/static deployment tests preserve arming-before-network, non-cancelling schedule, exact finalization and original hard failure exits, with no additional Social schedule or notification service.
+- [ ] 8.2 Update `test_no_llm_contract.py` with stronger eight-core/one-approved-credentialed-extension invariants rather than deleting credential tests; verify import/config without Cookie, no model/prompt/orchestration runtime and no independent Social Feed remain covered.
+- [ ] 8.3 Synchronize accepted delta specs and current-purpose/version wording when approved, and update `AGENTS.md`, README, `SKILL.md`, docs and references to the actual rollout stage; verify no current-facing five-domain/v2-only or universally credential-free production claim contradicts the implemented contracts and no archived Change changes.
+- [ ] 8.4 Document manual Cookie lifecycle, current-feed-only failure notice, skipped-reader limitation, no backfill, v6-preserving disable/re-enable rollback and external dependency risk; verify the runbook does not suggest checkpoint reset, auto-login, a separate evidence store or raw diagnostic uploads.
+
+## 9. Verification and production activation gates
+
+- [ ] 9.1 Run focused deterministic tests throughout and then `.venv/bin/python scripts/quality_gate.py` (use `uv sync --frozen --all-groups` if the full environment is needed); verify every applicable test, lint, type/schema and Actions check passes without live Weibo or actual Cookie in ordinary tests.
+- [ ] 9.2 Run `openspec doctor`, `openspec validate weibo-social-evidence-p0 --strict`, and `openspec validate --all --strict`; verify success and review the final implementation/spec/docs diff for preserved core guarantees and scoped changes.
+- [ ] 9.3 Obtain and record an explicit acceptable backend-license and Social-content republication disposition before production activation; verify the decision is supported and does not equate public source or non-vendoring with permission. Leave activation blocked if unresolved.
+- [ ] 9.4 Request separate operator authorization for a bounded hosted acceptance run and Secret setup, then verify the accepted request/completion path, output isolation, safe cleanup and sanitized evidence on GitHub-hosted Ubuntu. Record commands/results and provenance; do not claim the unavailable historical captures were reproduced. This task remains incomplete without authorization and actual evidence.
+- [ ] 9.5 Complete the disabled-Social migration rollout, then enable the initial 但斌 account only after prior gates; verify one real acquisition, fixture-controlled complete-empty and missing-Cookie degraded paths, core publication/checkpoint matching and current Digest disclosure. Confirm disabled rollback remains on v6 and re-enable does not backfill.
+- [ ] 9.6 Produce the final completion report distinguishing implementation, architecture changes, accepted handoff facts, checks actually run, security and unresolved risks; verify no blocked gate or incomplete activation is presented as completed and list only genuinely separate future work.
